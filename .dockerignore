@@ -1,0 +1,130 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Documentation
+docs/_build/
+site/
+
+# Data directories (these should be mounted, not copied)
+data/
+datasets/
+checkpoints/
+outputs/
+results/
+logs/
+wandb/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker and container files
+Dockerfile
+.dockerignore
+docker-compose*.yml
+*.tar
+*.sif
+*-deployment.txt
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Environment files (may contain secrets)
+.env
+.env.*
+*.env
+
+# Large files and archives
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Model weights and checkpoints (mount these instead)
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
+*.h5
+*.pkl
+*.pickle
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Deployment and documentation (not needed in container)
+prepare-hpc.sh
+DEPLOYMENT_CHECKLIST.md
+GETTING_STARTED.md
+
+# Old/backup directories
+*_old/
+*.backup
+
+# Scripts directory (training scripts not needed in container)
+scripts/
+
+# Project-specific large directories (mount these instead)
+/data/
+/checkpoints/
+/outputs/
+/logs/

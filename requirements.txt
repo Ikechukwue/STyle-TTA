@@ -1,0 +1,170 @@
+# ============================================================================
+# Colorist Requirements
+# ============================================================================
+# Complete list of Python packages for the Colorist project
+# Environment: colorist (Python 3.13, PyTorch 2.9.1, CUDA 12.8)
+# Last updated: 2025-12-04
+#
+# Note: numpy constrained to <2.3.0 due to scipy/scikit compatibility
+# opencv-python removed (not used in codebase)
+# ============================================================================
+
+# ============================================================================
+# Core Dependencies (from setup.py)
+# ============================================================================
+torch>=2.9.1
+torchvision>=0.24.1
+numpy>=2.2.0,<2.3.0
+Pillow>=12.0.0
+
+# ============================================================================
+# Scientific Computing & Image Processing
+# ============================================================================
+scipy==1.16.3
+# scikit-image pinned to 0.23.2 for medmnistc compatibility
+scikit-image==0.23.2
+scikit-learn==1.7.2
+# PyWavelets for wavelet-based color transfer (SWT, DWT)
+PyWavelets>=1.9.0
+# opencv-python removed - not used in codebase
+opencv-python-headless
+imageio==2.37.2
+tifffile==2025.10.16
+lazy-loader==0.4
+
+# ============================================================================
+# Data Manipulation & Visualization
+# ============================================================================
+pandas==2.3.3
+matplotlib==3.10.7
+tqdm==4.67.1
+
+# ============================================================================
+# Deep Learning & Model Training
+# ============================================================================
+accelerate==1.12.0
+diffusers==0.35.2
+transformers==4.57.3
+safetensors==0.7.0
+timm==1.0.22
+einops
+
+# ============================================================================
+# Hugging Face Ecosystem
+# ============================================================================
+# huggingface-hub 0.36.0 is latest compatible with transformers 4.x (requires <1.0)
+huggingface-hub==0.36.0
+tokenizers==0.22.1
+
+# ============================================================================
+# Experiment Tracking & Logging
+# ============================================================================
+wandb==0.23.1
+
+# ============================================================================
+# Metrics & Evaluation
+# ============================================================================
+lpips==0.1.4
+
+# ============================================================================
+# Medical Image Datasets
+# ============================================================================
+medmnist==3.0.1  # Pinned: medmnistc 0.1.0 requires exactly this version
+medmnistc==0.1.0
+
+# ============================================================================
+# Graph & Benchmark Datasets
+# ============================================================================
+ogb==1.3.6
+wilds==2.0.0
+
+# ============================================================================
+# Vision-Language Models & Foundation Models
+# ============================================================================
+open-clip-torch>=2.24.0
+
+# ============================================================================
+# Visualization & Analysis (Thesis)
+# ============================================================================
+umap-learn>=0.5.0
+seaborn>=0.13.0
+
+# ============================================================================
+# Vector Retrieval
+# ============================================================================
+faiss-cpu>=1.7.0
+
+# ============================================================================
+# Utilities & Infrastructure
+# ============================================================================
+pyyaml==6.0.3
+requests==2.32.5
+filelock==3.20.0
+click==8.3.1
+fire==0.7.1
+jinja2==3.1.6
+networkx==3.6
+packaging
+psutil==7.1.3
+
+# ============================================================================
+# Text Processing & Parsing
+# ============================================================================
+regex==2025.11.3
+protobuf==6.33.1
+
+# ============================================================================
+# Jupyter & Interactive Development
+# ============================================================================
+ipykernel
+jupyter_client
+ipython
+
+# ============================================================================
+# Version Control Integration
+# ============================================================================
+gitpython==3.1.45
+gitdb==4.0.12
+
+# ============================================================================
+# Additional Utilities
+# ============================================================================
+certifi>=2025.11.12
+charset-normalizer
+idna
+urllib3
+fsspec==2025.12.0
+typing-extensions
+annotated-types
+pydantic>=2.12.5
+pydantic-core>=2.41.5
+
+# ============================================================================
+# Specialized Tools
+# ============================================================================
+wand==0.6.13
+outdated==0.2.2
+littleutils==0.2.4
+dists-pytorch==0.1
+hf-xet==1.2.0
+sentry-sdk==2.47.0
+kornia==0.8.2
+
+# ============================================================================
+# Training-Free Style Transfer Methods
+# ============================================================================
+# DiffuseIT (ICLR 2023) - CLIP-guided diffusion for style transfer
+color-matcher>=0.1.0         # Color matching utility
+ftfy>=6.0.0                  # Text processing for CLIP
+lpips>=0.1.4                 # Perceptual similarity metric (duplicate with line 63, kept for clarity)
+kornia>=0.6.0                # Computer vision library for augmentations (duplicate with line 131, kept for clarity)
+
+# CLIP from OpenAI GitHub (required for DiffuseIT)
+# git+https://github.com/openai/CLIP.git
+
+# Note: guided-diffusion is vendored in the DiffuseIT method directory
+# No separate installation needed - included in:
+# experiments/reference_methods/style_transfer/training_free/diffuseit/guided_diffusion/
+
+# FAISS
+faiss-cpu>=1.13.2

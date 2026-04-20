@@ -1,0 +1,21 @@
+# Accelerate Configuration for Colorist Project
+# 6 GPUs - Auto-detects first available GPUs
+# c10d backend for PyTorch distributed training
+# main_process_port set to 0 for automatic port selection
+
+compute_environment: LOCAL_MACHINE
+distributed_type: 'MULTI_GPU'
+downcast_bf16: 'no'
+gpu_ids: all
+machine_rank: 0
+main_training_function: main
+mixed_precision: 'no'
+num_machines: 1
+num_processes: 6
+rdzv_backend: c10d
+same_network: true
+main_process_port: 0
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false

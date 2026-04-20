@@ -1,0 +1,100 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# idea folder
+../.idea
+
+# Weights & Biases
+wandb/
+
+# Visiual Studio Code
+.vscode/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Outputs
+outputs/
+
+# Docker & Apptainer artifacts
+*.sif
+*.tar
+retristyle-*.tar
+retristyle-*.sif
+*-deployment.txt
+docker-compose.override.yml
+
+# Data directories (large files)
+data/
+checkpoints/
+results/
+logs/
+models/
+
+# Environment files (may contain secrets)
+.env
+.env.local
+*.pem
+*.key
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Auto-generated HPC scripts
+scripts/generated/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# PyTorch model files (large)
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+
+# Large compressed files
+*.zip
+*.tar.gz
+*.tgz
+*.rar

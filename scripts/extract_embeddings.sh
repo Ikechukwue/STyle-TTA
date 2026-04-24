@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 DATASET="imagenet"
-SPLIT="train"
+SPLIT="train@test_r"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -27,7 +27,7 @@ done
 echo "Extracting embeddings: $DATASET / $SPLIT / $EMBEDDING_MODEL"
 
 python -m experiments.tta.extract_embeddings \
-    --dataset_name "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
+    --dataset "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
     --output_dir "$EMBEDDING_DIR" \
     --model_name "$EMBEDDING_MODEL" \
     --input_size 224

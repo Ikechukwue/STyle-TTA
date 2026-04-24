@@ -263,7 +263,7 @@ def prepare_dataloaders(
     #     train_set = create_dataset(..., transform=None, ...)
     #     train_set = ColorTransferDataset(train_set, transform=train_transform)
 
-    if classifier== "dinov2_vitb14" or classifier== "ViT-B-16":
+    if 1>2:#classifier== "dinov2_vitb14" or classifier== "ViT-B-16":
         cache = Path(f"./data/feature_cache/{classifier}")
         if cache.exists():
             print(f"Loading cached features from {cache}")
@@ -279,11 +279,11 @@ def prepare_dataloaders(
         train_set = create_dataset(
             dataset_name=dataset,
             data_path=data_path,
-            split="train",
+            split="test_r",
             transform=train_transform,
             **kwargs
         )
-        
+        """
         val_set = create_dataset(
             dataset_name=dataset,
             data_path=data_path,
@@ -291,17 +291,17 @@ def prepare_dataloaders(
             transform=val_transform,
             **kwargs
         )
-        
+        """
     # Create dataloaders
     train_loader = DataLoader(
         dataset=train_set,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,
         num_workers=num_workers,
         worker_init_fn=worker_seed,
         generator=g,
     )
-    
+    """
     val_loader = DataLoader(
         dataset=val_set,
         batch_size=batch_size,
@@ -310,8 +310,8 @@ def prepare_dataloaders(
         worker_init_fn=worker_seed,
         generator=g,
     )
-    
-    return train_loader, val_loader, dataset
+    """
+    return train_loader#, val_loader, dataset
 
 
 def create_optimizer_and_scheduler(

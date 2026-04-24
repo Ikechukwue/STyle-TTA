@@ -37,7 +37,7 @@ fi
 
 echo "Geometric TTA: $CLASSIFIER | $EVAL_STRATEGY | seed=$SEED"
 
-accelerate launch --config_file "${PROJECT_ROOT}/configs/auto_gpu.yaml" \
+accelerate launch --config_file "${PROJECT_ROOT}/configs/single_gpu_0.yaml" \
     -m experiments.tta.run_inference \
     --dataset "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
     --classifier "$CLASSIFIER" --weights_path "$WEIGHTS_PATH" \

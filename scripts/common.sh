@@ -5,13 +5,13 @@
 # ============================================================================
 
 # ── Project root (relative to scripts/) ──
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_ROOT="/home/stud/nemmler/retristyle"
 
 # ── Default paths (local machine) ──
 DATA_PATH="${DATA_PATH:-/data/local/retristyle/data}"
 OUTPUT_PATH="${OUTPUT_PATH:-${PROJECT_ROOT}/results}"
 WEIGHTS_DIR="${WEIGHTS_DIR:-/data/local/retristyle/models/style_transfer}"
-EMBEDDING_DIR="${EMBEDDING_DIR:-${PROJECT_ROOT}/embeddings}"
+EMBEDDING_DIR="${EMBEDDING_DIR:-${PROJECT_ROOT}/data/embeddings}"
 MODEL_DIR="${MODEL_DIR:-/data/local/retristyle/models/training}"
 
 # ── HPC cluster paths (NHR@FAU) ──
@@ -19,7 +19,7 @@ HPC_CONTAINER='$WORK/retristyle/retristyle-production.sif'
 HPC_DATA_PATH='$WORK/retristyle/data'
 HPC_OUTPUT_PATH='$WORK/retristyle/results'
 HPC_WEIGHTS_DIR='$WORK/retristyle/models/style_transfer'
-HPC_EMBEDDING_DIR='$WORK/retristyle/embeddings'
+HPC_EMBEDDING_DIR='$WORK/retristyle/data/embeddings'
 HPC_MODEL_DIR='$WORK/retristyle/models/training'
 HPC_HF_CACHE='$WORK/model_cache/hf'
 HPC_TORCH_CACHE='$WORK/model_cache/torch'
@@ -132,11 +132,10 @@ hpc_stage_imagenet() {
 
 # Stage data to $TMPDIR for fast I/O
 if [[ -n "$TMPDIR" ]]; then
-    echo "Staging data to $TMPDIR..."
-    mkdir -p $TMPDIR/data/imagenet
-    for sub in imagenet1k imagenet-r imagenet-a imagenet-sketch imagenetv2-matched-frequency-format-val; do
-        [[ -d "$DATA_PATH/imagenet/$sub" ]] && rsync -a "$DATA_PATH/imagenet/$sub/" "$TMPDIR/data/imagenet/$sub/"
-    done
+    echo "Unpacking data to $TMPDIR..."
+    mkdir -p $TMPDIR/data
+    # Unpack your tarball directly into the node's local SSD
+    tar -xf $WORK/retristyle/retristyle_data.tar -C $TMPDIR/
     EFFECTIVE_DATA_PATH=$TMPDIR/data
     echo "Staging complete."
 else

@@ -130,6 +130,24 @@ def _lazy_create_color_transfer_method(method_name: str, pretrained_weights=None
     )
     return create_color_transfer_method(method_name, pretrained_weights)
 
+def save_generated_views(views: torch.Tensor, cache_root: Path, sample_idx: int):
+    """
+    Saves live-generated views to the cache directory as full float32 tensors.
+    """
+    sample_dir = cache_root / f"{sample_idx:05d}"
+    
+    # Check if this sample already exists to avoid redundant I/O
+    
+    if sample_dir.exists():
+        return
+        
+    sample_dir.mkdir(parents=True, exist_ok=True)
+    
+    # views shape: (N_views, C, H, W)
+    for v_idx in range(views.size(0)):
+        view_path = sample_dir / f"view_{v_idx:03d}.pt"
+        # Explicitly keep float32 to maintain full data integrity
+        torch.save(views[v_idx].detach().cpu().to(torch.float32), view_path)
 
 # ======================================================================
 # Normalisation helper
@@ -407,8 +425,8 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
         if augmented_cache_dir.exists():
             accelerator.print(f"Using augmented cache: {augmented_cache_dir}")
         else:
-            accelerator.print(f"WARNING: Augmented cache not found: {augmented_cache_dir}")
-            augmented_cache_dir = None
+            accelerator.print(f"WARNING: Augmented cache not found: {augmented_cache_dir}. \nWill be created")
+            #augmented_cache_dir = None
 
     # ---- inference loop -----------------------------------------------------
     accelerator.print(f"\nStarting inference ({start_idx}/{total_samples} done)...")
@@ -487,16 +505,22 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
                 dataset=args.dataset,
                 style_batch_size=getattr(args, "style_batch_size", None),
             )
-
+            cache_root = augmented_cache_dir / str(args.seed) / args.classifier / args.tta_method
             if args.classifier in ["ViT-B-16", "dinov2_vitb14"]:
-                cache_root = augmented_cache_dir / str(args.seed) / args.classifier / args.tta_method
-                
+
                 views = cache_features(sample_idx=sample_idx,
                                        views=views,
                                        backbone=model.backbone,
                                        cache_root=cache_root,
                                        normalize_fn=normalize_fn)
                 is_feature_cache = True
+
+            else:
+                if accelerator.is_main_process:
+                    
+                    save_generated_views(views, cache_root, sample_idx)
+                is_feature_cache = False
+                
             eff_normalize = None if (is_feature_cache and args.classifier in ["ViT-B-16", "dinov2_vitb14"]) else normalize_fn
             if args.eval_strategy == "vanilla":
                 pred = eval_vanilla(views, model, eff_normalize)

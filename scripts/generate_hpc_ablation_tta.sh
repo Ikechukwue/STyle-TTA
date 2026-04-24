@@ -61,7 +61,7 @@ gen_script() {
 
     local WEIGHTS_LINE='WEIGHTS_PATH="pretrained"'
     if ! is_pretrained "$CLF"; then
-        WEIGHTS_LINE='WEIGHTS_PATH=$WORK/retristyle/models/training/${DATASET}-${CLASSIFIER}-none-seed${SEED}.pth'
+        WEIGHTS_LINE='WEIGHTS_PATH=/app/data/models/imagenet-${CLF}-random_flip-random_resized_crop-seed42.pth'
     fi
 
     local SCRIPT="${TARGET_DIR}/${SUBDIR}/abl_${CLF_SAFE}_${RETR}_${EVAL}_nr${NREFS}_s${SEED}.sh"
@@ -109,10 +109,8 @@ ACCELERATE_CONFIG=\$(printf "/app/configs/gpu_%02d.yaml" \$GPU_COUNT)
 
 if [[ -n "\$TMPDIR" ]]; then
     mkdir -p \$TMPDIR/data/imagenet
-    for sub in imagenet1k imagenet-r; do
-        [[ -d "\$DATA_PATH/imagenet/\$sub" ]] && rsync -a "\$DATA_PATH/imagenet/\$sub/" "\$TMPDIR/data/imagenet/\$sub/"
-    done
-    EFFECTIVE_DATA_PATH=\$TMPDIR/data
+    tar -xf \$WORK/retristyle_data.tar -C \$TMPDIR/
+    EFFECTIVE_DATA_PATH=\$TMPDIR
 else
     EFFECTIVE_DATA_PATH=\$DATA_PATH
 fi
@@ -130,9 +128,8 @@ APPTAINERENV_https_proxy=\$https_proxy \\
 APPTAINERENV_HF_HOME=/app/hf_models \\
 APPTAINERENV_TORCH_HOME=/app/torch_models \\
 timeout 23h apptainer exec --nv \\
-    --bind \$EFFECTIVE_DATA_PATH:/app/data \\
+    --bind \$EFFECTIVE_DATA_PATH/data:/app/data \\
     --bind \$OUTPUT_PATH:/app/results \\
-    --bind \$EMBEDDING_DIR:/app/embeddings \\
     --bind \$HF_MODELS_CACHE:/app/hf_models \\
     --bind \$TORCH_MODELS_CACHE:/app/torch_models \\
     \$CONTAINER \\
@@ -145,13 +142,16 @@ timeout 23h apptainer exec --nv \\
         --n_refs \$N_REFS --n_views ${DEFAULT_N_VIEWS} \\
         --style_batch_size ${STYLE_BATCH_SIZE} \\
         --embedding_model ${EMBEDDING_MODEL} \\
-        --embedding_dir /app/embeddings \\
+        --augmented_cache /app/data/cache \\
+        --embedding_dir /app/data/embeddings/imagenet/vit_base_patch16_dinov3_lvd1689m/train@test_r.pt \\
         --seed \$SEED \\
         --output_path /app/results
 
 EXIT_CODE=\$?
 echo "Done: \$EXIT_CODE | \$(date)"
 [[ \$EXIT_CODE -eq 124 ]] && sbatch "\${BASH_SOURCE[0]}"
+echo "Cleaning up augmentation cache for this run..."
+rm -rf /app/data/cache/${SEED}/${CLASSIFIER}/${TTA_METHOD}
 exit \$EXIT_CODE
 EOF
     chmod +x "$SCRIPT"

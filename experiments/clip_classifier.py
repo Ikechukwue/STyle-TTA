@@ -305,9 +305,7 @@ def extract_and_cache_features(
         print(f"Loading cached features from {cache}")
         data = torch.load(cache, weights_only=True)
         return TensorDataset(data["features"], data["labels"])
-    else:
-        print(f"Creating  Cache at {cache}")
-        cache.parent.mkdir(parents=True, exist_ok=True)
+
 
     print("Extracting features (one-time cost)...")
     all_features, all_labels = [], []
@@ -325,7 +323,8 @@ def extract_and_cache_features(
 
     features_tensor = torch.cat(all_features)
     labels_tensor = torch.cat(all_labels)
-
+    print(f"Creating  Cache at {cache}")
+    cache.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"features": features_tensor, "labels": labels_tensor}, cache)
     print(f"Saved features to {cache}  shape={features_tensor.shape}")
     return TensorDataset(features_tensor, labels_tensor)
@@ -333,30 +332,41 @@ def extract_and_cache_features(
 
 if __name__=="__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
-    model = load_clip_classifier()
-    print("Loaded  CLIP Model")
     g = random_seed(seed_value=42, use_cuda='store_true')
-    train_loader, val_loader, dataset = prepare_dataloaders(dataset="imagenet", 
-                                    data_path="./data",
-                                    input_size=224,
-                                    batch_size=256,
-                                    num_workers=4,
-                                    color_transfer_params=None,
-                                    augmentations=[],
-                                    g=g
-                                    )
-    print("Prepared Dataloader successfully")
-    # Train Features
-    _ = extract_and_cache_features(
-        backbone=model.model,
-        dataloader=train_loader,
-        cache_path="./data/feature_cache/clip_train.pt",
-        device=device
-    ) 
-    # Val Features
-    _ = extract_and_cache_features(
-        backbone=model.model,
-        dataloader=val_loader,
-        cache_path="./data/feature_cache/clip_val.pt",
-        device=device
-    ) 
+    
+    print("Start")
+    
+    for model_name in ["dinov2_vitb14"]:
+        if model_name == "ViT-B-16":
+            model = load_clip_classifier(model_name=model_name, num_classes=200, device="cuda")
+        else:
+            model = load_dinov2_classifier(num_classes=200, device="cuda")
+        print("Loaded Model")
+        train_loader = prepare_dataloaders(dataset="imagenet", 
+                                        data_path="./data",
+                                        input_size=224,
+                                        batch_size=256,
+                                        num_workers=4,
+                                        color_transfer_params=None,
+                                        augmentations=[],
+                                        g=g,
+                                        classifier=model_name
+                                        )
+        print("Prepared Dataloader successfully")
+        # Train Features
+        _ = extract_and_cache_features(
+            backbone=model.backbone,
+            dataloader=train_loader,
+            cache_path=f"./data/feature_cache/{model_name}/test_r.pt",
+            device=device
+        )
+
+        """    
+        # Val Features
+        _ = extract_and_cache_features(
+            backbone=model.model,
+            dataloader=val_loader,
+            cache_path="./data/feature_cache/clip_val.pt",
+            device=device
+        ) 
+        """

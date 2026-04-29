@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 DATASET="imagenet"
-SPLIT="train@test_r"
+SPLIT="test_r"
 
 while [[ $# -gt 0 ]]; do
     case $1 in

@@ -157,11 +157,30 @@ class ReferenceDatabase:
             elif hasattr(ds, 'datasets'):
                 print(f"    - Found '.datasets' (ConcatDataset), checking first element...")
                 debug_dataset(ds.datasets[0], level + 1)
-        if hasattr(self.dataset, 'dataset') and hasattr(self.dataset.dataset, 'targets'):
-            # This reaches from CustomDataset -> ImageNet -> targets
-            raw_labels = self.dataset.dataset.targets
-            return torch.tensor(raw_labels, dtype=torch.long)[self._indices]
-        
+        curr = self.dataset
+        while curr is not None:
+                # Check for common label attributes
+                for attr in ["targets", "labels", "samples"]:
+                    if hasattr(curr, attr):
+                        data = getattr(curr, attr)
+                        
+                        # ImageFolder stores 'samples' as [(path, class), ...]
+                        if attr == "samples":
+                            raw_labels = [s[1] for s in data]
+                        else:
+                            raw_labels = data
+                        
+                        # Convert to tensor and apply the local indexing/subsampling
+                        if not isinstance(raw_labels, torch.Tensor):
+                            raw_labels = torch.tensor(raw_labels, dtype=torch.long)
+                        
+                        return raw_labels[self._indices]
+                
+                # Move to the next nested layer if it exists
+                curr = getattr(curr, "dataset", None)
+
+            # Extreme Fallback: only if the above search fails
+        print("Direct metadata access failed. Falling back to slow iteration...")
         lbls: List[int] = []
         for local_idx in tqdm(range(self._n)):
             real_idx = self._indices[local_idx]

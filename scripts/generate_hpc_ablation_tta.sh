@@ -109,8 +109,8 @@ ACCELERATE_CONFIG=\$(printf "/app/configs/gpu_%02d.yaml" \$GPU_COUNT)
 
 if [[ -n "\$TMPDIR" ]]; then
     mkdir -p \$TMPDIR/data/imagenet
-    tar -xf \$WORK/retristyle_data.tar -C \$TMPDIR/
-    EFFECTIVE_DATA_PATH=\$TMPDIR
+    tar -xf \$WORK/retristyle/retristyle_data.tar -C \$TMPDIR/
+    EFFECTIVE_DATA_PATH=\$TMPDIR/data
 else
     EFFECTIVE_DATA_PATH=\$DATA_PATH
 fi
@@ -128,6 +128,7 @@ APPTAINERENV_https_proxy=\$https_proxy \\
 APPTAINERENV_HF_HOME=/app/hf_models \\
 APPTAINERENV_TORCH_HOME=/app/torch_models \\
 timeout 23h apptainer exec --nv \\
+    --pwd /appe \\
     --bind \$EFFECTIVE_DATA_PATH/data:/app/data \\
     --bind \$OUTPUT_PATH:/app/results \\
     --bind \$HF_MODELS_CACHE:/app/hf_models \\
@@ -143,7 +144,7 @@ timeout 23h apptainer exec --nv \\
         --style_batch_size ${STYLE_BATCH_SIZE} \\
         --embedding_model ${EMBEDDING_MODEL} \\
         --augmented_cache /app/data/cache \\
-        --embedding_dir /app/data/embeddings/imagenet/vit_base_patch16_dinov3_lvd1689m/train@test_r.pt \\
+        --embedding_dir /app/data/embeddings \\
         --seed \$SEED \\
         --output_path /app/results
 

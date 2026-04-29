@@ -247,7 +247,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
             extract_and_cache(
                 dataset_name=args.dataset,
                 data_path=args.data_path,
-                split="train",
+                split=f"train@{eval_split}",
                 output_dir=embedding_dir,
                 model_name=embedding_model,
                 input_size=args.input_size,
@@ -455,6 +455,8 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
             if sample_dir.exists():
                 cached_views = []
                 for vf in sorted(sample_dir.glob("view_*.pt")):
+                    if len(cached_views) == args.n_views:
+                        break
                     cached_views.append(torch.load(vf, map_location=device, weights_only=True))
                     is_feature_cache = True
                 if not cached_views:
@@ -464,6 +466,8 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
                     for vf in sorted(sample_dir.glob("view_*.png")) + sorted(sample_dir.glob("view_*.jpg")):
                         img = read_image(str(vf))
                         cached_views.append(convert_image_dtype(img, torch.float32))
+                        if len(cached_views) == args.n_views:
+                            break
                         is_feature_cache = False
                 if cached_views:
                     views = torch.stack(cached_views).to(device)

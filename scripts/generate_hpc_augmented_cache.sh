@@ -16,10 +16,11 @@ TARGET_DIR="${SCRIPT_DIR}/generated/augmented_cache"
 rm -rf "$TARGET_DIR"
 mkdir -p "$TARGET_DIR"
 
-BEST_RETRIEVAL="${BEST_RETRIEVAL:-dino}"
+#BEST_RETRIEVAL="${BEST_RETRIEVAL:-dino}"
+BEST_RETRIEVAL="random"
 DATASET="imagenet"
 SPLIT="test_r"
-N_REFS="${BEST_N_REFS:-16}"
+N_REFS=16
 
 echo "========================================================================"
 echo "Augmented Cache — HPC Script Generator"
@@ -41,7 +42,7 @@ for SEED in "${ALL_SEEDS[@]}"; do
 #SBATCH --job-name=cache-${DATASET}-nr${N_REFS}-s${SEED}
 #SBATCH --gres=${GPU_CONFIG}
 #SBATCH --partition=${PARTITION}
-#SBATCH --time=48:00:00
+#SBATCH --time=24:00:00
 #SBATCH --export=NONE
 unset SLURM_EXPORT_ENV
 
@@ -51,12 +52,12 @@ export https_proxy=http://proxy.nhr.fau.de:80
 CONTAINER=${HPC_CONTAINER}
 DATA_PATH=${HPC_DATA_PATH}
 EMBEDDING_DIR=${HPC_EMBEDDING_DIR}
-CACHE_ROOT=${HPC_OUTPUT_PATH}/augmented_cache
+FINAL_DEST=${HPC_OUTPUT_PATH}/augmented_cache
 HF_MODELS_CACHE=${HPC_HF_CACHE}
 TORCH_MODELS_CACHE=${HPC_TORCH_CACHE}
 
 echo "Augmented Cache: ${DATASET}/${SPLIT} | n_refs=${N_REFS} | seed=${SEED} | \$(date)"
-mkdir -p \$CACHE_ROOT \$EMBEDDING_DIR
+mkdir -p \$FINAL_DEST \$EMBEDDING_DIR
 
 [ ! -f "\$CONTAINER" ] && echo "ERROR: Container not found" && exit 1
 
@@ -65,28 +66,36 @@ GPU_COUNT=\$(echo \$GPU_DEVICES | tr ',' '\n' | wc -l)
 ACCELERATE_CONFIG=\$(printf "/app/configs/gpu_%02d.yaml" \$GPU_COUNT)
 
 if [[ -n "\$TMPDIR" ]]; then
-    mkdir -p \$TMPDIR/data/imagenet
-    for sub in imagenet1k imagenet-r; do
-        [[ -d "\$DATA_PATH/imagenet/\$sub" ]] && rsync -a "\$DATA_PATH/imagenet/\$sub/" "\$TMPDIR/data/imagenet/\$sub/"
-    done
+    echo "Unpacking Source ImageNet to SSD..."
+    tar -xf \$WORK/retristyle/retristyle_data.tar -C \$TMPDIR/
     EFFECTIVE_DATA_PATH=\$TMPDIR/data
+
+    cp \$HOME/retristyle/data/imagenet/imagenet_subsets.json \$EFFECTIVE_DATA_PATH/imagenet/
+
+    LOCAL_CACHE=\$TMPDIR/stylized_out
+    mkdir -p \$LOCAL_CACHE
 else
     EFFECTIVE_DATA_PATH=\$DATA_PATH
 fi
+
+ACCELERATE_CONFIG="/app/configs/gpu_02.yaml"
 
 APPTAINERENV_PYTHONPATH=/app \\
 APPTAINERENV_http_proxy=\$http_proxy \\
 APPTAINERENV_https_proxy=\$https_proxy \\
 APPTAINERENV_HF_HOME=/app/hf_models \\
 APPTAINERENV_TORCH_HOME=/app/torch_models \\
-timeout 47h apptainer exec --nv \\
+timeout 23h apptainer exec --nv \\
     --bind \$EFFECTIVE_DATA_PATH:/app/data \\
-    --bind \$CACHE_ROOT:/app/cache \\
+    --bind \$LOCAL_CACHE:/app/cache \\
+    --bind \$HOME/retristyle/experiments/data:/app/experiments/data:ro \\
     --bind \$EMBEDDING_DIR:/app/embeddings \\
+    --bind \$WORK/retristlye/acc_generate_augmented_images.py:/app/experiments/tta/generate_augmented_images.py \\
     --bind \$HF_MODELS_CACHE:/app/hf_models \\
     --bind \$TORCH_MODELS_CACHE:/app/torch_models \\
     \$CONTAINER \\
-    python -m experiments.tta.generate_augmented_images \\
+    accelerate launch --config_file $ACCELERATE_CONFIG \\
+        -m experiments.tta.generate_augmented_images \\
         --dataset ${DATASET} --data_path /app/data --split ${SPLIT} \\
         --tta_method retristyle \\
         --retrieval_strategy ${BEST_RETRIEVAL} \\
@@ -95,10 +104,18 @@ timeout 47h apptainer exec --nv \\
         --cache_root /app/cache \\
         --seed ${SEED}
 
-EXIT_CODE=\$?
-echo "Done: \$EXIT_CODE | \$(date)"
-[[ \$EXIT_CODE -eq 124 ]] && sbatch "\${BASH_SOURCE[0]}"
-exit \$EXIT_CODE
+GEN_EXIT=\$?
+
+if [ \$GEN_EXIT -eq 0 ] || [ \$GEN_EXIT -eq 124 ]; then
+    echo "Archiving generated images to \$FINAL_DEST..."
+    # Note: Using -c to create a new archive. Filename includes seed.
+    tar -cf "\$FINAL_DEST/stylized_random_s${SEED}.tar" -C \$LOCAL_CACHE .
+    echo "Archive complete: stylized_${BEST_RETRIEVAL}_n${N_REFS}_s${SEED}.tar"
+fi
+
+[[ \$GEN_EXIT -eq 124 ]] && sbatch "\$0"
+
+exit \$GEN_EXIT
 EOF
     chmod +x "$SCRIPT"
     COUNTER=$((COUNTER + 1))

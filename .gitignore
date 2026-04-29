@@ -60,7 +60,9 @@ checkpoints/
 results/
 logs/
 models/
-
+# Make sure it doesn't ignore that folder 
+!**/data/__init__.py
+!experiments/data/*.py
 # Environment files (may contain secrets)
 .env
 .env.local

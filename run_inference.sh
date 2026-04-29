@@ -5,12 +5,12 @@ export OUTDATED_IGNORE=1
 export PYTHONWARNINGS="ignore"
 
 DATASETS=("imagenet")
-SPLIT=("test_r")
-MODELS=("ViT-B-16" "dinov2_vitb14")
-TTA_METHOD=("geometric")
-THESIS_N_REFS_SWEEP=(64)
+SPLIT=("testing")
+MODELS=("resnet18" "vit_base_patch16_224" "ViT-B-16" "dinov2_vitb14")
+TTA_METHOD=("geometric" "zero" "tpt")
+THESIS_N_REFS_SWEEP=(4)
 THESIS_SEEDS=(71397589 133560673 265017005)
-EVAL_STRATEGY=("tpt" "vanilla" "zero")
+EVAL_STRATEGY=("random" "balanced_random" "metric" "balanced_metric" "dino")
 
 
 for TS in "${THESIS_SEEDS[@]}"; do
@@ -27,15 +27,18 @@ for TS in "${THESIS_SEEDS[@]}"; do
                             --dataset "imagenet" \
                             --data_path "./data" \
                             --weights_path "./data/models/imagenet-$MDL-random_flip-random_resized_crop-seed42.pth" \
-                            --classifier "$MDL" \
-                            --tta_method "$TTA" \
-                            --eval_strategy "$ES" \
-                            --split "$DS" \
+                            --classifier "resnet18" \
+                            --tta_method "retristyle" \
+                            --eval_strategy "vanilla" \
+                            --split "testting" \
+                            --retrieval_strategy $ES \
+                            --n_refs 2 \
                             --batch_size 128 \
                             --num_workers 4 \
                             --seed "$TS" \
                             --n_views "$NS" \
-                            --augmented_cache "./data/feature_cache"
+                            --augmented_cache "./data/feature_cache" \
+                            --output_path "results/ablation"
                         echo "Finished $MDL on $DS"
                     done
                 done

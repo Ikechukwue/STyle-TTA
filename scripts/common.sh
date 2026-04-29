@@ -39,7 +39,7 @@ PRETRAINED_CLASSIFIERS=("ViT-B-16" "dinov2_vitb14")
 # ── ImageNet datasets (primary) ──
 IMAGENET_DATASET="imagenet"
 IMAGENET_TRAIN_SPLIT="train"
-IMAGENET_TEST_SPLITS=("test_r" "test_a" "test_sketch" "test_v2")
+IMAGENET_TEST_SPLITS=("test_r" "test_a" "test_sketch" "test_v2" "testing")
 
 # ── All available datasets (uncomment when extending) ──
 # NATURAL_DATASETS=("pacs" "vlcs" "domainnet" "office_home" "terra_incognita")
@@ -90,10 +90,10 @@ safe_name() {
 gpu_tier_for_nrefs() {
     local n=$1
     case $n in
-        2|4)  echo "gpu:a40:1 a40" ;;
-        8|16) echo "gpu:a40:2 a40" ;;
-        32|64) echo "gpu:a40:4 a40" ;;
-        *)    echo "gpu:a40:1 a40" ;;
+        2|4)  echo "gpu:a100:1 a100" ;;
+        8|16) echo "gpu:a100:2 a100" ;;
+        32|64) echo "gpu:a100:4 a100" ;;
+        *)    echo "gpu:a100:1 a100" ;;
     esac
 }
 

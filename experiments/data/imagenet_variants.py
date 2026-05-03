@@ -138,7 +138,7 @@ class ImageNet(VisionDataset):
 
     VALID_SPLITS = [
         "train", "val", "test", "test_a", "test_r",
-        "test_c", "test_p", "test_sketch", "test_v2", "testing"
+        "test_c", "test_p", "test_sketch", "test_v2", "test_abl"
     ]
 
     def __init__(self, root_dir: str, split: str,
@@ -208,6 +208,7 @@ class ImageNet(VisionDataset):
         return subset_dir
 
     def _load_split(self, root_dir: str, split: str, **kwargs):
+        print(split)
         sub = None
         if "@" in split:
             split, sub = split.split("@")
@@ -224,10 +225,11 @@ class ImageNet(VisionDataset):
             self._check_dir(path, f"ImageNet-1k {split}")
             return ImageFolder(path)
         
-        elif split == "testing":
-            path = os.path.joing(root_dir,'imagenettest')
-            self._check_dir(path, 'TESTING DIR')
+        elif split == "test_abl":
+            path = os.path.join(root_dir,'imagenetabl')
+            self._check_dir(path, 'Ablation R DIR')
             return ImageFolder(path)
+        
         elif split == "test_a":
             path = os.path.join(root_dir,'imageneta', 'imagenet-a')
             self._check_dir(path, "ImageNet-A")

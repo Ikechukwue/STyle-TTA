@@ -305,12 +305,12 @@ def main():
         effective_n_refs = 0
 
     # ---- determine whether to use distributed style transfer ----------------
-    # For retrieval methods on multi-GPU, shard references across GPUs exactly
-    # as run_inference.py does via augment_views_distributed.
-    use_distributed_style = (
+
+    use_distributed_style = False
+    """(
         args.tta_method in RETRIEVAL_TTA_METHODS
         and accelerator.num_processes > 1
-    )
+    )"""
 
     # ---- main generation loop -----------------------------------------------
     total = len(test_set)
@@ -377,13 +377,12 @@ def main():
             )  # (V, 3, H, W) in [0, 1]
 
         # ---- save to disk (all ranks write their own samples) ---------------
-        # When using augment_views_distributed, every rank has the full view
-        # tensor, so only the main process writes to avoid duplicate I/O.
-        should_write = (
+        should_write = True
+        """(
             accelerator.is_main_process
             if use_distributed_style
             else True   # each rank owns its own disjoint sample shard
-        )
+        )"""
 
         if should_write:
             sample_dir = cache_dir / f"{global_idx:05d}"

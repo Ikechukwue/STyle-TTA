@@ -5,7 +5,7 @@ export OUTDATED_IGNORE=1
 export PYTHONWARNINGS="ignore"
 
 DATASETS=("imagenet")
-SPLIT=("testing")
+SPLIT=("test_abl")
 MODELS=("resnet18" "vit_base_patch16_224" "ViT-B-16" "dinov2_vitb14")
 TTA_METHOD=("geometric" "zero" "tpt")
 THESIS_N_REFS_SWEEP=(4)
@@ -26,11 +26,11 @@ for TS in "${THESIS_SEEDS[@]}"; do
                         python -m experiments.tta.run_inference \
                             --dataset "imagenet" \
                             --data_path "./data" \
-                            --weights_path "./data/models/imagenet-$MDL-random_flip-random_resized_crop-seed42.pth" \
+                            --weights_path "pretrained" \
                             --classifier "resnet18" \
                             --tta_method "retristyle" \
                             --eval_strategy "vanilla" \
-                            --split "testting" \
+                            --split "test_abl" \
                             --retrieval_strategy $ES \
                             --n_refs 2 \
                             --batch_size 128 \

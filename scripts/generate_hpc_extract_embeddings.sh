@@ -17,6 +17,7 @@ rm -rf "$TARGET_DIR"
 mkdir -p "$TARGET_DIR"
 
 DATASETS=("imagenet")
+SPLIT=("test_abl")
 # Uncomment when extending:
 # DATASETS+=("pacs" "vlcs" "office_home" "domainnet" "terra_incognita")
 # DATASETS+=("camelyon17wilds" "epistr" "fitzpatrick17k" "retina")
@@ -30,12 +31,12 @@ echo "========================================================================"
 COUNTER=0
 
 for DATASET in "${DATASETS[@]}"; do
-    SCRIPT="${TARGET_DIR}/embed_${DATASET}.sh"
+    SCRIPT="${TARGET_DIR}/embed_${DATASET}_${SPLIT}.sh"
     cat > "$SCRIPT" << EOF
 #!/bin/bash -l
-#SBATCH --job-name=emb-${DATASET}
-#SBATCH --gres=gpu:a40:1
-#SBATCH --partition=a40
+#SBATCH --job-name=emb-${DATASET}-${SPLIT}
+#SBATCH --gres=gpu:a100:1
+#SBATCH --partition=a100
 #SBATCH --time=12:00:00
 #SBATCH --export=NONE
 unset SLURM_EXPORT_ENV
@@ -48,8 +49,15 @@ DATA_PATH=${HPC_DATA_PATH}
 EMBEDDING_DIR=${HPC_EMBEDDING_DIR}
 HF_MODELS_CACHE=${HPC_HF_CACHE}
 TORCH_MODELS_CACHE=${HPC_TORCH_CACHE}
+if [[ -n "\$TMPDIR" ]]; then
+    echo "Unpacking Source ImageNet to SSD..."
+    tar -xf \$WORK/retristyle/data/${DATASET}_${SPLIT}.tar -C \$TMPDIR/
+    DATA_PATH=\$TMPDIR/data
 
-echo "Embedding extraction: ${DATASET} | \$(date)"
+else
+    DATA_PATH=${HPC_DATA_PATH}
+fi
+echo "Embedding extraction: ${DATASET} | ${SPLIT} |\$(date)"
 mkdir -p \$EMBEDDING_DIR
 
 [ ! -f "\$CONTAINER" ] && echo "ERROR: Container not found" && exit 1
@@ -62,11 +70,13 @@ APPTAINERENV_TORCH_HOME=/app/torch_models \\
 apptainer exec --nv \\
     --bind \$DATA_PATH:/app/data \\
     --bind \$EMBEDDING_DIR:/app/embeddings \\
+    --bind \$HOME/retristyle/experiments/data:/app/experiments/data:ro \\
     --bind \$HF_MODELS_CACHE:/app/hf_models \\
+    --bind \$HOME/retristyle/reference_db.py:/app/retristyle/retrieval/reference_db.py \\
     --bind \$TORCH_MODELS_CACHE:/app/torch_models \\
     \$CONTAINER \\
     python -m experiments.tta.extract_embeddings \\
-        --dataset_name ${DATASET} --data_path /app/data --split train \\
+        --dataset ${DATASET} --data_path /app/data --split train@${SPLIT} ${SPLIT} \\
         --output_dir /app/embeddings \\
         --model_name ${EMBEDDING_MODEL} \\
         --input_size 224

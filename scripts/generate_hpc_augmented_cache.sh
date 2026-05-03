@@ -17,14 +17,14 @@ rm -rf "$TARGET_DIR"
 mkdir -p "$TARGET_DIR"
 
 #BEST_RETRIEVAL="${BEST_RETRIEVAL:-dino}"
-BEST_RETRIEVAL="random"
+RETRIEVAL="balanced_random"
 DATASET="imagenet"
-SPLIT="test_r"
+SPLIT="test_abl"
 N_REFS=16
 
 echo "========================================================================"
 echo "Augmented Cache — HPC Script Generator"
-echo "  Retrieval : ${BEST_RETRIEVAL}"
+echo "  Retrieval : ${RETRIEVAL}"
 echo "  n_refs    : ${N_REFS}"
 echo "  Seeds     : ${ALL_SEEDS[*]}"
 echo "========================================================================"
@@ -36,13 +36,13 @@ for SEED in "${ALL_SEEDS[@]}"; do
     GPU_CONFIG=$(echo "$TIER" | awk '{print $1}')
     PARTITION=$(echo "$TIER" | awk '{print $2}')
 
-    SCRIPT="${TARGET_DIR}/cache_${DATASET}_nr${N_REFS}_s${SEED}.sh"
+    SCRIPT="${TARGET_DIR}/${RETRIEVAL}_cache_${DATASET}_nr${N_REFS}_s${SEED}.sh"
     cat > "$SCRIPT" << EOF
 #!/bin/bash -l
-#SBATCH --job-name=cache-${DATASET}-nr${N_REFS}-s${SEED}
+#SBATCH --job-name=cache-${RETRIEVAL}-${DATASET}-nr${N_REFS}-s${SEED}
 #SBATCH --gres=${GPU_CONFIG}
 #SBATCH --partition=${PARTITION}
-#SBATCH --time=24:00:00
+#SBATCH --time=12:00:00
 #SBATCH --export=NONE
 unset SLURM_EXPORT_ENV
 
@@ -52,7 +52,7 @@ export https_proxy=http://proxy.nhr.fau.de:80
 CONTAINER=${HPC_CONTAINER}
 DATA_PATH=${HPC_DATA_PATH}
 EMBEDDING_DIR=${HPC_EMBEDDING_DIR}
-FINAL_DEST=${HPC_OUTPUT_PATH}/augmented_cache
+FINAL_DEST=\$WORK/retristyle/data/augmented_cache
 HF_MODELS_CACHE=${HPC_HF_CACHE}
 TORCH_MODELS_CACHE=${HPC_TORCH_CACHE}
 
@@ -67,10 +67,8 @@ ACCELERATE_CONFIG=\$(printf "/app/configs/gpu_%02d.yaml" \$GPU_COUNT)
 
 if [[ -n "\$TMPDIR" ]]; then
     echo "Unpacking Source ImageNet to SSD..."
-    tar -xf \$WORK/retristyle/retristyle_data.tar -C \$TMPDIR/
+    tar -xf \$WORK/retristyle/data/${DATASET}_${SPLIT}.tar -C \$TMPDIR/
     EFFECTIVE_DATA_PATH=\$TMPDIR/data
-
-    cp \$HOME/retristyle/data/imagenet/imagenet_subsets.json \$EFFECTIVE_DATA_PATH/imagenet/
 
     LOCAL_CACHE=\$TMPDIR/stylized_out
     mkdir -p \$LOCAL_CACHE
@@ -78,27 +76,27 @@ else
     EFFECTIVE_DATA_PATH=\$DATA_PATH
 fi
 
-ACCELERATE_CONFIG="/app/configs/gpu_02.yaml"
 
 APPTAINERENV_PYTHONPATH=/app \\
 APPTAINERENV_http_proxy=\$http_proxy \\
 APPTAINERENV_https_proxy=\$https_proxy \\
 APPTAINERENV_HF_HOME=/app/hf_models \\
 APPTAINERENV_TORCH_HOME=/app/torch_models \\
-timeout 23h apptainer exec --nv \\
+timeout 11h apptainer exec --nv \\
     --bind \$EFFECTIVE_DATA_PATH:/app/data \\
     --bind \$LOCAL_CACHE:/app/cache \\
     --bind \$HOME/retristyle/experiments/data:/app/experiments/data:ro \\
-    --bind \$EMBEDDING_DIR:/app/embeddings \\
-    --bind \$WORK/retristlye/acc_generate_augmented_images.py:/app/experiments/tta/generate_augmented_images.py \\
+    --bind \$EMBEDDING_DIR:/app/data/embeddings \\
+    --bind \$WORK/retristyle/acc_generate_augmented_images.py:/app/experiments/tta/generate_augmented_images.py \\
     --bind \$HF_MODELS_CACHE:/app/hf_models \\
+    --bind \$HOME/retristyle/reference_db.py:/app/retristyle/retrieval/reference_db.py \\
     --bind \$TORCH_MODELS_CACHE:/app/torch_models \\
     \$CONTAINER \\
-    accelerate launch --config_file $ACCELERATE_CONFIG \\
+    accelerate launch --config_file \${ACCELERATE_CONFIG} \\
         -m experiments.tta.generate_augmented_images \\
         --dataset ${DATASET} --data_path /app/data --split ${SPLIT} \\
         --tta_method retristyle \\
-        --retrieval_strategy ${BEST_RETRIEVAL} \\
+        --retrieval_strategy ${RETRIEVAL} \\
         --n_refs ${N_REFS} --n_views ${DEFAULT_N_VIEWS} \\
         --embedding_dir /app/embeddings --embedding_model ${EMBEDDING_MODEL} \\
         --cache_root /app/cache \\
@@ -106,16 +104,17 @@ timeout 23h apptainer exec --nv \\
 
 GEN_EXIT=\$?
 
-if [ \$GEN_EXIT -eq 0 ] || [ \$GEN_EXIT -eq 124 ]; then
-    echo "Archiving generated images to \$FINAL_DEST..."
-    # Note: Using -c to create a new archive. Filename includes seed.
-    tar -cf "\$FINAL_DEST/stylized_random_s${SEED}.tar" -C \$LOCAL_CACHE .
-    echo "Archive complete: stylized_${BEST_RETRIEVAL}_n${N_REFS}_s${SEED}.tar"
+if [[ \$GEN_EXIT -eq 0 ]] || [[ \$GEN_EXIT -eq 124 ]]; then
+    echo "Starting local bundling on SSD..."
+    tar -cf "\$TMPDIR/output_j\${SLURM_JOB_ID}.tar" -C "\$LOCAL_CACHE" .
+    mv "\$TMPDIR/output_j\${SLURM_JOB_ID}.tar" "\$FINAL_DEST/${RETRIEVAL}_${N_REFS}_${DATASET}_${SPLIT}_s${SEED}.tar"
+    echo "Transfer complete: output_j\${SLURM_JOB_ID}.tar"
 fi
 
 [[ \$GEN_EXIT -eq 124 ]] && sbatch "\$0"
 
 exit \$GEN_EXIT
+
 EOF
     chmod +x "$SCRIPT"
     COUNTER=$((COUNTER + 1))

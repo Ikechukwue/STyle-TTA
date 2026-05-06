@@ -166,7 +166,7 @@ class MetricRetriever(BaseRetriever):
         scores: List[float] = []
         C1, C2 = 0.01**2, 0.03**2
         for i in range(self.n):
-            ref_edge = self._get_edge(i)
+            ref_edge = self._get_edge(i).to(q_edge.device)
             # Resize to match if needed
             if ref_edge.shape[2:] != q_edge.shape[2:]:
                 ref_edge = F.interpolate(ref_edge, size=q_edge.shape[2:], mode="bilinear", align_corners=False)

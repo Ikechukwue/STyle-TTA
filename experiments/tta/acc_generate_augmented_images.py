@@ -206,7 +206,9 @@ def main():
         split=eval_split,
         transform=test_transform,
     )
-
+    
+    rank_dir = cache_dir / f"rank_{accelerator.process_index}"
+    rank_dir.mkdir(parents=True, exist_ok=True)
     # Distributed sampler: each rank processes a disjoint shard.
     # shuffle=False preserves the original sample indices.
     if accelerator.num_processes > 1:
@@ -215,7 +217,7 @@ def main():
             num_replicas=accelerator.num_processes,
             rank=accelerator.process_index,
             shuffle=False,
-            drop_last=False,
+            drop_last=False
         )
         test_loader = DataLoader(
             test_set, batch_size=1, sampler=sampler,
@@ -235,7 +237,7 @@ def main():
         and args.retrieval_strategy == "dino"
         and args.embedding_dir is not None
     ):
-        if not embeddings_exist(args.embedding_dir, args.dataset, embedding_model, "train"):
+        if not embeddings_exist(args.embedding_dir, args.dataset, embedding_model, f"train@{eval_split}"):
             accelerator.print("Extracting training-set embeddings...")
             extract_and_cache(
                 dataset_name=args.dataset,
@@ -279,6 +281,7 @@ def main():
             embedding_model=embedding_model,
             dataset=args.dataset,
             device=str(device),
+            eval_split=args.split,
         )
         accelerator.print(f"  Retriever ready — {len(ref_db)} references")
 
@@ -335,8 +338,8 @@ def main():
 
     for local_step, (image, label) in enumerate(test_loader):
         global_idx = global_indices[local_step]
-
-        if global_idx in completed:
+        sample_dir = rank_dir / f"{global_idx:05d}"
+        if (sample_dir / "label.txt").exists():
             skipped += 1
             pbar.update(1)
             continue
@@ -385,7 +388,7 @@ def main():
         )"""
 
         if should_write:
-            sample_dir = cache_dir / f"{global_idx:05d}"
+            sample_dir = rank_dir / f"{global_idx:05d}"
             sample_dir.mkdir(parents=True, exist_ok=True)
 
             for v_idx in range(views.shape[0]):
@@ -419,8 +422,9 @@ def main():
     # ---- final manifest (main process only) ---------------------------------
     if accelerator.is_main_process:
         # Scan disk to build a definitive completed list (safe after barrier)
+        time.sleep(5)
         all_done = sorted(
-            int(p.name) for p in cache_dir.iterdir()
+            int(p.name) for p in cache_dir.rglob("*")
             if p.is_dir() and p.name.isdigit()
         )
         manifest = _load_manifest(manifest_path)
@@ -429,8 +433,10 @@ def main():
         manifest["generation_time_seconds"] = round(time.time() - start_time, 2)
         _save_manifest(manifest_path, manifest)
 
+    generated_t = torch.tensor(generated, device=device)
+    total_generated = accelerator.reduce(generated_t, reduction="sum").item()
     accelerator.print(
-        f"\nDone: generated={generated}, skipped={skipped}, total={total}"
+        f"\nDone: generated={total_generated}, skipped={skipped}, total={total}"
     )
     accelerator.print(f"Cache: {cache_dir}")
 

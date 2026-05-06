@@ -92,6 +92,7 @@ def build_retriever(
     embedding_dir: str | None = None,
     dataset: str | None = None,
     device: str = "cuda",
+    eval_split: str | None = None
 ):
     """Instantiate the requested retriever backed by *db*.
 
@@ -111,10 +112,10 @@ def build_retriever(
     if strategy == "dino":
         # Try to load cached embeddings
         embeddings = None
-        if embedding_dir is not None and dataset is not None:
-            if embeddings_exist(embedding_dir, dataset, embedding_model, "train"):
+        if embedding_dir is not None and dataset is not None and eval_split is not None:
+            if embeddings_exist(embedding_dir, dataset, embedding_model, f"train@{eval_split}"):
                 embeddings = load_cached_embeddings(
-                    embedding_dir, dataset, embedding_model, "train",
+                    embedding_dir, dataset, embedding_model, f"train@{eval_split}",
                 )
         return DinoRetriever(
             db=db,

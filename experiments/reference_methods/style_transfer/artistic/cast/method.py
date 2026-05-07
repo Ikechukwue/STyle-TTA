@@ -8,7 +8,7 @@ Based on: https://github.com/zyxElsa/CAST_pytorch
 
 Pretrained weights download:
   Official model from https://github.com/zyxElsa/CAST_pytorch
-  Google Drive: https://drive.google.com/file/d/1Kkce2Yxgpbs3ob3RBQx_bljYoV4YcHSq
+  Google Drive: https://drive.google.com/file/d/11dZqu95QfnAgkzgR1NTJfQutz8JlwRY8
 
   Download CAST_model.zip which contains:
     - vgg_normalised.pth (pretrained VGG encoder)

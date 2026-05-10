@@ -55,7 +55,7 @@ class Method:
         self.config = self.get_default_config()
 
         if model_path is None:
-            model_path = "/data/local/colorist/models/pretrained/diffstyle.pt"
+            model_path = "./data/models/style_transfer/diffstyle.pt"
         
         self._initialize_network(model_path)
 

@@ -308,7 +308,7 @@ DATASET_SPLITS = {
 
     # ImageNet-1k + variants
     "imagenet": ["train", "val", "test", "test_a", "test_r", "test_c",
-                 "test_p", "test_sketch", "test_v2", "test_abl"],
+                 "test_p", "test_sketch", "test_v2", "test_abl", "train@test_r"],
 
     # PACS (default train_domain=photo)
     "pacs": ["train", "val", "test",

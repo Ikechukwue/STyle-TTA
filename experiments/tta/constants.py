@@ -97,7 +97,7 @@ THESIS_ALL_CLASSIFIERS = [
     "ViT-B-16",  # CLIP
     "dinov2_vitb14",  # DINOv2
 ]
-
+CACHE_VIEW_CLASSIFIERS = ["ViT-B-16", "dinov2_vitb14"]
 THESIS_N_REFS_SWEEP = [2, 4, 8, 16, 32, 64]
 
 THESIS_HYBRID_RATIOS = [

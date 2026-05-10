@@ -58,7 +58,7 @@ from experiments.metrics.content_metrics import (
 METHODS = {
     "artistic_trained": [
         "adain", "adaattn", "aespanet", "artflow", "cast",
-        "efdm", "iecontrast", "mast", "sanet", "styleformer", "stytr2",
+        "efdm", "iecontrast", "sanet", "styleformer", "stytr2",
     ],
     "artistic_diffusion": [
         "styleid", "diffstyle",
@@ -76,9 +76,9 @@ WEIGHT_FILES = {
     "aespanet": "aespanet.pth",
     "artflow": "artflow.pth",
     "cast": "cast.pth",
-    "efdm": "efdm.pth",
+    "efdm": "efdm.pth.tar",
     "iecontrast": "iecontrast.pth",
-    "mast": "mast.pth",
+    #"mast": "mast.pth",
     "sanet": "sanet.pth",
     "styleformer": "styleformer.pth",
     "stytr2": "stytr2.pth",
@@ -126,7 +126,11 @@ def evaluate_single_method(
     # Metrics accumulators
     all_metrics: List[Dict[str, float]] = []
     dev = torch.device(device if torch.cuda.is_available() else "cpu")
-
+    if network is not None:
+        network.to(dev)
+        network.eval()
+    if hasattr(method, 'to'):
+        method.to(dev)
     total = len(content_images) * len(style_images)
     pbar = tqdm(total=total, desc=f"  {method_name}", leave=False)
 
@@ -148,6 +152,7 @@ def evaluate_single_method(
                     output = method(content_native, style_native)
                 output = output.squeeze(0).clamp(0, 1).cpu()
             except Exception as e:
+                print(f"Error in {method_name}: {e}")
                 pbar.update(1)
                 continue
 
@@ -268,7 +273,7 @@ def run_evaluation(args: argparse.Namespace):
     print(f"Total pairs: {len(content_images)} × {len(style_images)} = {len(content_images) * len(style_images)}")
 
     # Save example content/style images
-    examples_dir = output_dir / "examples"
+    examples_dir = output_dir / "_examples"
     examples_dir.mkdir(exist_ok=True)
     for i, img in enumerate(content_images[:5]):
         save_image(img, examples_dir / f"content_{i:02d}.png")

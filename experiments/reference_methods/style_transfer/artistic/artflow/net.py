@@ -284,7 +284,7 @@ def covsqrt_mean(feature, inverse=False, tolerance=1e-14):
     mean = torch.mean(feature.view(b, c, -1), dim=2, keepdim=True)
     zeromean = feature.view(b, c, -1) - mean
     cov = torch.bmm(zeromean, zeromean.transpose(1, 2))
-    evals, evects = torch.symeig(cov, eigenvectors=True)
+    evals, evects = evals, evects = torch.linalg.eigh(cov)
     p = -0.5 if inverse else 0.5
     covsqrt = []
     for i in range(b):

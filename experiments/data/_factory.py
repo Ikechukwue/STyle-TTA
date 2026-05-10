@@ -48,9 +48,9 @@ class CustomDataset(VisionDataset):
         **kwargs
     ):
         # Extract subset parameters
-        use_subset = kwargs.get('use_subset', False)
-        subset_size = kwargs.get('subset_size', None)
-        subset_seed = kwargs.get('subset_seed', None)
+        use_subset = kwargs.pop('use_subset', False)
+        subset_size = kwargs.pop('subset_size', None)
+        subset_seed = kwargs.pop('subset_seed', None)
 
         # Load the dataset
         if dataset_name.lower() == "camelyon17wilds":
@@ -346,5 +346,5 @@ def create_dataset(dataset_name: str, data_path: str, split: str = "train",
         dataset: The requested dataset split or all splits as a dictionary.
     """
 
-    return CustomDataset(dataset_name, data_path, split, transform, target_transform,
+    return CustomDataset(dataset_name=dataset_name, data_path=data_path, split=split, transform=transform, target_transform=target_transform,
                          **kwargs)

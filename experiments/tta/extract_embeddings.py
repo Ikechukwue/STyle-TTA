@@ -208,8 +208,6 @@ def cache_features(
 
     with torch.no_grad():
         # 2. Normalize and Extract
-        # Note: If 'views' already contains the original image, 
-        # the loop will save view_00.pt as the original.
         x_norm = normalize_fn(views.to(device))
         
         if hasattr(backbone, 'encode_image'):
@@ -217,7 +215,6 @@ def cache_features(
         else:
             features = backbone(x_norm) # (N_views, D)
 
-        # 3. Save individually to match your glob("view_*.pt") logic
         for i, feat in enumerate(features):
             feat_path = sample_dir / f"view_{i:02d}.pt"
             torch.save(feat.cpu(), feat_path)

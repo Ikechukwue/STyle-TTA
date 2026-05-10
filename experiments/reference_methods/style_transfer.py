@@ -403,7 +403,7 @@ def evaluate_color_transfer(
     # model = accelerator.prepare(model)
 
     # Load the method and the underlying model
-    color_transfer_transform, color_transfer_model = create_color_transfer_method(
+    color_transfer_transform, color_transfer_model = create_style_transfer_method(
         method_name=method_name,
         pretrained_weights=model_weights
     )

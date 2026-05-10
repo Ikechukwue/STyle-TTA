@@ -103,6 +103,7 @@ from .constants import (
     ZERO_N_VIEWS,
     ZERO_GAMMA,
     TPT_GAMMA,
+    CACHE_VIEW_CLASSIFIERS,
     AUGMENTATION_TTA_METHODS,
     RETRIEVAL_TTA_METHODS,
     AVAILABLE_TTA_METHODS,
@@ -172,7 +173,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     # ---- dataset info -------------------------------------------------------
     num_classes = NUM_CLASSES[args.dataset]
     task_type = TASK_TYPE[args.dataset]
-    available_splits = DATASET_SPLITS.get(args.dataset, ["train", "val", "test"])
+    available_splits = DATASET_SPLITS.get(args.dataset, ["train", "val", "test"]) 
     eval_split = args.split if args.split in available_splits else available_splits[-1]
 
     accelerator.print("=" * 72)
@@ -450,7 +451,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
         if args.tta_method == "tent":
             pred = eval_tent(x, tent, normalize_fn)
         # ---- Augmented cache path ----
-        elif augmented_cache_dir is not None:
+        elif augmented_cache_dir:
             sample_dir = augmented_cache_dir / str(args.seed) / args.classifier / args.tta_method / f"{sample_idx:05d}"
             if sample_dir.exists():
                 cached_views = []
@@ -473,8 +474,8 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
                     views = torch.stack(cached_views).to(device)
 
                     # Include original as first view if not already there (feature extractions already have that)
-                    if cached_views[0].ndim == 4:
-                        views = torch.cat([x, views], dim=0)
+                    #if cached_views[0].ndim == 4:
+                    #    views = torch.cat([x, views], dim=0)
                 else:
                     views = x  # fallback: just the original
 
@@ -519,7 +520,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
                                        normalize_fn=normalize_fn)
                 is_feature_cache = True
 
-            else:
+            elif args.tta_method != "geometric":
                 if accelerator.is_main_process:
                     
                     save_generated_views(views, cache_root, sample_idx)

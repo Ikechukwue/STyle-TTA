@@ -389,7 +389,9 @@ class MaskedClassifier(nn.Module):
 
         with open("./data/imagenet/imagenet_subsets.json", "r") as f:
             data = json.load(f)
-            subset_wnids = data.get(self.split, [])
+            if "@" in self.split:
+                split = self.split.split("@")[1] 
+            subset_wnids = data.get(split, [])
             all_wnids = data.get("full", [])
 
         mask = [wnid in subset_wnids for wnid in all_wnids]

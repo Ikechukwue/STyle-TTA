@@ -31,7 +31,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 WEIGHTS_PATH="pretrained"
-if is_pretrained "$CLASSIFIER"; then
+if ! is_pretrained "$CLASSIFIER"; then
     WEIGHTS_PATH="${MODEL_DIR}/${DATASET}-${CLASSIFIER}-none-seed${SEED}.pth"
 fi
 

@@ -18,7 +18,7 @@ python -m experiments.style_transfer_evaluation \
     --weights_dir "$WEIGHTS_DIR" \
     --output_dir "$OUTPUT_PATH/style_transfer_eval" \
     --content_dataset imagenet --content_split test_r \
-    --style_dataset imagenet --style_split train@test_r \
-    --n_content 3 --n_style 3 \
+    --style_dataset imagenet --style_split train \
+    --n_content 20 --n_style 40 \
     --input_size 256 --seed 42 \
     "$@"

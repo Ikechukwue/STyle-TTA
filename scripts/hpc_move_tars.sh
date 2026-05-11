@@ -11,6 +11,13 @@ for folder_path in "$SOURCE_BASE"/*/; do
     folder_name=$(basename "$folder_path")
     if [ "$folder_name" == "complete" ]; then continue; fi
 
+    # --- SKIP MECHANIC ---
+    if [ -f "$DEST_BASE/${folder_name}.tar" ]; then
+        echo "Skipping $folder_name: ${folder_name}.tar already exists in $DEST_BASE"
+        continue
+    fi
+    # ---------------------
+
     echo "------------------------------------------------"
     echo "Processing experiment: $folder_name"
 
@@ -20,10 +27,9 @@ for folder_path in "$SOURCE_BASE"/*/; do
     rm -rf "$TMP_EXTRACT" "$TMP_MERGED"
     mkdir -p "$TMP_EXTRACT" "$TMP_MERGED"
 
-    # 1. Identify the tar with the highest number18:08:28 [15/1806]
+    # 1. Identify the tar with the highest number
     # Assumes format part_XXXXXX.tar
-    LATEST_TAR=$(ls "$folder_path"part_*.tar 2>/dev/null | sort -V
-| tail -n 1)
+    LATEST_TAR=$(ls "$folder_path"part_*.tar 2>/dev/null | sort -V | tail -n 1)
 
     if [ -z "$LATEST_TAR" ]; then
         echo "No tar files found in $folder_name. Skipping."
@@ -37,12 +43,10 @@ for folder_path in "$SOURCE_BASE"/*/; do
     tar -xf "$LATEST_TAR" -C "$TMP_EXTRACT"
 
     # 3. Merging Logic (rank_0 and rank_1)
-    # This moves files from rank folders into a unified structure
     echo "Merging ranks..."
     for rank_dir in "$TMP_EXTRACT"/*/rank_*; do
         if [ -d "$rank_dir" ]; then
-            # cp -an ensures we don't overwrite if files exist and
-stays quiet
+            # cp -r handles the directory structure
             cp -r "$rank_dir"/* "$TMP_MERGED/"
         fi
     done

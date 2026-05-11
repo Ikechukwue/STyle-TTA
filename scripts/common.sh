@@ -8,11 +8,11 @@
 PROJECT_ROOT="/home/stud/nemmler/retristyle"
 
 # ── Default paths (local machine) ──
-DATA_PATH="${DATA_PATH:-${PROJECT_ROOT}/data}"
-OUTPUT_PATH="${OUTPUT_PATH:-${PROJECT_ROOT}/data/results}"
-WEIGHTS_DIR="${WEIGHTS_DIR:-${PROJECT_ROOT}/data/models/style_transfer}"
+DATA_PATH="${DATA_PATH:-/data/local/retristyle/data}"
+OUTPUT_PATH="${OUTPUT_PATH:-${PROJECT_ROOT}/results}"
+WEIGHTS_DIR="${WEIGHTS_DIR:-/data/local/retristyle/models/style_transfer}"
 EMBEDDING_DIR="${EMBEDDING_DIR:-${PROJECT_ROOT}/data/embeddings}"
-MODEL_DIR="${MODEL_DIR:-${PROJECT_ROOT}/data/models/training}"
+MODEL_DIR="${MODEL_DIR:-/data/local/retristyle/models/training}"
 
 # ── HPC cluster paths (NHR@FAU) ──
 HPC_CONTAINER='$WORK/retristyle/retristyle-production.sif'
@@ -20,7 +20,7 @@ HPC_DATA_PATH='$WORK/retristyle/data'
 HPC_OUTPUT_PATH='$WORK/retristyle/results'
 HPC_WEIGHTS_DIR='$WORK/retristyle/models'
 HPC_EMBEDDING_DIR='$WORK/retristyle/embeddings'
-HPC_MODEL_DIR='$WORK/retristyle/models/training'
+HPC_MODEL_DIR='$WORK/retristyle/models'
 HPC_HF_CACHE='$WORK/model_cache/hf'
 HPC_TORCH_CACHE='$WORK/model_cache/torch'
 
@@ -47,7 +47,7 @@ IMAGENET_TEST_SPLITS=("test_r" "test_a" "test_sketch" "test_v2" "testing")
 
 # ── Retrieval / TTA settings ──
 EMBEDDING_MODEL="vit_base_patch16_dinov3.lvd1689m"
-RETRIEVAL_STRATEGIES=("random" "balanced_random" "metric" "balanced_metric" "dino")
+RETRIEVAL_STRATEGIES=("random" "balanced_random" "dino") #"metric" "balanced_metric")
 EVAL_STRATEGIES=("vanilla" "zero" "tpt")
 N_REFS_VALUES=(2 4 8 16 32 64)
 DEFAULT_N_VIEWS=64

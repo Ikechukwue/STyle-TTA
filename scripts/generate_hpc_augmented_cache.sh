@@ -85,7 +85,7 @@ fi
 APPTAINERENV_PYTHONPATH=/app \\
 APPTAINERENV_HF_HOME=/app/hf_models \\
 APPTAINERENV_TORCH_HOME=/app/torch_models \\
-timeout 22h apptainer exec --nv \\
+timeout 20h apptainer exec --nv \\
     --bind \$EFFECTIVE_DATA_PATH:/app/data \\
     --bind \$LOCAL_CACHE:/app/cache \\
     --bind \$LIVE_CODE:/app \\

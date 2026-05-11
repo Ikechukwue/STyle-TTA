@@ -60,8 +60,8 @@ gen_script() {
     local PARTITION=$(echo "$TIER" | awk '{print $2}')
 
     local WEIGHTS_LINE='WEIGHTS_PATH="pretrained"'
-    if ! is_pretrained "$CLF"; then
-        WEIGHTS_LINE='WEIGHTS_PATH=/app/data/models/imagenet-${CLF}-random_flip-random_resized_crop-seed42.pth'
+    if is_pretrained "$CLF"; then
+        WEIGHTS_LINE='WEIGHTS_PATH=$WORK/retristyle/data/imagenet-$CLASSIFIER-random_flip-random_resized_crop-seed42.pth'
     fi
 
     local SCRIPT="${TARGET_DIR}/${SUBDIR}/abl_${CLF_SAFE}_${RETR}_${EVAL}_nr${NREFS}_s${SEED}.sh"
@@ -116,10 +116,13 @@ if [[ -n "\$TMPDIR" ]]; then
     EFFECTIVE_DATA_PATH=\$TMPDIR/data
 
     echo "Unpacking Augmented Cache to SSD..."
-    LOCAL_CACHE=\$TMPDIR/augmented_cache
-    mkdir -p \$LOCAL_CACHE
-    rsync -ahW --progress \$HPCVAULT/augmented_cache/${SPLIT}/complete/${BEST_RETRIEVAL}_${BEST_N_REFS}_${DATASET}_${SPLIT}_s${SEED}.tar -C \$LOCAL_CACHE/
-    tar -xf \$LOCAL_CACHE/${BEST_RETRIEVAL}_${BEST_N_REFS}_${DATASET}_${SPLIT}_s${SEED}.tar -C \$LOCAL_CACHE/
+    TARGET_EXTRACT_DIR="\$TMPDIR/data/augmented_cache/\$SEED/\$CLASSIFIER/\$TTA_METHOD"
+    LOCAL_CACHE=\$TMPDIR/data/augmented_cache
+    mkdir -p \$LOCAL_CACHE \$TARGET_EXTRACT_DIR
+
+    TAR_FILE="${BEST_RETRIEVAL}_${BEST_N_REFS}_${DATASET}_${SPLIT}_s${SEED}.tar"
+    rsync -ahW --progress \$HPCVAULT/augmented_cache/${SPLIT}/complete/\$TAR_FILE \$TMPDIR/
+    tar -xf \$TMPDIR/\$TAR_FILE -C \$TARGET_EXTRACT_DIR
 else
     EFFECTIVE_DATA_PATH=\$DATA_PATH
 fi
@@ -154,8 +157,8 @@ timeout 23h apptainer exec --nv \\
         --n_refs \$N_REFS --n_views ${DEFAULT_N_VIEWS} \\
         --style_batch_size ${STYLE_BATCH_SIZE} \\
         --embedding_model ${EMBEDDING_MODEL} \\
-        --augmented_cache /app/data/cache \\
-        --embedding_dir /app/data/embeddings \\
+        --augmented_cache /app/data/augmented_cache \\
+        --embedding_dir None \\
         --seed \$SEED \\
         --output_path /app/results
 

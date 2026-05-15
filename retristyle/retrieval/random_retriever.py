@@ -53,5 +53,5 @@ class RandomRetriever(BaseRetriever):
     def retrieve(
         self, query: torch.Tensor, k: int = 5
     ) -> Tuple[List[int], Optional[List[float]]]:
-        indices = torch.randperm(self.n, generator=self._generator)[:k].tolist()
+        indices = torch.randperm(self.n, generator=self.generator)[:k].tolist()
         return indices, None

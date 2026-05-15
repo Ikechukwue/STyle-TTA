@@ -284,6 +284,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
         retriever = build_retriever(
             strategy=args.retrieval_strategy,
             db=ref_db,
+            seed = args.seed,
             metric_type=args.metric_type,
             embedding_model=embedding_model,
             embedding_dir=embedding_dir,
@@ -454,7 +455,8 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
             pred = eval_tent(x, tent, normalize_fn)
         # ---- Augmented cache path ----
         elif augmented_cache_dir:
-            sample_dir = augmented_cache_dir / str(args.seed) / args.classifier / args.tta_method / f"{sample_idx:05d}"
+         
+            sample_dir = augmented_cache_dir / f"{args.retrieval_strategy}_{args.dataset}_{args.split}_s{str(args.seed)}" / f"{sample_idx:05d}"
             if sample_dir.exists():
                 cached_views = []
                 for vf in sorted(sample_dir.glob("view_*.pt")):

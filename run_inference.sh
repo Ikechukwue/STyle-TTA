@@ -8,11 +8,11 @@ export PYTHONWARNINGS="ignore"
 
 DATASETS=("imagenet")
 SPLIT=("test_abl")
-MODELS=("resnet18" "densenet121" "swin_base_patch4_window7_224" "vit_base_patch16_224" ) #("ViT-B-16" "dinov2_vitb14") 
-TTA_METHOD=("vanilla" "zero" "tpt")
-THESIS_N_REFS_SWEEP=(8 4 2)
-THESIS_SEEDS=(71397589 133560673 265017005)
-EVAL_STRATEGY=("random" "balanced_random" "metric" "balanced_metric" "dino")
+MODELS=("resnet18") #"densenet121" "swin_base_patch4_window7_224" "vit_base_patch16_224" ) #("ViT-B-16" "dinov2_vitb14") 
+TTA_METHOD=("vanilla" ) #"zero" "tpt")
+THESIS_N_REFS_SWEEP=(8 4 2 16)
+THESIS_SEEDS=(133560673)
+EVAL_STRATEGY=("random") # "dino" "balanced_random" "metric" "balanced_metric" 
 MODEL_DIR="/home/stud/nemmler/retristyle/data/models"
 
 
@@ -36,16 +36,16 @@ for TS in "${THESIS_SEEDS[@]}"; do
                             --data_path "./data" \
                             --weights_path $WEIGHTS_PATH \
                             --classifier $MDL \
-                            --tta_method "geometric" \
+                            --tta_method "retristyle" \
                             --eval_strategy $TTA \
                             --split $DS \
                             --retrieval_strategy $ES \
-                            --n_refs 2 \
+                            --n_refs $NS \
                             --batch_size 128 \
                             --num_workers 4 \
                             --seed "$TS" \
                             --n_views "$NS" \
-                            --augmented_cache "./data/feature_cache" \
+                            --augmented_cache "./data/augmented_cache" \
                             --output_path "results/baseline/$DS"
                         echo "Finished $MDL on $DS"
                     done

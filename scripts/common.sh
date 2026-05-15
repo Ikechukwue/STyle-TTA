@@ -19,7 +19,7 @@ HPC_CONTAINER='$WORK/retristyle/retristyle-production.sif'
 HPC_DATA_PATH='$WORK/retristyle/data'
 HPC_OUTPUT_PATH='$WORK/retristyle/results'
 HPC_WEIGHTS_DIR='$WORK/retristyle/models'
-HPC_EMBEDDING_DIR='$WORK/retristyle/embeddings'
+HPC_EMBEDDING_DIR='$HPCVAULT/retristyle/embeddings'
 HPC_MODEL_DIR='$WORK/retristyle/models'
 HPC_HF_CACHE='$WORK/model_cache/hf'
 HPC_TORCH_CACHE='$WORK/model_cache/torch'
@@ -47,9 +47,9 @@ IMAGENET_TEST_SPLITS=("test_r" "test_a" "test_sketch" "test_v2" "testing")
 
 # ── Retrieval / TTA settings ──
 EMBEDDING_MODEL="vit_base_patch16_dinov3.lvd1689m"
-RETRIEVAL_STRATEGIES=("random" "balanced_random" "dino") #"metric" "balanced_metric")
+RETRIEVAL_STRATEGIES=("random" "balanced_random" "dino" "metric" "balanced_metric")
 EVAL_STRATEGIES=("vanilla" "zero" "tpt")
-N_REFS_VALUES=(2 4 8 16 32 64)
+N_REFS_VALUES=(2 4 8 16)
 DEFAULT_N_VIEWS=64
 STYLE_BATCH_SIZE=8
 

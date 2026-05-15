@@ -53,6 +53,7 @@ COUNTER=0
 # Args: SUBDIR CLF EVAL RETR NREFS SEED TAG
 gen_script() {
     local SUBDIR=$1 CLF=$2 EVAL=$3 RETR=$4 NREFS=$5 SEED=$6 TAG=$7
+    is_pretrained "$CLF" && return 0
     local CLF_SAFE=$(safe_name "$CLF")
 
     local TIER=$(gpu_tier_for_nrefs "$NREFS")
@@ -72,7 +73,7 @@ gen_script() {
 #SBATCH --job-name=abl-${TAG}-${CLF_SAFE}-s${SEED}
 #SBATCH --gres=${GPU_CONFIG}
 #SBATCH --partition=${PARTITION}
-#SBATCH --time=24:00:00
+#SBATCH --time=3:00:00
 #SBATCH --export=NONE
 unset SLURM_EXPORT_ENV
 
@@ -92,7 +93,7 @@ ${WEIGHTS_LINE}
 
 CONTAINER=${HPC_CONTAINER}
 DATA_PATH=${HPC_DATA_PATH}
-OUTPUT_PATH=${HPC_OUTPUT_PATH}/ablation
+OUTPUT_PATH=${HPC_OUTPUT_PATH}
 EMBEDDING_DIR=${HPC_EMBEDDING_DIR}
 HF_MODELS_CACHE=${HPC_HF_CACHE}
 TORCH_MODELS_CACHE=${HPC_TORCH_CACHE}
@@ -139,12 +140,13 @@ APPTAINERENV_http_proxy=\$http_proxy \\
 APPTAINERENV_https_proxy=\$https_proxy \\
 APPTAINERENV_HF_HOME=/app/hf_models \\
 APPTAINERENV_TORCH_HOME=/app/torch_models \\
-timeout 23h apptainer exec --nv \\
+timeout 2h apptainer exec --nv \\
     --pwd /app \\
     --bind \$EFFECTIVE_DATA_PATH:/app/data \\
     --bind \$OUTPUT_PATH:/app/results \\
     --bind \$LOCAL_CACHE:/app/data/augmented_cache \\
     --bind \$HF_MODELS_CACHE:/app/hf_models \\
+    --bind \$EMBEDDING_DIR:/app/data/embeddings \\
     --bind \$LIVE_CODE:/app \\
     --bind \$TORCH_MODELS_CACHE:/app/torch_models \\
     \$CONTAINER \\
@@ -158,7 +160,7 @@ timeout 23h apptainer exec --nv \\
         --style_batch_size ${STYLE_BATCH_SIZE} \\
         --embedding_model ${EMBEDDING_MODEL} \\
         --augmented_cache /app/data/augmented_cache \\
-        --embedding_dir None \\
+        --embedding_dir /app/data/embeddings \\
         --seed \$SEED \\
         --output_path /app/results
 

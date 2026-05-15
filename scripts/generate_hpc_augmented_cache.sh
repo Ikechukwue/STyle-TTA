@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 DATASET="imagenet"
-SPLIT="test_abl"
+SPLIT="test_r"
 N_REFS=16
 
 TARGET_DIR="${SCRIPT_DIR}/generated/augmented_cache/${SPLIT}"
@@ -27,16 +27,16 @@ echo "  n_refs    : ${N_REFS}"
 echo "  Seeds     : ${ALL_SEEDS[*]}"
 echo "========================================================================"
 
-COUNTER=0
+generate_script() {
+    local RETRIEVAL=$1
+    local SEED=$2
 
-for RETRIEVAL in "${RETRIEVAL_STRATEGIES[@]}"; do
-    for SEED in "${ALL_SEEDS[@]}"; do
-        TIER=$(gpu_tier_for_nrefs "$N_REFS")
-        GPU_CONFIG=$(echo "$TIER" | awk '{print $1}')
-        PARTITION=$(echo "$TIER" | awk '{print $2}')
+    TIER=$(gpu_tier_for_nrefs "$N_REFS")
+    GPU_CONFIG=$(echo "$TIER" | awk '{print $1}')
+    PARTITION=$(echo "$TIER" | awk '{print $2}')
 
-        SCRIPT="${TARGET_DIR}/cache_${RETRIEVAL}_${DATASET}_nr${N_REFS}_s${SEED}.sh"
-        cat > "$SCRIPT" << EOF
+    SCRIPT="${TARGET_DIR}/cache_${RETRIEVAL}_${DATASET}_nr${N_REFS}_s${SEED}.sh"
+    cat > "$SCRIPT" << EOF
 #!/bin/bash -l
 #SBATCH --job-name=cache-${RETRIEVAL}-${DATASET}-nr${N_REFS}-s${SEED}
 #SBATCH --gres=${GPU_CONFIG}
@@ -64,7 +64,7 @@ mkdir -p "\$FINAL_DEST" "\$EMBEDDING_DIR"
 if [[ -n "\$TMPDIR" ]]; then
     echo "Staging data to SSD..."
     # Note: Ensure this tar path is correct!
-    tar -xf \$HPCVAULT/data/imagenet_test_abl.tar -C \$TMPDIR/
+    tar -xf \$HPCVAULT/data/imagenet_test_r.tar -C \$TMPDIR/
     EFFECTIVE_DATA_PATH=\$TMPDIR/data
 
     LOCAL_CACHE=\$TMPDIR/stylized_out
@@ -119,7 +119,20 @@ exit \$GEN_EXIT
 EOF
         chmod +x "$SCRIPT"
         COUNTER=$((COUNTER + 1))
+}
+
+COUNTER=0
+SEEDED_STRATEGIES=("random" "balanced_random")
+DETERMINISTIC_STRATEGIES=("dino" "metric" "balanced_metric")
+
+for RETRIEVAL in "${SEEDED_STRATEGIES[@]}"; do
+    for SEED in "${ALL_SEEDS[@]}"; do
+        generate_script "$RETRIEVAL" "$SEED"
     done
+done
+
+for RETRIEVAL in "${DETERMINISTIC_STRATEGIES[@]}"; do
+    generate_script "$RETRIEVAL" "${ALL_SEEDS[0]}"
 done
 
 cat > "${TARGET_DIR}/submit_all.sh" << 'SUBMIT'

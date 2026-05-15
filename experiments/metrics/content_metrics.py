@@ -1230,53 +1230,113 @@ def batch_edge_similarity(batch_A, batch_B, model, method='ldc'):
             results[i, j] = ssim(eA_np[i], eB_np[j], data_range=1.0)
             
     return torch.from_numpy(results)
+    
+def _pairwise_dists_chunked(feats_A, feats_B, dists_model, chunk_size=16):
+    """
+    Computes pairwise DISTS between two sets of 3-channel maps
+    without materializing the full N*M batch at once.
+    feats_A: [N, 3, H, W]
+    feats_B: [M, 3, H, W]
+    Returns: numpy array [N, M]
+    """
+    N, M = feats_A.shape[0], feats_B.shape[0]
+    out = np.zeros((N, M), dtype=np.float32)
 
-def batch_depth_analysis(batch_A, batch_B, model_dict):
-    """
-    Computes all depth-based metrics for two batches.
-    Returns: MAE, SSIM, Spearman, DISTS (as grids)
-    """
+    for i_start in range(0, N, chunk_size):
+        i_end = min(i_start + chunk_size, N)
+        chunk_A = feats_A[i_start:i_end]  # [ci, 3, H, W]
+        ci = chunk_A.shape[0]
+
+        for j_start in range(0, M, chunk_size):
+            j_end = min(j_start + chunk_size, M)
+            chunk_B = feats_B[j_start:j_end]  # [cj, 3, H, W]
+            cj = chunk_B.shape[0]
+
+            # Only ci*cj pairs in memory at once
+            a_exp = chunk_A.repeat_interleave(cj, dim=0)   # [ci*cj, 3, H, W]
+            b_exp = chunk_B.repeat(ci, 1, 1, 1)             # [ci*cj, 3, H, W]
+
+            with torch.no_grad():
+                scores = dists_model(a_exp, b_exp)           # [ci*cj]
+
+            out[i_start:i_end, j_start:j_end] = (
+                scores.view(ci, cj).cpu().numpy()
+            )
+
+            # Free the pair batch immediately
+            del a_exp, b_exp, scores
+
+    return out
+
+
+def _extract_depth_maps(batch, model_dict, mini_batch_size=8):
+    """Run depth model in mini-batches to avoid OOM on large batches."""
     model = model_dict['model']
     processor = model_dict['processor']
-    device = batch_A.device
-    
-    def get_maps(batch):
-        # Batch to PIL for the transformer processor
-        images_list = [torch.clamp(img, 0, 1) for img in batch]
-        inputs = processor(images=images_list, return_tensors="pt").to(device)
-        outputs = model(**inputs)
-        
-        # Interpolate to input resolution
+    device = batch.device
+    all_maps = []
+
+    for start in range(0, batch.shape[0], mini_batch_size):
+        chunk = batch[start:start + mini_batch_size]
+        images_list = [torch.clamp(img, 0, 1) for img in chunk]
+
+        with torch.no_grad():
+            inputs = processor(images=images_list, return_tensors="pt").to(device)
+            outputs = model(**inputs)
+
         maps = torch.nn.functional.interpolate(
             outputs.predicted_depth.unsqueeze(1),
             size=(batch.shape[2], batch.shape[3]),
             mode="bicubic", align_corners=False
         )
-        # Min-Max Normalize per image in batch
-        b_size = maps.shape[0]
-        mins = maps.view(b_size, -1).min(dim=1)[0].view(-1, 1, 1, 1)
-        maxs = maps.view(b_size, -1).max(dim=1)[0].view(-1, 1, 1, 1)
-        return (maps - mins) / (maxs - mins + 1e-8)
+        b = maps.shape[0]
+        mins = maps.view(b, -1).min(1)[0].view(-1, 1, 1, 1)
+        maxs = maps.view(b, -1).max(1)[0].view(-1, 1, 1, 1)
+        all_maps.append((maps - mins) / (maxs - mins + 1e-8))
 
-    # Pre-extract maps
-    depth_A = get_maps(batch_A) # [N, 1, H, W]
-    depth_B = get_maps(batch_B) # [M, 1, H, W]
+    return torch.cat(all_maps, dim=0)  # [N, 1, H, W]
 
+
+def _extract_edges(batch, model, method='ldc', mini_batch_size=8):
+    """Run edge model in mini-batches."""
+    device = batch.device
+    all_edges = []
+
+    for start in range(0, batch.shape[0], mini_batch_size):
+        chunk = batch[start:start + mini_batch_size]
+        with torch.no_grad():
+            if method == 'ldc':
+                mean = torch.tensor([103.939, 116.779, 123.68]).view(1, 3, 1, 1).to(device)
+                out = model((chunk * 255.0) - mean)
+                edges = torch.sigmoid(out[-1])
+            else:
+                edges = model(chunk)
+
+        b = edges.shape[0]
+        max_v = edges.view(b, -1).max(1)[0].view(-1, 1, 1, 1)
+        all_edges.append(edges / (max_v + 1e-8))
+
+    return torch.cat(all_edges, dim=0)  # [N, 1, H, W]
+
+
+def batch_depth_analysis(batch_A, batch_B, model_dict, dists_model, dists_chunk=8, depth_mini_batch=8):
+
+    depth_A = _extract_depth_maps(batch_A, model_dict, depth_mini_batch)
+    depth_B = _extract_depth_maps(batch_B, model_dict, depth_mini_batch)
     N, M = depth_A.shape[0], depth_B.shape[0]
-    
-    # 1. Depth DISTS (Using the global dists_model)
-    dists_model = _get_dists_model().to(device)
-    # Expand to pairwise: [N*M, 3, H, W]
-    dA_exp = depth_A.repeat(1, 3, 1, 1).repeat_interleave(M, dim=0)
-    dB_exp = depth_B.repeat(1, 3, 1, 1).repeat(N, 1, 1, 1)
-    dists_grid = dists_model(dA_exp, dB_exp).view(N, M).cpu().numpy()
 
-    # 2. SSIM/MAE/Spearman (Numpy loops for scipy compatibility)
+    # DISTS: chunked pairwise, no giant intermediate tensor
+    dA3 = depth_A.repeat(1, 3, 1, 1)
+    dB3 = depth_B.repeat(1, 3, 1, 1)
+    dists_grid = _pairwise_dists_chunked(dA3, dB3, dists_model, chunk_size=dists_chunk)
+
+    # CPU metrics unchanged
     dA_np = depth_A.squeeze(1).cpu().numpy()
     dB_np = depth_B.squeeze(1).cpu().numpy()
-    
-    mae_grid, ssim_grid, spear_grid = np.zeros((N, M)), np.zeros((N, M)), np.zeros((N, M))
-    
+    mae_grid = np.zeros((N, M))
+    ssim_grid = np.zeros((N, M))
+    spear_grid = np.zeros((N, M))
+
     from scipy.stats import spearmanr
     for i in range(N):
         for j in range(M):
@@ -1287,67 +1347,46 @@ def batch_depth_analysis(batch_A, batch_B, model_dict):
 
     return mae_grid, ssim_grid, spear_grid, dists_grid
 
-def batch_edge_analysis(batch_A, batch_B, model, method='ldc'):
-    """
-    Computes all edge-based metrics.
-    """
-    device = batch_A.device
-    
-    def get_edges(batch):
-        if method == 'ldc':
-            mean = torch.tensor([103.939, 116.779, 123.68]).view(1, 3, 1, 1).to(device)
-            out = model((batch * 255.0) - mean)
-            edges = torch.sigmoid(out[-1])
-        else: # HED
-            edges = model(batch)
-        # Normalize
-        b_size = edges.shape[0]
-        max_v = edges.view(b_size, -1).max(1)[0].view(-1, 1, 1, 1)
-        return edges / (max_v + 1e-8)
 
-    edges_A = get_edges(batch_A)
-    edges_B = get_edges(batch_B)
-    
+def batch_edge_analysis(batch_A, batch_B, model,  dists_model, method='ldc', dists_chunk=8, edge_mini_batch=8):
+
+    edges_A = _extract_edges(batch_A, model, method, edge_mini_batch)
+    edges_B = _extract_edges(batch_B, model, method, edge_mini_batch)
     N, M = edges_A.shape[0], edges_B.shape[0]
-    
-    # 1. Edge DISTS (Vectorized on GPU)
-    dists_model = _get_dists_model().to(device)
-    eA_exp = edges_A.repeat(1, 3, 1, 1).repeat_interleave(M, dim=0)
-    eB_exp = edges_B.repeat(1, 3, 1, 1).repeat(N, 1, 1, 1)
-    dists_grid = dists_model(eA_exp, eB_exp).view(N, M).cpu().numpy()
 
-    # 2. Geometric Metrics (Numpy/Scipy)
+    eA3 = edges_A.repeat(1, 3, 1, 1)
+    eB3 = edges_B.repeat(1, 3, 1, 1)
+    dists_grid = _pairwise_dists_chunked(eA3, eB3, dists_model, chunk_size=dists_chunk)
+
     eA_np = edges_A.squeeze(1).cpu().numpy()
     eB_np = edges_B.squeeze(1).cpu().numpy()
-    
-    ssim_grid, fom_grid, haus_grid = np.zeros((N, M)), np.zeros((N, M)), np.zeros((N, M))
-    
+    ssim_grid = np.zeros((N, M))
+    fom_grid  = np.zeros((N, M))
+    haus_grid = np.zeros((N, M))
+
     from scipy.ndimage import distance_transform_edt
     from scipy.spatial.distance import directed_hausdorff
 
     for i in range(N):
-        # Binarize for FOM/Hausdorff
         bin_A = eA_np[i] > 0.1
         pts_A = np.argwhere(bin_A)
         dist_trans_A = distance_transform_edt(~bin_A)
-        
+
         for j in range(M):
-            # SSIM
             ssim_grid[i, j] = ssim(eA_np[i], eB_np[j], data_range=1.0)
-            
-            # FOM & Hausdorff
             bin_B = eB_np[j] > 0.1
             pts_B = np.argwhere(bin_B)
-            
+
             if np.any(bin_A) and np.any(bin_B):
-                # FOM
                 d_i = dist_trans_A[bin_B]
-                fom_grid[i, j] = np.sum(1.0 / (1.0 + (1.0/9.0) * (d_i ** 2))) / max(np.sum(bin_A), np.sum(bin_B))
-                # Hausdorff
+                fom_grid[i, j] = (
+                    np.sum(1.0 / (1.0 + (1.0/9.0) * (d_i ** 2)))
+                    / max(np.sum(bin_A), np.sum(bin_B))
+                )
                 h1 = directed_hausdorff(pts_A, pts_B)[0]
                 h2 = directed_hausdorff(pts_B, pts_A)[0]
                 haus_grid[i, j] = max(h1, h2)
             else:
-                haus_grid[i, j] = 1000.0 # Penalty for no edges
+                haus_grid[i, j] = 1000.0
 
     return ssim_grid, dists_grid, fom_grid, haus_grid

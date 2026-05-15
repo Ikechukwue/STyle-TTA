@@ -177,7 +177,7 @@ def domain_analysis(args):
     n_classes = len(common_classes)
     print(f"Found {n_classes}, processing {groups_A_length/n_classes} x {groups_B_length/n_classes} = {(groups_B_length * groups_A_length)/(n_classes*2)}")
 
-    models = ["lpips", "hed", "ldc", "depthanything_v2_large", "dpt_large", "depthpro"]
+    models = ["lpips", "hed", "ldc", "depthanything_v2_large", "dpt_large" ] # "depthpro", is too big for now
     model_metrics = model_analysis(set_A, set_B, common_classes, groups_A, groups_B, models)
 
     for cls in tqdm(common_classes, desc="Processing Classes"):

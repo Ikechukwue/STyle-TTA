@@ -71,7 +71,7 @@ def _setup_style():
 # =========================================================================
 # 1. Style Transfer Method Comparison (Grouped Bar)
 # =========================================================================
-def plot_style_transfer_comparison(results_dir: Path, output_dir: Path):
+def plot_style_transfer_comparison(results_dir: Path, output_dir: Path, args):
     """Grouped bar chart comparing style transfer methods."""
     f = results_dir / "style_transfer_eval" / "all_methods_comparison.json"
     if not f.exists():
@@ -125,12 +125,12 @@ def plot_style_transfer_comparison(results_dir: Path, output_dir: Path):
 # =========================================================================
 # 2. Ablation Bar Charts
 # =========================================================================
-def plot_ablation_bars(results_dir: Path, output_dir: Path, ablation_type: str):
+def plot_ablation_bars(results_dir: Path, output_dir: Path, ablation_type: str, args):
     """Bar chart for a specific ablation axis."""
-    abl_dir = results_dir / "thesis" / "ablation"
+    abl_dir = results_dir / "ablation"  / "tta_inference" / "results" / "imagenet" / args.split
     if not abl_dir.exists():
         abl_dir = results_dir / "ablation"
-    files = _find_json(abl_dir, "*_results.json")
+    files = _find_json(abl_dir, "*.json")
     if not files:
         print(f"  [skip] No ablation results for {ablation_type}")
         return
@@ -179,12 +179,12 @@ def plot_ablation_bars(results_dir: Path, output_dir: Path, ablation_type: str):
 # =========================================================================
 # 3. n_refs Line Plot
 # =========================================================================
-def plot_nrefs_sweep(results_dir: Path, output_dir: Path):
+def plot_nrefs_sweep(results_dir: Path, output_dir: Path, args):
     """Line plot of accuracy vs n_refs per classifier."""
-    abl_dir = results_dir / "thesis" / "ablation"
+    abl_dir = results_dir / "ablation" / args.split / "tta_inference" / "results"
     if not abl_dir.exists():
         abl_dir = results_dir / "ablation"
-    files = _find_json(abl_dir, "*_results.json")
+    files = _find_json(abl_dir, "*.json")
     if not files:
         print("  [skip] No n_refs sweep results")
         return
@@ -228,9 +228,9 @@ def plot_nrefs_sweep(results_dir: Path, output_dir: Path):
 # =========================================================================
 # 4. Hybrid TTA Mixing Ratios
 # =========================================================================
-def plot_hybrid_tta(results_dir: Path, output_dir: Path):
+def plot_hybrid_tta(results_dir: Path, output_dir: Path, args):
     """Line plot of accuracy across geo/style mixing ratios."""
-    hybrid_dir = results_dir / "thesis" / "hybrid_tta"
+    hybrid_dir = results_dir / "hybrid_tta"
     if not hybrid_dir.exists():
         hybrid_dir = results_dir / "hybrid_tta"
     files = _find_json(hybrid_dir, "*_results.json")
@@ -275,13 +275,13 @@ def plot_hybrid_tta(results_dir: Path, output_dir: Path):
 # =========================================================================
 # 5. Accuracy vs ECE Scatter
 # =========================================================================
-def plot_accuracy_vs_ece(results_dir: Path, output_dir: Path):
+def plot_accuracy_vs_ece(results_dir: Path, output_dir: Path, args):
     """Scatter plot of accuracy vs ECE across all experiments."""
     all_points = []
     for pattern in ["thesis/geometric_tta", "thesis/ablation", "thesis/hybrid_tta",
                     "geometric_tta", "ablation", "hybrid_tta"]:
-        d = results_dir / pattern
-        for f in _find_json(d, "*_results.json"):
+        d = results_dir / pattern / f"{args.split}/tta_inference/results"
+        for f in _find_json(d, "*.json"):
             data = _load_json(f)
             m = data.get("metrics", {})
             if "accuracy" in m and "ece" in m:
@@ -319,11 +319,13 @@ def plot_accuracy_vs_ece(results_dir: Path, output_dir: Path):
 # =========================================================================
 # Main
 # =========================================================================
-def generate_all_plots(results_dir: Path, output_dir: Path):
+def generate_all_plots(args):
     if not HAS_MPL:
         print("ERROR: matplotlib not installed. Install with: pip install matplotlib seaborn")
         return
 
+    results_dir = Path(args.results_dir)
+    output_dir = Path(args.output_dir)
     _setup_style()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -331,13 +333,13 @@ def generate_all_plots(results_dir: Path, output_dir: Path):
     print("Result Visualisation")
     print("=" * 60)
 
-    plot_style_transfer_comparison(results_dir, output_dir)
-    plot_ablation_bars(results_dir, output_dir, "retrieval")
-    plot_ablation_bars(results_dir, output_dir, "eval")
-    plot_ablation_bars(results_dir, output_dir, "nrefs")
-    plot_nrefs_sweep(results_dir, output_dir)
-    plot_hybrid_tta(results_dir, output_dir)
-    plot_accuracy_vs_ece(results_dir, output_dir)
+    plot_style_transfer_comparison(results_dir, output_dir, args)
+    plot_ablation_bars(results_dir, output_dir, "retrieval", args)
+    plot_ablation_bars(results_dir, output_dir, "eval", args)
+    plot_ablation_bars(results_dir, output_dir, "nrefs", args)
+    plot_nrefs_sweep(results_dir, output_dir, args)
+    plot_hybrid_tta(results_dir, output_dir, args)
+    plot_accuracy_vs_ece(results_dir, output_dir, args)
 
     print(f"\nAll figures written to {output_dir}/")
 
@@ -346,12 +348,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Generate thesis figures")
     p.add_argument("--results_dir", type=str, default="./results")
     p.add_argument("--output_dir", type=str, default="./figures")
+    p.add_argument("--split", type=str, default="test_abl")
     return p
 
 
 def main():
     args = build_parser().parse_args()
-    generate_all_plots(Path(args.results_dir), Path(args.output_dir))
+    generate_all_plots(args)
 
 
 if __name__ == "__main__":

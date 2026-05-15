@@ -87,6 +87,7 @@ def build_retriever(
     strategy: str,
     db: ReferenceDatabase,
     *,
+    seed: int= DEFAULT_SEED,
     metric_type: str = "ssim",
     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
     embedding_dir: str | None = None,
@@ -102,9 +103,9 @@ def build_retriever(
     NOTE: Add split to filter for the relevant classes in Imagenet 
     """
     if strategy == "random":
-        return RandomRetriever(db=db)
+        return RandomRetriever(db=db, seed=seed)
     if strategy == "balanced_random":
-        return BalancedRandomRetriever(db=db)
+        return BalancedRandomRetriever(db=db, seed=seed)
     if strategy == "metric":
         return MetricRetriever(db=db, metric=metric_type)
     if strategy == "balanced_metric":

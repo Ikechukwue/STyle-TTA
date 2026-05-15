@@ -16,6 +16,7 @@ from skimage.metrics import structural_similarity as ssim
 from typing import Tuple, Optional, Dict, Any
 from pathlib import Path
 from PIL import Image
+import torch.nn.functional as F
 
 # Global model instances (lazy-loaded)
 _lpips_model = None
@@ -91,52 +92,56 @@ def _get_lpips_model():
 
 
 def _get_hed_model():
-    """
-    Get the HED (Holistically-Nested Edge Detection) model.
-    Uses implementation from https://github.com/sniklaus/pytorch-hed
-    Lazily loads the model on first use.
-    """
     global _hed_model
     if _hed_model is None:
-        try:
-            # Import HED implementation
-            from experiments.metrics.edge_models.hed import Network
+        from experiments.metrics.edge_models.hed import Network
+        _hed_model = Network()
+        model_path = EDGE_DETECTION_MODELS_DIR / "hed.pth"
+
+        if model_path.exists():
+            checkpoint = torch.load(str(model_path), map_location='cpu', weights_only=False)
             
-            _hed_model = Network()
-            
-            # Load pretrained weights if available
-            model_path = EDGE_DETECTION_MODELS_DIR / "hed.pth"
-            if model_path.exists():
-                # Load checkpoint (weights_only=False for compatibility with official weights)
-                checkpoint = torch.load(str(model_path), map_location='cpu', weights_only=False)
-                
-                # Extract state dict if checkpoint contains metadata
-                if isinstance(checkpoint, dict):
-                    if 'state_dict' in checkpoint:
-                        state_dict = checkpoint['state_dict']
-                    elif 'model' in checkpoint:
-                        state_dict = checkpoint['model']
-                    else:
-                        state_dict = checkpoint
-                else:
-                    state_dict = checkpoint
-                
-                # Rename keys: module -> net (for compatibility with official weights)
-                state_dict = {key.replace('module', 'net'): value for key, value in state_dict.items()}
-                
-                _hed_model.load_state_dict(state_dict)
-                print(f"HED model loaded from {model_path.name}")
+            # Extract state dict if nested
+            if isinstance(checkpoint, dict):
+                state_dict = checkpoint.get('net', checkpoint.get('state_dict', checkpoint))
             else:
-                print(f"HED weights not found at {model_path.absolute()}, using untrained model")
-            
-            if torch.cuda.is_available():
-                _hed_model = _hed_model.cuda()
-            _hed_model.eval()
-        except Exception as e:
-            raise RuntimeError(f"Could not load HED model: {e}")
+                state_dict = checkpoint
+
+            # Define the manual mapping from Checkpoint -> Your Model Class
+            mapping = {
+                "conv1_1": "netVggOne.0", "conv1_2": "netVggOne.2",
+                "conv2_1": "netVggTwo.1", "conv2_2": "netVggTwo.3",
+                "conv3_1": "netVggThr.1", "conv3_2": "netVggThr.3", "conv3_3": "netVggThr.5",
+                "conv4_1": "netVggFou.1", "conv4_2": "netVggFou.3", "conv4_3": "netVggFou.5",
+                "conv5_1": "netVggFiv.1", "conv5_2": "netVggFiv.3", "conv5_3": "netVggFiv.5",
+                "score_dsn1": "netScoreOne", "score_dsn2": "netScoreTwo",
+                "score_dsn3": "netScoreThr", "score_dsn4": "netScoreFou",
+                "score_dsn5": "netScoreFiv", "score_final": "netCombine.0"
+            }
+
+            new_state_dict = {}
+            for old_key, value in state_dict.items():
+                # Strip potential 'module.' or 'net.' prefixes first
+                k = old_key.replace('module.', '').replace('net.', '')
+                
+                # Check if the base name (e.g., 'conv1_1') is in our map
+                base_name = ".".join(k.split('.')[:-1])
+                suffix = k.split('.')[-1] # weight or bias
+                
+                if base_name in mapping:
+                    new_key = f"{mapping[base_name]}.{suffix}"
+                    new_state_dict[new_key] = value
+                else:
+                    # If it's already named correctly or doesn't need mapping
+                    new_state_dict[k] = value
+
+            _hed_model.load_state_dict(new_state_dict)
+            print(f"HED model successfully remapped and loaded.")
+        
+        if torch.cuda.is_available():
+            _hed_model = _hed_model.cuda()
+        _hed_model.eval()
     return _hed_model
-
-
 def _get_ldc_model():
     """
     Get the LDC (Lightweight Dense CNN for Edge Detection) model.
@@ -150,7 +155,7 @@ def _get_ldc_model():
             from experiments.metrics.edge_models.ldc import LDC
             
             _ldc_model = LDC()
-            model_path = EDGE_DETECTION_MODELS_DIR / "ldc_biped.pth"
+            model_path = Path("/home/stud/nemmler/retristyle/data/models/edge_detection/ldc_biped.pth")
             
             if model_path.exists():
                 # Load checkpoint (weights_only=False for compatibility)
@@ -322,6 +327,9 @@ def _get_adists_model():
             _adists_model = None
     return _adists_model
 
+##############################################################################
+# Model-Free Formulas
+##############################################################################
 
 def compute_luminance_ssim(img1, img2) -> float:
     """
@@ -395,6 +403,9 @@ def compute_ssim(img1, img2) -> float:
     
     return float(ssim_value)
 
+##############################################################################
+# Model Formulas
+##############################################################################
 
 def compute_lpips_distance(img1, img2) -> float:
     """
@@ -410,7 +421,7 @@ def compute_lpips_distance(img1, img2) -> float:
     # Get the LPIPS model
     model = _get_lpips_model()
     
-    # Ensure inputs are tensors [C, H, W]
+    # Ensure inputs are tensors [B, C, H, W]
     if not isinstance(img1, torch.Tensor):
         img1 = torch.from_numpy(img1).float()
         if img1.ndim == 3 and img1.shape[-1] == 3:
@@ -1035,4 +1046,308 @@ def compute_depth_ssim(img1, img2, method: str = 'depthanything_v2_large') -> fl
         print(f"Depth SSIM calculation failed: {e}")
         return 0.0
 
+##############################################################################
+# Batch Formulas
+##############################################################################
 
+def batch_ssim(X: torch.Tensor, Y: torch.Tensor, window_size: int = 11, size_average: bool = False, use_luminance: bool = False,) -> torch.Tensor:
+    """
+    Computes SSIM pairwise between batch X (N, C, H, W) and batch Y (M, C, H, W).
+    Returns a matrix of shape (N, M) containing the SSIM for every pair.
+    """
+    
+    # Create a 2D Gaussian window
+    def gaussian(w_size, sigma, device, dtype):
+        coords = torch.arange(w_size, device=device, dtype=dtype)
+        coords -= w_size // 2
+
+        gauss = torch.exp(-(coords ** 2) / (2 * sigma ** 2))
+        return gauss / gauss.sum()
+
+    def luminance(img1, img2):
+        gray1 = (
+            0.2989 * img1[:, 0:1]
+            + 0.5870 * img1[:, 1:2]
+            + 0.1140 * img1[:, 2:3]
+        )
+        gray2 = (
+            0.2989 * img2[:, 0:1]
+            + 0.5870 * img2[:, 1:2]
+            + 0.1140 * img2[:, 2:3]
+        )
+        return gray1, gray2
+    
+    if use_luminance:
+        X, Y = luminance(X,Y)
+
+    N, C, H, W = X.shape
+    M = Y.shape[0]
+    
+    _1D_window = gaussian(window_size, 1.5, X.device, X.dtype).unsqueeze(1)
+    _2D_window = _1D_window.mm(_1D_window.t()).to(dtype=X.dtype).unsqueeze(0).unsqueeze(0).to(X.device)
+    window = _2D_window.expand(C, 1, window_size, window_size)
+
+    # To do an N x M pairwise cross comparison efficiently, we expand the tensors
+    # X_exp: (N, M, C, H, W) -> reshaped to (N*M, C, H, W)
+    X_exp = X.unsqueeze(1).expand(N, M, C, H, W).reshape(N * M, C, H, W)
+    Y_exp = Y.unsqueeze(0).expand(N, M, C, H, W).reshape(N * M, C, H, W)
+
+    # Compute local means
+    mu1 = F.conv2d(X_exp, window, groups=C, padding=window_size//2)
+    mu2 = F.conv2d(Y_exp, window, groups=C, padding=window_size//2)
+
+    mu1_sq = mu1.pow(2)
+    mu2_sq = mu2.pow(2)
+    mu1_mu2 = mu1 * mu2
+
+    # Compute local variances and covariances
+    sigma1_sq = F.conv2d(X_exp * X_exp, window, groups=C, padding=window_size//2) - mu1_sq
+    sigma2_sq = F.conv2d(Y_exp * Y_exp, window, groups=C, padding=window_size//2) - mu2_sq
+    sigma12 = F.conv2d(X_exp * Y_exp, window, groups=C, padding=window_size//2) - mu1_mu2
+
+    C1 = 0.01 ** 2
+    C2 = 0.03 ** 2
+
+    # SSIM formula applied across all NxM pairs at once
+    ssim_map = ((2 * mu1_mu2 + C1) * (2 * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2))
+    
+    # Average over spatial dimensions and channels -> Shape (N * M) -> Reshape to (N, M)
+    return ssim_map.mean(dim=[1, 2, 3]).reshape(N, M)
+
+
+def batch_sobel_edge_similarity(X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
+    """
+    Computes Sobel Edge Magnitude similarity pairwise between batch X and batch Y.
+    Returns a matrix of shape (N, M).
+    """
+    def rgb_to_gray(img):
+        return (
+            0.2989 * img[:, 0:1]
+            + 0.5870 * img[:, 1:2]
+            + 0.1140 * img[:, 2:3]
+        )
+    
+    
+    X = rgb_to_gray(X)
+    Y = rgb_to_gray(Y)
+
+    N, C, H, W = X.shape
+    M = Y.shape[0]
+
+    # Define Sobel kernels
+    sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=X.dtype).view(1, 1, 3, 3).to(X.device)
+    sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=X.dtype).view(1, 1, 3, 3).to(X.device)
+
+    # Expand to match channels
+    sobel_x = sobel_x.expand(C, 1, 3, 3)
+    sobel_y = sobel_y.expand(C, 1, 3, 3)
+
+    def get_edge_magnitude(img_batch):
+        # Flatten channels to batch dimension to apply grayscale Sobel or handle per channel
+        grad_x = F.conv2d(img_batch, sobel_x, groups=C, padding=1)
+        grad_y = F.conv2d(img_batch, sobel_y, groups=C, padding=1)
+        magnitude = torch.sqrt(grad_x**2 + grad_y**2 + 1e-8)
+        return magnitude.mean(dim=1, keepdim=True) # Average channels to get single edge map
+
+    # Compute edge maps for both blocks independently
+    edges_X = get_edge_magnitude(X) # (N, 1, H, W)
+    edges_Y = get_edge_magnitude(Y) # (M, 1, H, W)
+
+    # Cross-compare via Mean Squared Error or Mean Absolute Error across all pairs
+    # Expand shapes to (N, M, 1, H, W)
+    edges_X_exp = edges_X.unsqueeze(1).expand(N, M, 1, H, W)
+    edges_Y_exp = edges_Y.unsqueeze(0).expand(N, M, 1, H, W)
+
+    # Pairwise L1 similarity metric mapped to [0, 1] bounds roughly
+    edge_diff = torch.mean(torch.abs(edges_X_exp - edges_Y_exp), dim=[2, 3, 4])
+    return 1.0 / (1.0 + edge_diff) # Return similarity score matrix (N, M)
+
+
+def batch_lpips_distance(X: torch.Tensor, Y: torch.Tensor, lpips_model) -> torch.Tensor:
+    """
+    Computes pairwise LPIPS distances between batch X (N, C, H, W) 
+    and batch Y (M, C, H, W) cleanly on the GPU.
+    
+    Returns a matrix of shape (N, M).
+    """
+    N, C, H, W = X.shape
+    M = Y.shape[0]
+
+    # 1. Scale inputs from [0, 1] to LPIPS expected [-1, 1] range
+    X_scaled = X * 2.0 - 1.0
+    Y_scaled = Y * 2.0 - 1.0
+
+    # 2. Expand tensors to compute all N x M cross-combinations
+    # Shapes become: (N * M, C, H, W)
+    X_exp = X_scaled.unsqueeze(1).expand(N, M, C, H, W).reshape(N * M, C, H, W)
+    Y_exp = Y_scaled.unsqueeze(0).expand(N, M, C, H, W).reshape(N * M, C, H, W)
+
+    # 3. Stream through the pre-loaded model
+    # LPIPS returns a distance tensor of shape (N * M, 1, 1, 1)
+    with torch.no_grad():
+        distances = lpips_model(X_exp, Y_exp)
+        
+    # 4. Flatten and reshape back to a beautiful (N, M) coordinate matrix
+    return distances.reshape(N, M)
+
+def batch_edge_similarity(batch_A, batch_B, model, method='ldc'):
+    """
+    Computes pairwise SSIM similarity between edge maps of two batches.
+    """
+    device = batch_A.device
+    N, C, H, W = batch_A.shape
+    M = batch_B.shape[0]
+
+    def get_batch_edges(batch):
+        if method == 'ldc':
+            # LDC Preprocessing: Scale to 255 and subtract mean
+            mean = torch.tensor([103.939, 116.779, 123.68]).view(1, 3, 1, 1).to(device)
+            inputs = (batch * 255.0) - mean
+            outputs = model(inputs)
+            edges = torch.sigmoid(outputs[-1]) # Use fused output
+        elif method == 'hed':
+            edges = model(batch)
+        
+        # Normalize each edge map in the batch to [0, 1]
+        # Reshape to (B, -1) to find max per image
+        b_size = edges.shape[0]
+        max_vals = edges.view(b_size, -1).max(dim=1)[0].view(b_size, 1, 1, 1)
+        return edges / (max_vals + 1e-7)
+
+    # 1. Get edge maps for both batches once
+    edges_A = get_batch_edges(batch_A) # (N, 1, H, W)
+    edges_B = get_batch_edges(batch_B) # (M, 1, H, W)
+
+    # 2. Compute Pairwise SSIM (Requires CPU/Numpy for skimage)
+    # Note: For massive batches, you can use a PyTorch SSIM implementation 
+    # to stay on GPU, but here we follow your skimage preference.
+    eA_np = edges_A.squeeze(1).cpu().numpy()
+    eB_np = edges_B.squeeze(1).cpu().numpy()
+    
+    results = np.zeros((N, M))
+    for i in range(N):
+        for j in range(M):
+            results[i, j] = ssim(eA_np[i], eB_np[j], data_range=1.0)
+            
+    return torch.from_numpy(results)
+
+def batch_depth_analysis(batch_A, batch_B, model_dict):
+    """
+    Computes all depth-based metrics for two batches.
+    Returns: MAE, SSIM, Spearman, DISTS (as grids)
+    """
+    model = model_dict['model']
+    processor = model_dict['processor']
+    device = batch_A.device
+    
+    def get_maps(batch):
+        # Batch to PIL for the transformer processor
+        images_list = [torch.clamp(img, 0, 1) for img in batch]
+        inputs = processor(images=images_list, return_tensors="pt").to(device)
+        outputs = model(**inputs)
+        
+        # Interpolate to input resolution
+        maps = torch.nn.functional.interpolate(
+            outputs.predicted_depth.unsqueeze(1),
+            size=(batch.shape[2], batch.shape[3]),
+            mode="bicubic", align_corners=False
+        )
+        # Min-Max Normalize per image in batch
+        b_size = maps.shape[0]
+        mins = maps.view(b_size, -1).min(dim=1)[0].view(-1, 1, 1, 1)
+        maxs = maps.view(b_size, -1).max(dim=1)[0].view(-1, 1, 1, 1)
+        return (maps - mins) / (maxs - mins + 1e-8)
+
+    # Pre-extract maps
+    depth_A = get_maps(batch_A) # [N, 1, H, W]
+    depth_B = get_maps(batch_B) # [M, 1, H, W]
+
+    N, M = depth_A.shape[0], depth_B.shape[0]
+    
+    # 1. Depth DISTS (Using the global dists_model)
+    dists_model = _get_dists_model().to(device)
+    # Expand to pairwise: [N*M, 3, H, W]
+    dA_exp = depth_A.repeat(1, 3, 1, 1).repeat_interleave(M, dim=0)
+    dB_exp = depth_B.repeat(1, 3, 1, 1).repeat(N, 1, 1, 1)
+    dists_grid = dists_model(dA_exp, dB_exp).view(N, M).cpu().numpy()
+
+    # 2. SSIM/MAE/Spearman (Numpy loops for scipy compatibility)
+    dA_np = depth_A.squeeze(1).cpu().numpy()
+    dB_np = depth_B.squeeze(1).cpu().numpy()
+    
+    mae_grid, ssim_grid, spear_grid = np.zeros((N, M)), np.zeros((N, M)), np.zeros((N, M))
+    
+    from scipy.stats import spearmanr
+    for i in range(N):
+        for j in range(M):
+            mae_grid[i, j] = np.mean(np.abs(dA_np[i] - dB_np[j]))
+            ssim_grid[i, j] = ssim(dA_np[i], dB_np[j], data_range=1.0)
+            corr, _ = spearmanr(dA_np[i].flatten(), dB_np[j].flatten())
+            spear_grid[i, j] = corr if not np.isnan(corr) else 0.0
+
+    return mae_grid, ssim_grid, spear_grid, dists_grid
+
+def batch_edge_analysis(batch_A, batch_B, model, method='ldc'):
+    """
+    Computes all edge-based metrics.
+    """
+    device = batch_A.device
+    
+    def get_edges(batch):
+        if method == 'ldc':
+            mean = torch.tensor([103.939, 116.779, 123.68]).view(1, 3, 1, 1).to(device)
+            out = model((batch * 255.0) - mean)
+            edges = torch.sigmoid(out[-1])
+        else: # HED
+            edges = model(batch)
+        # Normalize
+        b_size = edges.shape[0]
+        max_v = edges.view(b_size, -1).max(1)[0].view(-1, 1, 1, 1)
+        return edges / (max_v + 1e-8)
+
+    edges_A = get_edges(batch_A)
+    edges_B = get_edges(batch_B)
+    
+    N, M = edges_A.shape[0], edges_B.shape[0]
+    
+    # 1. Edge DISTS (Vectorized on GPU)
+    dists_model = _get_dists_model().to(device)
+    eA_exp = edges_A.repeat(1, 3, 1, 1).repeat_interleave(M, dim=0)
+    eB_exp = edges_B.repeat(1, 3, 1, 1).repeat(N, 1, 1, 1)
+    dists_grid = dists_model(eA_exp, eB_exp).view(N, M).cpu().numpy()
+
+    # 2. Geometric Metrics (Numpy/Scipy)
+    eA_np = edges_A.squeeze(1).cpu().numpy()
+    eB_np = edges_B.squeeze(1).cpu().numpy()
+    
+    ssim_grid, fom_grid, haus_grid = np.zeros((N, M)), np.zeros((N, M)), np.zeros((N, M))
+    
+    from scipy.ndimage import distance_transform_edt
+    from scipy.spatial.distance import directed_hausdorff
+
+    for i in range(N):
+        # Binarize for FOM/Hausdorff
+        bin_A = eA_np[i] > 0.1
+        pts_A = np.argwhere(bin_A)
+        dist_trans_A = distance_transform_edt(~bin_A)
+        
+        for j in range(M):
+            # SSIM
+            ssim_grid[i, j] = ssim(eA_np[i], eB_np[j], data_range=1.0)
+            
+            # FOM & Hausdorff
+            bin_B = eB_np[j] > 0.1
+            pts_B = np.argwhere(bin_B)
+            
+            if np.any(bin_A) and np.any(bin_B):
+                # FOM
+                d_i = dist_trans_A[bin_B]
+                fom_grid[i, j] = np.sum(1.0 / (1.0 + (1.0/9.0) * (d_i ** 2))) / max(np.sum(bin_A), np.sum(bin_B))
+                # Hausdorff
+                h1 = directed_hausdorff(pts_A, pts_B)[0]
+                h2 = directed_hausdorff(pts_B, pts_A)[0]
+                haus_grid[i, j] = max(h1, h2)
+            else:
+                haus_grid[i, j] = 1000.0 # Penalty for no edges
+
+    return ssim_grid, dists_grid, fom_grid, haus_grid

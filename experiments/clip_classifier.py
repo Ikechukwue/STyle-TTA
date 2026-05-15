@@ -336,13 +336,16 @@ if __name__=="__main__":
     
     print("Start")
     
-    for model_name in ["dinov2_vitb14"]:
+    for model_name in ["ViT-B-16"]:
         if model_name == "ViT-B-16":
-            model = load_clip_classifier(model_name=model_name, num_classes=200, device="cuda")
-        else:
-            model = load_dinov2_classifier(num_classes=200, device="cuda")
+            model = load_clip_classifier(model_name=model_name, num_classes=1000, device="cuda")
+            backbone = model.backbone
+        elif model_name == "dinov2_vitb14":
+            model = load_dinov2_classifier(num_classes=1000, device="cuda")
+            backbone = model.backbone
         print("Loaded Model")
-        train_loader = prepare_dataloaders(dataset="imagenet", 
+        extract = {"extraction": True}
+        train_loader, val_loader, _ = prepare_dataloaders(dataset="imagenet", 
                                         data_path="./data",
                                         input_size=224,
                                         batch_size=256,
@@ -350,23 +353,24 @@ if __name__=="__main__":
                                         color_transfer_params=None,
                                         augmentations=[],
                                         g=g,
-                                        classifier=model_name
+                                        classifier=model_name,
+                                        kwargs=extract
                                         )
         print("Prepared Dataloader successfully")
         # Train Features
+
         _ = extract_and_cache_features(
-            backbone=model.backbone,
+            backbone=backbone,
             dataloader=train_loader,
-            cache_path=f"./data/feature_cache/{model_name}/test_r.pt",
+            cache_path=f"./data/feature_cache/{model_name}/train.pt",
             device=device
         )
 
-        """    
+           
         # Val Features
         _ = extract_and_cache_features(
-            backbone=model.model,
+            backbone=backbone,
             dataloader=val_loader,
-            cache_path="./data/feature_cache/clip_val.pt",
+            cache_path=f"./data/feature_cache/{model_name}/val.pt",
             device=device
         ) 
-        """

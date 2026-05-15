@@ -34,6 +34,7 @@ class RandomRetriever(BaseRetriever):
         *,
         images: torch.Tensor | None = None,
         labels: Optional[torch.Tensor] = None,
+        seed: int = 0,
     ):
         if db is not None:
             self.db = db
@@ -48,9 +49,9 @@ class RandomRetriever(BaseRetriever):
             self.n = images.shape[0]
         else:
             raise ValueError("Either db or images must be provided")
-
+        self.generator = torch.Generator().manual_seed(seed)
     def retrieve(
         self, query: torch.Tensor, k: int = 5
     ) -> Tuple[List[int], Optional[List[float]]]:
-        indices = torch.randperm(self.n)[:k].tolist()
+        indices = torch.randperm(self.n, generator=self._generator)[:k].tolist()
         return indices, None

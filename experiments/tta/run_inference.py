@@ -372,7 +372,9 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
         
         if y_pred.ndim == 3:  # (N, 1, C) from old format
             y_pred = y_pred.squeeze(1)
+        num_classes = len(np.unique(test_set.dataset.dataset.targets))
         metrics = compute_metrics(y_true, y_pred, num_classes, task_type)
+        print(f"there are {num_classes}")
 
         res_path = results_path(args, eval_split, key=exp_key)
         if not res_path.exists():         
@@ -607,6 +609,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
         accelerator.print(f"Predictions saved to {pred_path}")
 
     # ---- compute metrics ----------------------------------------------------
+    num_classes = len(np.unique(test_set.dataset.dataset.targets))
     if accelerator.is_main_process:
         y_true = np.array([p["y_true"] for p in pred_data["predictions"]]).squeeze()
         y_pred = np.array([p["y_pred"] for p in pred_data["predictions"]])

@@ -424,7 +424,7 @@ def load_classifier(
     # ---- CLIP models (via open_clip) ----------------------------------------
     if classifier in _CLIP_CLASSIFIERS:
         from experiments.clip_classifier import load_clip_classifier
-        mode = "linear_probe" if weights_path and Path(weights_path).exists() else "zero_shot"
+        mode = "linear_probe" if weights_path and (Path(weights_path).exists() or weights_path=="linear_probe") else "zero_shot"
         return load_clip_classifier(
             model_name=classifier,
             num_classes=num_classes,

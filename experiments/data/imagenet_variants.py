@@ -208,7 +208,7 @@ class ImageNet(VisionDataset):
         return subset_dir
 
     def _load_split(self, root_dir: str, split: str, **kwargs):
-        print(split)
+        
         sub = None
         if "@" in split:
             split, sub = split.split("@")

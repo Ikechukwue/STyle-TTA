@@ -195,6 +195,8 @@ def prepare_dataloaders(
         mean=NORMALIZATION_MEAN[dataset]
         std=NORMALIZATION_STD[dataset]
 
+    extract = kwargs.get("extraction", False)
+
     # Check if using color transfer (applied at batch level)
     use_color_transfer = 'color_transfer' in augmentations
     
@@ -263,7 +265,7 @@ def prepare_dataloaders(
     #     train_set = create_dataset(..., transform=None, ...)
     #     train_set = ColorTransferDataset(train_set, transform=train_transform)
 
-    if 1>2:#classifier== "dinov2_vitb14" or classifier== "ViT-B-16":
+    if extract and (classifier== "dinov2_vitb14" or classifier== "ViT-B-16"):
         cache = Path(f"./data/feature_cache/{classifier}")
         if cache.exists():
             print(f"Loading cached features from {cache}")
@@ -279,11 +281,11 @@ def prepare_dataloaders(
         train_set = create_dataset(
             dataset_name=dataset,
             data_path=data_path,
-            split="test_r",
+            split="train",
             transform=train_transform,
             **kwargs
         )
-        """
+        
         val_set = create_dataset(
             dataset_name=dataset,
             data_path=data_path,
@@ -291,7 +293,7 @@ def prepare_dataloaders(
             transform=val_transform,
             **kwargs
         )
-        """
+        
     # Create dataloaders
     train_loader = DataLoader(
         dataset=train_set,
@@ -301,7 +303,7 @@ def prepare_dataloaders(
         worker_init_fn=worker_seed,
         generator=g,
     )
-    """
+    
     val_loader = DataLoader(
         dataset=val_set,
         batch_size=batch_size,
@@ -310,8 +312,8 @@ def prepare_dataloaders(
         worker_init_fn=worker_seed,
         generator=g,
     )
-    """
-    return train_loader#, val_loader, dataset
+    
+    return train_loader, val_loader, dataset
 
 
 def create_optimizer_and_scheduler(
@@ -661,7 +663,7 @@ def train_lbfgs(
     num_classes: int,
     device: torch.device,
     num_iter: int = 50,
-    output_path: str = "./models",
+    output_path: str = "./data/models",
     run_name: str = "clip_lbfgs"
 ):
     # Load full feature cache into GPU
@@ -669,7 +671,7 @@ def train_lbfgs(
     train_data = torch.load(train_cache, weights_only=True)
     val_data   = torch.load(val_cache,   weights_only=True)
 
-    #X_train = F.normalize(train_data["features"], dim=-1).to(device)
+    X_train = F.normalize(train_data["features"], dim=-1).to(device)
     y_train = train_data["labels"].squeeze().long().to(device)
     #X_val   = F.normalize(val_data["features"],   dim=-1).to(device)
     y_val   = val_data["labels"].squeeze().long().to(device)
@@ -897,6 +899,7 @@ def train(
         color_transfer_params=color_transfer_params,
         g=g,
         classifier=classifier,
+        extraction=True,
         **kwargs
     )
     
@@ -1229,16 +1232,16 @@ def main():
 
 if __name__ == "__main__":
     main()
-    """    
+    """
     device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
-
-    train_lbfgs(
-        train_cache="./data/feature_cache/ViT-B-16/train.pt",
-        val_cache="./data/feature_cache/ViT-B-16/val.pt",
-        num_classes=1000,
-        device=device,
-        num_iter=50,
-        output_path="./data/models",
-        run_name="clip_lbfgs"
-    )
+    for model in ["ViT-B-16", "dinov2_vitb14"]:
+        train_lbfgs(
+            train_cache=f"./data/feature_cache/{model}/train.pt",
+            val_cache=f"./data/feature_cache/{model}/val.pt",
+            num_classes=1000,
+            device=device,
+            num_iter=50,
+            output_path="./data/models",
+            run_name=f"{model}"
+        )
     """

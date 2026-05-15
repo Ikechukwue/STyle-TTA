@@ -7,10 +7,10 @@ export OUTDATED_IGNORE=1
 export PYTHONWARNINGS="ignore"
 
 DATASETS=("imagenet")
-SPLIT=("train@test_r")
-MODELS=("resnet18" "densenet121" "swin_base_patch4_window7_224" "vit_base_patch16_224" "ViT-B-16" "dinov2_vitb14")
+SPLIT=("test_abl")
+MODELS=("ViT-B-16" "dinov2_vitb14") #"resnet18" "densenet121" "swin_base_patch4_window7_224" "vit_base_patch16_224" )
 TTA_METHOD=("vanilla" "zero" "tpt")
-THESIS_N_REFS_SWEEP=(2 4 8 16 32 64)
+THESIS_N_REFS_SWEEP=(64 32 16 8 4 2)
 THESIS_SEEDS=(71397589 133560673 265017005)
 EVAL_STRATEGY=("random") #"balanced_random" "metric" "balanced_metric" "dino")
 MODEL_DIR="/home/stud/nemmler/retristyle/data/models"
@@ -36,7 +36,7 @@ for TS in "${THESIS_SEEDS[@]}"; do
                             --data_path "./data" \
                             --weights_path $WEIGHTS_PATH \
                             --classifier $MDL \
-                            --tta_method "geometric" \
+                            --tta_method "retristlye" \
                             --eval_strategy $TTA \
                             --split $DS \
                             --retrieval_strategy $ES \

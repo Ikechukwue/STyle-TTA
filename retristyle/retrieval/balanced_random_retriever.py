@@ -37,6 +37,7 @@ class BalancedRandomRetriever(BaseRetriever):
         *,
         images: torch.Tensor | None = None,
         labels: Optional[torch.Tensor] = None,
+        seed: int = 0,
     ):
         if db is not None:
             self.db = db
@@ -57,7 +58,8 @@ class BalancedRandomRetriever(BaseRetriever):
             self._classes = sorted(self._class_indices.keys())
         else:
             raise ValueError("Either db or images must be provided")
-
+        
+        self._generator = torch.Generator().manual_seed(seed)
     def retrieve(
         self, query: torch.Tensor, k: int = 5
     ) -> Tuple[List[int], Optional[List[float]]]:
@@ -69,12 +71,12 @@ class BalancedRandomRetriever(BaseRetriever):
         for ci, cls in enumerate(self._classes):
             pool = self._class_indices[cls]
             need = per_class + (1 if ci < remainder else 0)
-            perm = torch.randperm(len(pool))[:need]
+            perm = torch.randperm(len(pool), generator=self._generator)[:need]
             selected.extend([pool[j] for j in perm.tolist()])
 
         # If rounding issues leave us short, fill from any class
         while len(selected) < k:
-            idx = torch.randint(0, self.n, (1,)).item()
+            idx = torch.randint(0, self.n, (1,), generator=self._generator).item()
             if idx not in selected:
                 selected.append(idx)
 

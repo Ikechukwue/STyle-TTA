@@ -170,10 +170,11 @@ class ImageNet(VisionDataset):
         self.transform = transform
         self.target_transform = target_transform
         if "@" in split:
-            _, b_split = split.split("@")
+            a_split, b_split = split.split("@")
         else:
             b_split = split 
-        assert b_split in self.VALID_SPLITS, \
+            a_split = split
+        assert b_split in self.VALID_SPLITS and a_split in ["train", "val"], \
             f"Split must be one of {self.VALID_SPLITS}, got '{split}'."
 
         self.dataset = self._load_split(root_dir, split, **kwargs)
@@ -212,15 +213,16 @@ class ImageNet(VisionDataset):
         sub = None
         if "@" in split:
             split, sub = split.split("@")
-        if split == "train":
+
+        if split in ["train", "val"]:
             if sub is not None:
                 path=self._get_imagenet_linkfolder(root_dir, sub)
             else:
-                path = os.path.join(root_dir, 'imagenet1k/ILSVRC/Data/CLS-LOC/train')
-            self._check_dir(path, "ImageNet-1k train")
+                path = os.path.join(root_dir, 'imagenet1k/ILSVRC/Data/CLS-LOC', split)
+            self._check_dir(path, f"ImageNet-1k {split}")
             return ImageFolder(path)
 
-        elif split in ["val", "test"]:
+        elif split in ["test"]:
             path = os.path.join(root_dir, 'imagenet1k/ILSVRC/Data/CLS-LOC', split)
             self._check_dir(path, f"ImageNet-1k {split}")
             return ImageFolder(path)

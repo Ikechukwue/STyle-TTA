@@ -8,11 +8,11 @@ do
         --dataset imagenet \
         --data_path ./data \
         --classifier $CL \
-        --epochs 200 \
+        --epochs 100 \
         --lr 0.01 \
         --batch_size 256 \
         --seed 42 \
-        --augmentations none \
+        --augmentations random_flip random_resized_crop \
         --output_path ./data/models \
         --use_cuda
 done

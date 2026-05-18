@@ -7,11 +7,11 @@ export OUTDATED_IGNORE=1
 export PYTHONWARNINGS="ignore"
 
 DATASETS=("imagenet")
-SPLIT=("test_abl")
-MODELS=("resnet18") #"densenet121" "swin_base_patch4_window7_224" "vit_base_patch16_224" ) #("ViT-B-16" "dinov2_vitb14") 
-TTA_METHOD=("vanilla" ) #"zero" "tpt")
-THESIS_N_REFS_SWEEP=(8 4 2 16)
-THESIS_SEEDS=(133560673)
+SPLIT=("test_r")
+MODELS=("resnet18" "densenet121" "swin_base_patch4_window7_224" "vit_base_patch16_224" "ViT-B-16" "dinov2_vitb14") 
+TTA_METHOD=("vanilla" "zero" "tpt")
+THESIS_N_REFS_SWEEP=(8 4 2 16 32 64)
+THESIS_SEEDS=(71397589 133560673 265017005)
 EVAL_STRATEGY=("random") # "dino" "balanced_random" "metric" "balanced_metric" 
 MODEL_DIR="/home/stud/nemmler/retristyle/data/models"
 
@@ -28,7 +28,7 @@ for TS in "${THESIS_SEEDS[@]}"; do
 
                         WEIGHTS_PATH="pretrained"
                         if is_pretrained "$MDL"; then
-                            WEIGHTS_PATH="$MODEL_DIR/imagenet-$MDL-random_flip-random_resized_crop-seed42.pth"
+                            WEIGHTS_PATH="$MODEL_DIR/imagenet-$MDL-random_flip-random_resized_crop-seed42.pth" #"
                         fi
 
                         python -m experiments.tta.run_inference \
@@ -36,7 +36,7 @@ for TS in "${THESIS_SEEDS[@]}"; do
                             --data_path "./data" \
                             --weights_path $WEIGHTS_PATH \
                             --classifier $MDL \
-                            --tta_method "retristyle" \
+                            --tta_method "geometric" \
                             --eval_strategy $TTA \
                             --split $DS \
                             --retrieval_strategy $ES \

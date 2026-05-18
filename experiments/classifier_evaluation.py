@@ -736,7 +736,7 @@ def evaluate_classifier(
     # Get dataset info
     num_classes = NUM_CLASSES[dataset]
     task_type = TASK_TYPE[dataset]
-    available_splits = DATASET_SPLITS.get(dataset, ["train", "val", "test"])
+    available_splits = ["train", "val", "test", "test_r", "train@test_r", "val@test_r"]
     
     # Determine splits to evaluate
     if splits is None:
@@ -749,7 +749,7 @@ def evaluate_classifier(
     accelerator.print(f"Splits to evaluate: {splits}")
     
     # Check if weights exist
-    if not Path(weights_path).exists():
+    if weights_path != "pretrained" and not Path(weights_path).exists():
         accelerator.print(f"\n✗ Weights not found: {weights_path}")
         return
     
@@ -764,15 +764,25 @@ def evaluate_classifier(
         num_classes=num_classes,
         device=accelerator.device
     )
-    model = accelerator.prepare(model)
-    accelerator.print(f"✓ Model loaded")
     
     # Evaluate on each split
     split_metrics = {}
     
     for split in splits:
-        accelerator.print(f"\nEvaluating on {split} split...")
+
         
+        accelerator.print(f"\nEvaluating on {split} split...")
+
+        if "@" in split or split == "test_r":
+            accelerator.print(f"  Applying class subset masking for split: {split}")
+            active_model = MaskedClassifier(model, split=split)
+            split_num_classes = int(active_model.mask.sum().item())
+        else:
+            active_model = model
+            split_num_classes = num_classes
+
+        eval_model = accelerator.prepare(active_model)
+
         # Prepare dataloader
         dataloader = prepare_dataloader(
             dataset=dataset,
@@ -787,10 +797,10 @@ def evaluate_classifier(
         
         # Evaluate
         metrics = evaluate_model(
-            model=model,
+            model=eval_model,
             dataloader=dataloader,
             accelerator=accelerator,
-            num_classes=num_classes,
+            num_classes=split_num_classes,
             task_type=task_type,
             split=split
         )

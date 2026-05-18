@@ -12,7 +12,7 @@ DATA_PATH="${DATA_PATH:-/data/local/retristyle/data}"
 OUTPUT_PATH="${OUTPUT_PATH:-${PROJECT_ROOT}/results}"
 WEIGHTS_DIR="${WEIGHTS_DIR:-/data/local/retristyle/models/style_transfer}"
 EMBEDDING_DIR="${EMBEDDING_DIR:-${PROJECT_ROOT}/data/embeddings}"
-MODEL_DIR="${MODEL_DIR:-/data/local/retristyle/models/training}"
+MODEL_DIR="${MODEL_DIR:-${PROJECT_ROOT}/data/models}"
 
 # ── HPC cluster paths (NHR@FAU) ──
 HPC_CONTAINER='$WORK/retristyle/retristyle-production.sif'

@@ -298,7 +298,7 @@ def prepare_dataloaders(
     train_loader = DataLoader(
         dataset=train_set,
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=True if extract else False,
         num_workers=num_workers,
         worker_init_fn=worker_seed,
         generator=g,

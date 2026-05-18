@@ -23,9 +23,15 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
+import pandas as pd
+
+from typing import Dict, List, Optional, Tuple
 import numpy as np
+import nltk
+from nltk.corpus import wordnet as wn
+from scipy.cluster.hierarchy import linkage, leaves_list
+from scipy.spatial.distance import squareform
 
 try:
     import matplotlib
@@ -67,10 +73,109 @@ def _setup_style():
         "axes.labelsize": 12,
     })
 
+def _get_names(split:str,
+                subset_json: str = "./data/imagenet/imagenet_subsets.json",
+                name_json:str = "./data/imagenet/imagenet1k/imagenet_class_index.json" ):
+    all_ids = _load_json(name_json)
+    name_dict = {}
+    for v in all_ids.values():
+        name_dict[v[0]] = v[1]
 
+    split_names = []
+    sub_ids = _load_json(subset_json)
+    split_ids = sub_ids[split]
+
+    split_names = [name_dict[id] for id in split_ids]
+    return split_names 
+
+
+
+def get_wordnet_taxonomic_order(name_json_path: str = "./data/imagenet/imagenet1k/imagenet_class_index.json") -> list[int]:
+    """
+    Computes a taxonomic sort order for classes using true WordNet path similarity.
+    Groups classes by their lowest common subsumers via hierarchical clustering.
+    
+    Returns:
+        list[int]: A list of class indices sorted by their WordNet hierarchy proximity.
+    """
+    # Ensure WordNet data is available in the environment
+    try:
+        wn.ensure_loaded()
+    except LookupError:
+        nltk.download('wordnet', quiet=True)
+        nltk.download('omw-1.4', quiet=True)
+
+    # 1. Load the core map to extract WNIDs (e.g., "n02119789")
+    try:
+        with open(name_json_path) as f:
+            class_index_map = json.load(f)
+    except Exception as e:
+        print(f"Error loading class index map: {e}")
+        return []
+
+    # 2. Resolve WNIDs to actual WordNet Synsets
+    resolved_synsets = {}
+    valid_class_indices = []
+    
+    for idx_str, (wnid, _) in class_index_map.items():
+        idx = int(idx_str)
+        try:
+            # Parse ImageNet format: n02119789 -> offset 2119789, pos noun ('n')
+            offset = int(wnid[1:])
+            pos = wnid[0]
+            synset = wn.synset_from_pos_and_offset(pos, offset)
+            resolved_synsets[idx] = synset
+            valid_class_indices.append(idx)
+        except Exception:
+            # Skip or handle invalid mappings gracefully
+            continue
+
+    # Sort indices to establish a deterministic baseline matrix
+    valid_class_indices.sort()
+    n_classes = len(valid_class_indices)
+    
+    if n_classes == 0:
+        return []
+
+    # 3. Build a Distance Matrix based on WordNet Path Similarity
+    # Similarity is bounded (0, 1], where 1.0 means identical synsets.
+    # Distance = 1.0 - Similarity
+    distance_matrix = np.zeros((n_classes, n_classes))
+    
+    for i in range(n_classes):
+        syn_i = resolved_synsets[valid_class_indices[i]]
+        for j in range(i, n_classes):
+            syn_j = resolved_synsets[valid_class_indices[j]]
+            
+            # Compute path similarity (looks at shortest path in hypernym tree)
+            sim = syn_i.path_similarity(syn_j)
+            if sim is None:
+                sim = 0.001 # Fallback minimum connectivity if branches are distinct
+                
+            dist = 1.0 - sim
+            distance_matrix[i, j] = dist
+            distance_matrix[j, i] = dist
+
+    # 4. Perform Hierarchical Clustering to group by lowest mappings
+    # Convert square distance matrix to condensed form for scipy linkage
+    from scipy.spatial.distance import squareform
+    condensed_distances = squareform(distance_matrix)
+    
+    # Use Ward's minimum variance algorithm to create clean, compact thematic groups
+    row_linkage = linkage(condensed_distances, method="ward")
+    
+    # Extract the optimized leaves order from the tree
+    sorted_matrix_indices = leaves_list(row_linkage)
+    
+    # Map back to your original class integers
+    sorted_class_order = [valid_class_indices[i] for i in sorted_matrix_indices]
+    
+    return sorted_class_order
 # =========================================================================
 # 1. Style Transfer Method Comparison (Grouped Bar)
 # =========================================================================
+
+
 def plot_style_transfer_comparison(results_dir: Path, output_dir: Path, args):
     """Grouped bar chart comparing style transfer methods."""
     f = results_dir / "style_transfer_eval" / "all_methods_comparison.json"
@@ -315,8 +420,326 @@ def plot_accuracy_vs_ece(results_dir: Path, output_dir: Path, args):
     plt.close(fig)
     print(f"  [saved] {out}")
 
+def plot_domain_shift_analysis(results_dir: Path, output_dir: Path, args):
+    """
+    Generates a publication-quality publication grid separating domain shift 
+    metrics into categorical groups with error bars.
+    """
+    # Assuming your data is saved in your results directory
+    f = results_dir / "domain_stats" / "_imagenet_and_test_r.json"
+    if not f.exists():
+        print("  [skip] Domain shift analysis JSON not found")
+        return
 
-# =========================================================================
+    data = _load_json(f)
+    global_stats = data.get("global_summary", {})
+    if not global_stats:
+        return
+
+    # Define logical groups for bounded metrics [0, 1] to avoid scaling issues
+    metric_groups = {
+        "Perceptual & Structure": [
+            ("SSIM", "ssim_mean", "ssim_std"),
+            #("Luminance SSIM", "luminance_ssim_mean", "luminance_ssim_std"),
+            ("LPIPS Score", "lpips_score_mean", "lpips_score_std"),
+        ],
+        "Color & Distribution": [
+            ("Histogram Dist.", "histogramm_distance_mean", "histogramm_distance_std"),
+            ("Color Moment Dist.", "color_moment_distance_mean", "color_moment_distance_std"),
+            #("Wasserstein Dist.", "wasserstein_distance_mean", "wasserstein_distance_std"),
+        ],
+        "Edges & Boundaries": [
+            ("Edge Similarity", "edge_similarity_mean", "edge_similarity_std"),
+            #("HED Distance", "hed_dists_mean", "hed_dists_std"),
+            ("LDC Distance", "ldc_dists_mean", "ldc_dists_std"),
+            #("HED Figure of Merit", "hed_fom_mean", "hed_fom_std"),
+            ("LDC Figure of Merit", "ldc_fom_mean", "ldc_fom_std"),
+        ],
+        "Depth & Geometry": [
+            ("DepthAnything MAE", "depthanything_v2_large_mae_mean", "depthanything_v2_large_mae_std"),
+            ("DPT MAE", "dpt_large_mae_mean", "dpt_large_mae_std"),
+            ("DepthAnything Spear.", "depthanything_v2_large_spear_mean", "depthanything_v2_large_spear_std"),
+            ("DPT Spearman", "dpt_large_spear_mean", "dpt_large_spear_std"),
+        ]
+    }
+
+    # Setup 2x2 subplot grid
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    axes = axes.flatten()
+    colors = plt.get_cmap("Set2").colors
+
+    for idx, (group_name, metrics) in enumerate(metric_groups.items()):
+        ax = axes[idx]
+        
+        labels, means, stds = [], [], []
+        for name, mean_k, std_k in metrics:
+            if mean_k in global_stats:
+                labels.append(name)
+                means.append(global_stats[mean_k])
+                stds.append(global_stats.get(std_k, 0))
+
+        if not labels:
+            ax.text(0.5, 0.5, "No Data", ha='center', va='center')
+            continue
+
+        y_pos = np.arange(len(labels))
+        # Plot horizontal bars with standard deviation error bars
+        bars = ax.barh(y_pos, means, xerr=stds, align='center', alpha=0.8, 
+                       color=colors[:len(labels)], edgecolor='none', capsize=5)
+        
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(labels, fontsize=10)
+        ax.invert_yaxis()  # Top-down order
+        ax.set_title(group_name, fontsize=12, fontweight="bold", pad=10)
+        ax.set_xlim(0, 1.1)  # All these metrics are bounded near/within [0, 1]
+        ax.grid(axis='x', linestyle='--', alpha=0.7)
+
+        # Add data values on top of the bars
+        for bar, mean in zip(bars, means):
+            width = bar.get_width()
+            ax.text(width + 0.02, bar.get_y() + bar.get_height()/2, f'{mean:.2f}', 
+                    ha='left', va='center', fontsize=9, fontweight='semibold')
+
+    fig.suptitle("Domain Shift Metric Analysis Summary", fontsize=16, fontweight="bold", y=0.98)
+    fig.tight_layout()
+    
+    out = output_dir / "domain_shift_metrics_summary.pdf"
+    fig.savefig(out)
+    plt.close(fig)
+    print(f"  [saved] {out}")
+
+try:
+    from matplotlib.backends.backend_pdf import PdfPages
+    HAS_MPL = True
+except ImportError:
+    HAS_MPL = False
+
+def plot_domain_shift_class_scatter_per_group(results_dir: Path, output_dir: Path, args=None):
+    """
+    Generates spacious class-wise scatter plots for domain shift metrics.
+    Saves a single clean multi-page PDF document (one page per group) 
+    AND exports separate standalone files inside a dedicated subfolder pipeline.
+    """
+    f = results_dir / "domain_stats" / "_imagenet_and_test_r.json"
+    if not f.exists():
+        print("  [skip] Class domain shift scatter data not found")
+        return
+
+    data = _load_json(f)
+    class_summaries = data.get("class_summaries", {})
+    name_list = _get_names(args.split)
+    if not class_summaries:
+        print("  [skip] No class-wise summaries available")
+        return
+
+    # Define groups for bounded metrics [0, 1] 
+    metric_groups = {
+        "perceptual_structure": ("Perceptual & Structure Metrics", [
+            ("ssim_mean", "SSIM"),
+            #("luminance_ssim_mean", "Luminance SSIM"),
+            ("lpips_score_mean", "LPIPS Score"),
+        ]),
+        "color_distribution": ("Color & Distribution Metrics", [
+            ("histogramm_distance_mean", "Histogram Dist."),
+            ("color_moment_distance_mean", "Color Moment Dist."),
+            #("wasserstein_distance_mean", "Wasserstein Dist."),
+        ]),
+        "edges_boundaries": ("Edges & Boundaries Metrics", [
+            ("edge_similarity_mean", "Edge Similarity"),
+            #("hed_dists_mean", "HED Distance"),
+            ("ldc_dists_mean", "LDC Distance"),
+            #("hed_fom_mean", "HED Figure of Merit"),
+            ("ldc_fom_mean", "LDC Figure of Merit"),
+        ]),
+        "depth_geometry": ("Depth & Geometry Metrics", [
+            ("depthanything_v2_large_mae_mean", "DepthAnything MAE"),
+            ("dpt_large_mae_mean", "DPT MAE"),
+            ("depthanything_v2_large_spear_mean", "DepthAnything Spear."),
+            ("dpt_large_spear_mean", "DPT Spearman"),
+        ])
+    }
+
+    # FIX 1: Gather data map structured correctly by metric key string
+    classes_data = {}
+    for class_id, metrics in class_summaries.items():
+        # Get human-readable name for the class ID (e.g. "tench")
+        class_name = name_list[int(class_id)]
+        for k, val in metrics.items():
+            if k.endswith("_mean"):
+                # Key on the metric string (e.g., 'ssim_mean'), append tuple of (class_id, value)
+                classes_data.setdefault(k, []).append((class_id, val))
+
+    unique_classes = sorted(list(class_summaries.keys()), key=int)
+    color_map = plt.cm.get_cmap("tab20", max(len(unique_classes), 2))
+    class_colors = {cls: color_map(i) for i, cls in enumerate(unique_classes)}
+
+    # Create the dedicated subfolder directory path for isolated assets
+    subfolder_dir = output_dir / "domain_shift_groups"
+    subfolder_dir.mkdir(parents=True, exist_ok=True)
+
+    # Master path configuration for the multi-page output target
+    multipage_pdf_path = output_dir / "domain_shift_class_scatter_multipage.pdf"
+    
+    print(f"  [processing] Splitting charts into isolated pages and individual files...")
+
+    # Open multi-page document context manager stream
+    with PdfPages(multipage_pdf_path) as pdf:
+        for group_id, (group_name, metrics_list) in metric_groups.items():
+            # Create a broad, short landscape figure ideal for single metric rows
+            fig, ax = plt.subplots(figsize=(10, 4.5))
+            
+            y_ticks = []
+            y_labels = []
+            
+            for y_idx, (metric_key, display_name) in enumerate(metrics_list):
+                if metric_key not in classes_data:
+                    continue
+                    
+                y_ticks.append(y_idx)
+                y_labels.append(display_name)
+                
+                # Plot layout backdrop alignment grid
+                ax.axhline(y_idx, color='gray', linestyle=':', alpha=0.3, zorder=1)
+                
+                # FIX 2: Correctly unpacking class_id (as string) and metric value
+                for class_id, val in classes_data[metric_key]:
+                    # Seed deterministic class jitter to preserve visualization spacing 
+                    np.random.seed(int(class_id) + 42)
+                    jitter = np.random.uniform(-0.06, 0.06)
+                    
+                    # Look up class human readable label for the legend
+                    class_name = name_list[int(class_id)]
+                    
+                    ax.scatter(val, y_idx + jitter, 
+                               color=class_colors[class_id], 
+                               edgecolor='black', linewidth=0.6,
+                               s=85, alpha=0.9, zorder=2,
+                               label=class_name if y_idx == 0 else "")
+
+            ax.set_yticks(y_ticks)
+            ax.set_yticklabels(y_labels, fontsize=11)
+            ax.set_ylim(-0.6, len(metrics_list) - 0.4)
+            ax.invert_yaxis()
+            ax.set_xlim(-0.05, 1.05)
+            ax.set_xlabel("Metric Value Space", fontsize=10, labelpad=6)
+            ax.set_title(group_name, fontsize=13, fontweight="bold", pad=12)
+            ax.grid(axis='x', linestyle='--', alpha=0.5)
+
+            # Localized clean plot area legends
+            handles, labels = ax.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+            if by_label:
+                ax.legend(by_label.values(), by_label.keys(), 
+                          loc='upper right', frameon=True, fontsize=9.5)
+
+            fig.tight_layout()
+            
+            # Target 1: Commit visualization block as a new separate page in the master PDF document stream
+            pdf.savefig(fig, bbox_inches='tight')
+            
+            # Target 2: Save an explicit standalone isolated figure image inside the directory path
+            individual_out = subfolder_dir / f"domain_shift_{group_id}.pdf"
+            fig.savefig(individual_out, bbox_inches='tight')
+            plt.close(fig)
+
+    print(f"  [saved multi-page] {multipage_pdf_path}")
+    print(f"  [saved individual groups] check directory: {subfolder_dir}/")
+
+import pandas as pd
+from scipy.cluster.hierarchy import linkage, leaves_list
+
+def plot_metric_correlation_heatmap(results_dir: Path, output_dir: Path, args=None):
+    """
+    Computes and plots a Pearson correlation heatmap across all domain shift metrics
+    to identify statistical redundancy and streamline the thesis narrative.
+    """
+    if not HAS_SNS:
+        print("  [skip] Seaborn not installed. Skipping correlation matrix.")
+        return
+
+    f = results_dir / "domain_stats" / "_imagenet_and_test_r.json"
+    if not f.exists():
+        print("  [skip] Metrics JSON not found for correlation analysis.")
+        return
+
+    data = _load_json(f)
+    class_summaries = data.get("class_summaries", {})
+    if not class_summaries:
+        return
+
+    # Map your metrics to clean, readable text abbreviations for the axis labels
+    metric_mapping = {
+        "ssim_mean": "SSIM",
+        #"luminance_ssim_mean": "Lum. SSIM",
+        "lpips_score_mean": "LPIPS Score",
+        "histogramm_distance_mean": "Hist. Dist",
+        "color_moment_distance_mean": "Color Mom. Dist",
+        #"wasserstein_distance_mean": "Wasserstein Dist",
+        "edge_similarity_mean": "Edge Similarity",
+        #"hed_dists_mean": "HED Distance",
+        "ldc_dists_mean": "LDC Distance",
+        #"hed_fom_mean": "HED FOM",
+        "ldc_fom_mean": "LDC FOM",
+        "depthanything_v2_large_mae_mean": "DepthAnything MAE",
+        "dpt_large_mae_mean": "DPT MAE",
+        "depthanything_v2_large_spear_mean": "DepthAnything Spear.",
+        "dpt_large_spear_mean": "DPT Spearman",
+    }
+
+    # 1. Gather all class mean data into a structured table
+    all_rows = {}
+    for class_id, metrics in class_summaries.items():
+        # Only pull metrics that match our mapped keys and end with _mean
+        all_rows[int(class_id)] = {
+            metric_mapping[k]: v for k, v in metrics.items() if k in metric_mapping
+        }
+    
+    df = pd.DataFrame.from_dict(all_rows, orient="index")
+    
+    if df.empty:
+        print("  [skip] DataFrame empty for correlation mapping.")
+        return
+
+    # 2. Compute the Pearson Correlation Matrix
+    corr_matrix = df.corr(method="pearson")
+
+    # 3. Plotting preparation
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    # Create a mask to hide the upper triangle (since correlation matrices are symmetrical)
+    # This prevents visual clutter and makes the chart look highly professional
+    mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
+
+    sns.heatmap(
+        corr_matrix,
+        mask=mask,
+        cmap="coolwarm",      # Red = Positive, Blue = Negative, White = No correlation
+        vmax=1.0, vmin=-1.0,  # Forces boundaries strictly to Pearson r range [-1, 1]
+        center=0,
+        square=True,
+        linewidths=.5,
+        cbar_kws={"label": "Pearson Correlation Coefficient ($r$)", "shrink": 0.8},
+        annot=True,           # Prints the exact decimal values inside the boxes
+        fmt=".2f",            # Formats to 2 decimal places
+        annot_kws={"size": 7, "weight": "semibold"} # Small, clean typography
+    )
+
+    # Clean text rotations so they don't overlap
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=9)
+    plt.setp(ax.get_yticklabels(), rotation=0, fontsize=9)
+
+    ax.set_title("Domain Shift Metrics Redundancy Analysis\n(Correlation Across 200 Shared Classes)", 
+                 fontsize=12, fontweight="bold", pad=15)
+    
+    fig.tight_layout()
+    out_file = output_dir / "metric_correlation_matrix.pdf"
+    fig.savefig(out_file, bbox_inches='tight')
+    plt.close(fig)
+    
+    print(f"  [saved correlation map] {out_file}")
+
+
+#  =========================================================================
 # Main
 # =========================================================================
 def generate_all_plots(args):
@@ -333,13 +756,16 @@ def generate_all_plots(args):
     print("Result Visualisation")
     print("=" * 60)
 
-    plot_style_transfer_comparison(results_dir, output_dir, args)
-    plot_ablation_bars(results_dir, output_dir, "retrieval", args)
-    plot_ablation_bars(results_dir, output_dir, "eval", args)
-    plot_ablation_bars(results_dir, output_dir, "nrefs", args)
-    plot_nrefs_sweep(results_dir, output_dir, args)
-    plot_hybrid_tta(results_dir, output_dir, args)
-    plot_accuracy_vs_ece(results_dir, output_dir, args)
+    #plot_style_transfer_comparison(results_dir, output_dir, args)
+    #plot_ablation_bars(results_dir, output_dir, "retrieval", args)
+    #plot_ablation_bars(results_dir, output_dir, "eval", args)
+    #plot_ablation_bars(results_dir, output_dir, "nrefs", args)
+    #plot_nrefs_sweep(results_dir, output_dir, args)
+    #plot_hybrid_tta(results_dir, output_dir, args)
+    #plot_accuracy_vs_ece(results_dir, output_dir, args)
+    #plot_domain_shift_analysis(results_dir, output_dir, args)
+    #plot_domain_shift_class_scatter_per_group(results_dir, output_dir, args)
+    plot_domain_gap_clustermap(results_dir, output_dir, args)
 
     print(f"\nAll figures written to {output_dir}/")
 
@@ -348,7 +774,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Generate thesis figures")
     p.add_argument("--results_dir", type=str, default="./results")
     p.add_argument("--output_dir", type=str, default="./figures")
-    p.add_argument("--split", type=str, default="test_abl")
+    p.add_argument("--dataset", type=str, default="imagenet")
+    p.add_argument("--split", type=str, default="test_r")
     return p
 
 

@@ -12,30 +12,42 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-CLASSIFIER="resnet18"
+export OUTDATED_IGNORE=1
+export PYTHONWARNINGS="ignore"
+
+MODELS=(
+    "resnet18" 
+    "densenet121" 
+    "swin_base_patch4_window7_224" 
+    "vit_base_patch16_224" 
+    "ViT-B-16" 
+    "dinov2_vitb14"
+)
 AUGMENTATION="none"
 SEED=$DEFAULT_SEED
 DATASET="imagenet"
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --classifier) CLASSIFIER="$2"; shift 2 ;;
-        --augmentation) AUGMENTATION="$2"; shift 2 ;;
-        --seed) SEED="$2"; shift 2 ;;
-        --dataset) DATASET="$2"; shift 2 ;;
-        *) echo "Unknown: $1"; exit 1 ;;
-    esac
+for MDL in "${MODELS[@]}"; do
+    echo "----------------------------------------------------------"
+    echo "RUNNING EVALUATION: Model=$MDL on Split=$SPLIT"
+    echo "----------------------------------------------------------"
+
+    # Exact weight resolving logic from your TTA script
+    WEIGHTS_PATH="pretrained"
+    if is_pretrained "$MDL"; then
+        WEIGHTS_PATH="$MODEL_DIR/imagenet-$MDL-random_flip-random_resized_crop-seed42.pth"
+    fi
+
+    echo "Weights target resolving to: $WEIGHTS_PATH"
+
+    python -m experiments.classifier_evaluation \
+        --dataset "$DATASET" \
+        --data_path "./data" \
+        --classifier "$MDL" \
+        --weights_path "$WEIGHTS_PATH" \
+        --method "$AUGMENTATION" \
+        --seed "$SEED" \
+        --output_path "results/classifier_eval" 
+
+    echo "Finished evaluating $MDL"
 done
-
-WEIGHTS_PATH="pretrained"
-if ! is_pretrained "$CLASSIFIER"; then
-    WEIGHTS_PATH="${MODEL_DIR}/${DATASET}-${CLASSIFIER}-${AUGMENTATION}-seed${SEED}.pth"
-fi
-
-echo "Evaluating: $CLASSIFIER | aug=$AUGMENTATION | seed=$SEED"
-
-python -m experiments.classifier_evaluation \
-    --dataset "$DATASET" --data_path "$DATA_PATH" \
-    --classifier "$CLASSIFIER" --weights_path "$WEIGHTS_PATH" \
-    --augmentation "$AUGMENTATION" --seed "$SEED" \
-    --output_path "$OUTPUT_PATH/classifier_eval"

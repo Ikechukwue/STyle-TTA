@@ -174,7 +174,7 @@ class ImageNet(VisionDataset):
         else:
             b_split = split 
             a_split = split
-        assert b_split in self.VALID_SPLITS and a_split in ["train", "val"], \
+        assert b_split in self.VALID_SPLITS and a_split in self.VALID_SPLITS, \
             f"Split must be one of {self.VALID_SPLITS}, got '{split}'."
 
         self.dataset = self._load_split(root_dir, split, **kwargs)

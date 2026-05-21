@@ -182,13 +182,14 @@ class ImageNet(VisionDataset):
         if use_subset and subset_size is not None:
             self._apply_subset(subset_size, subset_seed)
     
-    def _get_imagenet_linkfolder(self, root_dir:str, split:str):
+    def _get_imagenet_linkfolder(self, root_dir:str, split:str, sub:str):
         """ 
         Creates symlink dictionaries for the Imgenet style pool.
         Filters for relevant Classes of the Subset.
 
         """
-        subset_dir = os.path.abspath(os.path.join(root_dir, "imagenet1k/subsets", split))
+        subset_name = f"{split}_{sub}" if split != "train" else sub
+        subset_dir = os.path.abspath(os.path.join(root_dir, "imagenet1k/subsets", subset_name))
         if os.path.exists(subset_dir):
             return subset_dir
         os.makedirs(subset_dir, exist_ok=True)
@@ -196,8 +197,9 @@ class ImageNet(VisionDataset):
         with open("./data/imagenet/imagenet_subsets.json", "r") as f:
             data = json.load(f)
 
-        subset_classes = data.get(split, [])
-        src_base = os.path.abspath(os.path.join(root_dir, 'imagenet1k/ILSVRC/Data/CLS-LOC/train'))
+        subset_classes = data.get(sub, [])
+        src_name = split
+        src_base = os.path.abspath(os.path.join(root_dir, f'imagenet1k/ILSVRC/Data/CLS-LOC/{src_name}'))
         
         for c in subset_classes:
             link_target = os.path.join(src_base, c)
@@ -216,13 +218,13 @@ class ImageNet(VisionDataset):
 
         if split in ["train", "val"]:
             if sub is not None:
-                path=self._get_imagenet_linkfolder(root_dir, sub)
+                path=self._get_imagenet_linkfolder(root_dir, split, sub)
             else:
                 path = os.path.join(root_dir, 'imagenet1k/ILSVRC/Data/CLS-LOC', split)
             self._check_dir(path, f"ImageNet-1k {split}")
             return ImageFolder(path)
 
-        elif split in ["test"]:
+        elif split == "test":
             path = os.path.join(root_dir, 'imagenet1k/ILSVRC/Data/CLS-LOC', split)
             self._check_dir(path, f"ImageNet-1k {split}")
             return ImageFolder(path)

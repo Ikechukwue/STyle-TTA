@@ -9,9 +9,9 @@ export PYTHONWARNINGS="ignore"
 DATASETS=("imagenet")
 SPLIT=("test_r")
 MODELS=("resnet18" "densenet121" "swin_base_patch4_window7_224" "vit_base_patch16_224" "ViT-B-16" "dinov2_vitb14") 
-TTA_METHOD=("vanilla" "zero" "tpt")
-THESIS_N_REFS_SWEEP=(8 4 2 16 32 64)
-THESIS_SEEDS=(71397589 133560673 265017005)
+TTA_METHOD=("vanilla") # "zero" "tpt")
+THESIS_N_REFS_SWEEP=(1)
+THESIS_SEEDS=(265017005) #71397589 133560673 
 EVAL_STRATEGY=("random") # "dino" "balanced_random" "metric" "balanced_metric" 
 MODEL_DIR="/home/stud/nemmler/retristyle/data/models"
 
@@ -46,7 +46,7 @@ for TS in "${THESIS_SEEDS[@]}"; do
                             --seed "$TS" \
                             --n_views "$NS" \
                             --augmented_cache "./data/augmented_cache" \
-                            --output_path "results/baseline/$DS"
+                            --output_path "results/baseline_1/$DS"
                         echo "Finished $MDL on $DS"
                     done
                 done

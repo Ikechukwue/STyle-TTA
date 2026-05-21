@@ -4,7 +4,7 @@ from experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
 from experiments.metrics.color_metrics import (compute_wasserstein_distance, compute_histogram_distance, 
                                compute_color_moment_distance, batch_wasserstein_distance, batch_color_moment_distance, batch_histogram_distances)
 from experiments.metrics.content_metrics import (compute_luminance_ssim, compute_ssim, compute_lpips_distance, compute_edge_similarity, 
-                                                 batch_sobel_edge_similarity, batch_ssim, batch_lpips_distance, _get_lpips_model)
+                                                 batch_sobel_edge_similarity, batch_ssim, batch_lpips_distance, _get_lpips_model,)
 from experiments.utils.reproducibility import random_seed, worker_seed
 from experiments.metrics.model import model_analysis
 import torch
@@ -241,14 +241,11 @@ def domain_analysis(args):
     set_A, set_B = prepare_datasets(args) 
 
     if args.mode == "intra":
-        results_A = classes_analysis(set_A, set_A, args)
-        results_B = classes_analysis(set_B, set_B, args)
-
-        result_name_A = result_name + f"_{args.dataset}.json"
-        result_name_B = result_name + f"_{args.split}.json"
-
-        _save_json(result_dir / result_name_A, results_A)
-        _save_json(result_dir / result_name_B, results_B)
+        for i, set_ in enumerate([set_A, set_B]):
+            results = classes_analysis(set_, set_, args)
+            suffix = f"_{args.dataset}.json" if i == 1 else f"_{args.split}.json"
+            result_name = result_name + suffix
+            _save_json(result_dir / result_name, results)
     else:    
         class_results = classes_analysis(set_A, set_B, args)
         result_name += f"_{args.dataset}_{args.split}.json"

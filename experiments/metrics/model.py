@@ -1,6 +1,7 @@
 from .content_metrics import (_get_lpips_model, batch_lpips_distance,
                              _get_hed_model, _get_ldc_model, batch_edge_similarity, _get_depth_model,
-                             calculate_depths_metrics, calculate_edge_metrics, calculate_lpips_metrics)
+                             calculate_depths_metrics, calculate_edge_metrics, calculate_lpips_metrics,
+                             clear_global_models,)
 import torch 
 import numpy as np
 from tqdm import tqdm
@@ -49,20 +50,21 @@ def model_analysis(set_A, set_B, common_classes, groups_A, groups_B, models, int
         print(f"Processing all dataset classes using Model Phase: {model_name}")
 
         torch.cuda.empty_cache()
-        if model_name in ['depthpro', 'depthanything_v2_large', 'dpt_large']:
-            model_results=calculate_depths_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra)
+        with torch.no_grad():
+            if model_name in ['depthpro', 'depthanything_v2_large', 'dpt_large']:
+                model_results=calculate_depths_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra)
 
-        elif model_name=="lpips":
-            model_results=calculate_lpips_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra)
-    
-        else:
-            model_results=calculate_edge_metrics(set_A, set_B, common_classes, model_name,groups_A, groups_B, device, intra)
+            elif model_name=="lpips":
+                model_results=calculate_lpips_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra)
+        
+            else:
+                model_results=calculate_edge_metrics(set_A, set_B, common_classes, model_name,groups_A, groups_B, device, intra)
 
         for cls, metric_dict in model_results.items():
             if cls not in metrics_report:
                 metrics_report[cls] = {}
             metrics_report[cls].update(metric_dict)
-    
+    clear_global_models()
     return metrics_report
 
     

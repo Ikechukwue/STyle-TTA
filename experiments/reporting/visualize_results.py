@@ -33,6 +33,7 @@ from nltk.corpus import wordnet as wn
 from scipy.cluster.hierarchy import linkage, leaves_list
 from scipy.spatial.distance import squareform
 
+
 try:
     import matplotlib
     matplotlib.use("Agg")
@@ -645,8 +646,7 @@ def plot_domain_shift_class_scatter_per_group(results_dir: Path, output_dir: Pat
     print(f"  [saved multi-page] {multipage_pdf_path}")
     print(f"  [saved individual groups] check directory: {subfolder_dir}/")
 
-import pandas as pd
-from scipy.cluster.hierarchy import linkage, leaves_list
+
 
 def plot_metric_correlation_heatmap(results_dir: Path, output_dir: Path, args=None):
     """
@@ -738,7 +738,167 @@ def plot_metric_correlation_heatmap(results_dir: Path, output_dir: Path, args=No
     
     print(f"  [saved correlation map] {out_file}")
 
+def plot_domain_shift_class_rankings_by_group(results_dir: Path, output_dir: Path, args=None):
+    """
+    Generates isolated, standalone PDF files for each metric group saved inside a 
+    dedicated subfolder pipeline. Parallel columns list class names ordered from best to worst.
+    
+    The top 20 classes from the FIRST metric column are tracked across all subsequent 
+    metric columns on that page using matching color fills for easy visual scanning.
+    """
+    f = results_dir / "domain_stats" / "_imagenet_and_test_r.json"
+    if not f.exists():
+        print("  [skip] Metrics JSON not found for rankings analysis.")
+        return
 
+    data = _load_json(f)
+    class_summaries = data.get("class_summaries", {})
+    if not class_summaries:
+        print("  [skip] No class-wise summaries available for rankings.")
+        return
+
+    split_str = args.split if args else "test_r"
+    try:
+        name_list = _get_names(split_str)
+    except Exception:
+        name_list = [f"Class {i}" for i in range(1000)]
+
+    # Structural analytical groups with explicitly assigned sorting properties
+    # Tuple pattern: (metric_key_string, column_display_label, reverse_sort_boolean)
+    metric_groups = {
+        "perceptual_structure": ("Perceptual & Structure Metrics", [
+            ("ssim_mean", "SSIM", False),
+            ("lpips_score_mean", "LPIPS Score", True),
+        ]),
+        "color_distribution": ("Color & Distribution Metrics", [
+            ("histogramm_distance_mean", "Histogram Dist.", True),
+            ("color_moment_distance_mean", "Color Moment Dist.", True),
+        ]),
+        "edges_boundaries": ("Edges & Boundaries Metrics", [
+            ("edge_similarity_mean", "Edge Similarity", False),
+            ("ldc_dists_mean", "LDC Distance", True),
+            ("ldc_fom_mean", "LDC Figure of Merit", False),
+        ]),
+        "depth_geometry": ("Depth & Geometry Metrics", [
+            ("depthanything_v2_large_mae_mean", "DepthAnything MAE", True),
+            ("dpt_large_mae_mean", "DPT MAE", True),
+            ("depthanything_v2_large_spear_mean", "DepthAnything Spear.", False),
+            ("dpt_large_spear_mean", "DPT Spearman", False),
+        ])
+    }
+
+    # Restructure source JSON dictionary records down into accessible flat metrics arrays
+    metrics_data = {}
+    for class_id, metrics in class_summaries.items():
+        try:
+            class_name = name_list[int(class_id)]
+        except IndexError:
+            class_name = f"ID {class_id}"
+            
+        for k, val in metrics.items():
+            if k.endswith("_mean"):
+                metrics_data.setdefault(k, []).append((class_name, val))
+
+    # Initialize the target dedicated pipeline subfolder directory
+    subfolder_dir = output_dir / "domain_shift_rankings"
+    subfolder_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"  [processing] Exporting distinct group rank summaries to: {subfolder_dir}/")
+
+    # Generate isolated assets processing one group at a time
+    for group_id, (group_display_title, metrics_list) in metric_groups.items():
+        active_metrics = [m for m in metrics_list if m[0] in metrics_data]
+        if not active_metrics:
+            continue
+            
+        n_cols = len(active_metrics)
+        column_data = []
+        column_headers = []
+        
+        # Track raw class records to easily run identity matching evaluations later
+        # matrix dimensions: [col_idx][row_idx] -> class_name string
+        raw_class_matrix = [] 
+
+        for col_idx, (key, display_name, minimize_val) in enumerate(active_metrics):
+            # Sort records: lower values on top if minimize_val=True, else higher on top
+            sorted_records = sorted(metrics_data[key], key=lambda x: x[1], reverse=not minimize_val)
+            
+            # Extract raw sorted class arrays for index tracking checks
+            raw_class_matrix.append([record[0] for record in sorted_records])
+            
+            # Construct formatted text cells with directional indicator arrows
+            arrow = "↓" if minimize_val else "↑"
+            column_headers.append(f"{display_name} {arrow}")
+            
+            formatted_col = []
+            for rank, (name, val) in enumerate(sorted_records, start=1):
+                short_name = name[:14] + ".." if len(name) > 16 else name
+                formatted_col.append(f"{rank}. {short_name} ({val:.2f})")
+            column_data.append(formatted_col)
+
+        # Transpose column vectors into rows for the final table structure
+        table_rows = list(zip(*column_data))
+        n_rows = len(table_rows)
+        if n_rows == 0:
+            continue
+
+        # Generate unique, visually distinct colors for tracking the Top 20 items
+        # We use a soft pastel palette so text remains perfectly readable without high contrast glare
+        cmap = plt.cm.get_cmap("Pastel1", 20)
+        top_20_classes_first_col = raw_class_matrix[0][:20]
+        class_color_mapping = {class_name: cmap(i) for i, class_name in enumerate(top_20_classes_first_col)}
+
+        # Scale figure canvas dynamic heights using structural row length allocations
+        fig_height = max(8, n_rows * 0.24)
+        fig, ax = plt.subplots(figsize=(3.4 * n_cols, fig_height))
+        ax.axis('off')
+
+        col_widths = [1.0 / n_cols] * n_cols
+        table = ax.table(
+            cellText=table_rows,
+            colLabels=column_headers,
+            colWidths=col_widths,
+            loc='center',
+            cellLoc='left'
+        )
+        
+        table.auto_set_font_size(False)
+        table.set_fontsize(8.5)
+
+        # Apply specific visual styles to headers and match classes to highlight fills
+        for (row_idx, col_idx), cell in table.get_celld().items():
+            if row_idx == 0:
+                cell.set_text_props(weight='bold', color='white', size=10)
+                cell.set_facecolor('#2c3e50')  # Dark slate gray professional header
+                cell.set_height(0.035)
+            else:
+                cell.set_height(max(0.012, 1.0 / (n_rows + 5)))
+                cell.set_linewidth(0.3)
+                
+                # Retrieve the identity string of the class assigned to this cell
+                current_cell_class = raw_class_matrix[col_idx][row_idx - 1]
+                
+                # Check if this class is one of the original top 20 from column 0
+                if current_cell_class in class_color_mapping:
+                    # Paint cell with its distinct tracked tracking color background
+                    cell.set_facecolor(class_color_mapping[current_cell_class])
+                    # Add bold text treatment so tracked entities jump out across columns
+                    cell.set_text_props(weight='bold')
+                else:
+                    # Non-tracked standard clean baseline alternate row tints
+                    if row_idx % 2 == 0:
+                        cell.set_facecolor('#f8f9fa')
+
+        fig.suptitle(f"{group_display_title}\n(Top 20 of First Metric Color-Tracked Across Columns)", 
+                     fontsize=12, fontweight="bold", y=0.99)
+        
+        fig.tight_layout()
+        group_out_path = subfolder_dir / f"rankings_{group_id}.pdf"
+        fig.savefig(group_out_path, bbox_inches='tight')
+        plt.close(fig)
+        print(f"    [saved individual group rank] {group_out_path.name}")
+
+    print(f"  [completed] Check folder pipeline target at: {subfolder_dir}/")
 #  =========================================================================
 # Main
 # =========================================================================
@@ -765,7 +925,7 @@ def generate_all_plots(args):
     #plot_accuracy_vs_ece(results_dir, output_dir, args)
     #plot_domain_shift_analysis(results_dir, output_dir, args)
     #plot_domain_shift_class_scatter_per_group(results_dir, output_dir, args)
-    plot_domain_gap_clustermap(results_dir, output_dir, args)
+    plot_domain_shift_class_rankings_by_group(results_dir, output_dir, args)
 
     print(f"\nAll figures written to {output_dir}/")
 

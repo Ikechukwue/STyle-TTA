@@ -28,7 +28,7 @@ from torchvision.transforms import v2
 from accelerate import Accelerator
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, roc_auc_score
-
+from sklearn.model_selection import train_test_split
 # Import project modules
 from experiments.data import (
     create_dataset,
@@ -37,6 +37,14 @@ from experiments.data import (
     NUM_CLASSES,
     TASK_TYPE,
     DATASET_SPLITS
+)
+from experiments.tta.checkpoint import (
+    build_experiment_key,
+    predictions_path,
+    results_path,
+    load_predictions,
+    save_predictions,
+    save_result,
 )
 from experiments.utils.reproducibility import random_seed, worker_seed
 from experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
@@ -273,16 +281,32 @@ def compute_metrics(
             auc = 0.0
             
     else:
-        # Multi-class classification (including ordinal)
+        # Multi-class classification
         y_true_squeezed = y_true.squeeze()
         y_pred_labels = np.argmax(y_pred, axis=1)
         accuracy = accuracy_score(y_true_squeezed, y_pred_labels)
         balanced_acc = balanced_accuracy_score(y_true_squeezed, y_pred_labels)
+        
         try:
-            auc = roc_auc_score(y_true_squeezed, y_pred, multi_class="ovr")
-        except ValueError:
+            # Check array scale constraints
+            if len(y_true_squeezed) > 30000:
+                print(f"  [Note] Dataset large ({len(y_true_squeezed)} samples). Stratifying 30k items for AUC...")
+                
+                # train_test_split will keep class proportions perfectly intact
+                _, y_true_sub, _, y_pred_sub = train_test_split(
+                    y_true_squeezed, 
+                    y_pred, 
+                    test_size=30000,            # Force the exact evaluation size you want
+                    stratify=y_true_squeezed,   # This is the magic parameter
+                    random_state=42
+                    )
+            else:
+                y_true_sub = y_true_squeezed
+                y_pred_sub = y_pred  
+            auc = roc_auc_score(y_true_sub, y_pred_sub, multi_class="ovr")
+        except Exception as e:
+            print(f"  [Warning] Global AUC calculation fallback triggered: {e}")
             auc = 0.0
-    
     return {
         'accuracy': float(accuracy),
         'balanced_accuracy': float(balanced_acc),
@@ -579,64 +603,60 @@ def evaluate_model(
     split: str,
 ) -> Dict[str, float]:
     """
-    Evaluate a model on a dataset split.
-    
-    Args:
-        model: Model to evaluate
-        dataloader: DataLoader for the split
-        accelerator: Accelerator for distributed inference
-        num_classes: Number of classes
-        task_type: Task type
-        split: Split name (for progress bar)
-        
-    Returns:
-        Dictionary with evaluation metrics
+    Evaluate a model on a dataset split cleanly in memory.
     """
     model.eval()
+    total_batches = len(dataloader)
     
-    # Progress bar
+    # Progress bar setup
     pbar = tqdm(
-        total=len(dataloader),
+        total=total_batches,
         desc=f"Evaluating {split}",
         ncols=80,
         disable=not accelerator.is_local_main_process
     )
     
-    # Metrics tracking
+    # Pure in-memory metrics tracking lists
     y_true_list = []
     y_pred_list = []
     prediction_fn = nn.Sigmoid() if task_type == "multi-label" else nn.Softmax(dim=1)
     
     with torch.no_grad():
-        for x, y in dataloader:
+        for batch_idx, (x, y) in enumerate(dataloader):
             # Forward pass
             outputs = model(x)
             
-            # Gather predictions across processes
+            # Gather predictions across all distributed processes
             gathered_outputs = accelerator.gather_for_metrics(outputs)
             gathered_y = accelerator.gather_for_metrics(y)
             
-            # Store predictions
-            y_true_list.append(gathered_y.cpu())
-            preds = prediction_fn(gathered_outputs).cpu()
+            # Post-process predictions
+            preds = prediction_fn(gathered_outputs)
             
-            # Handle potential NaNs
+            # Handle potential NaNs safely
             if torch.isnan(preds).any():
                 preds = torch.nan_to_num(preds, nan=1.0/num_classes)
-            y_pred_list.append(preds)
+
+            # Keep purely as CPU tensors (extremely memory efficient compared to Python lists/JSON strings)
+            y_true_list.append(gathered_y.cpu())
+            y_pred_list.append(preds.cpu())
             
             pbar.update(1)
     
     pbar.close()
     
-    # Compute metrics
+    # Concatenate the collected batches and convert directly to NumPy arrays
     y_true = torch.cat(y_true_list).numpy()
     y_pred = torch.cat(y_pred_list).numpy()
-    metrics = compute_metrics(y_true, y_pred, num_classes, task_type)
     
+    # Slice arrays to match the exact dataset size, trimming distributed sampler padding
+    original_dataset_size = len(dataloader.dataset)
+    y_true = y_true[:original_dataset_size]
+    y_pred = y_pred[:original_dataset_size]
+    
+    # Calculate and return final metrics
+    metrics = compute_metrics(y_true, y_pred, num_classes, task_type)
     return metrics
-
-
 # =============================================================================
 # JSON Handling
 # =============================================================================
@@ -736,7 +756,7 @@ def evaluate_classifier(
     # Get dataset info
     num_classes = NUM_CLASSES[dataset]
     task_type = TASK_TYPE[dataset]
-    available_splits = ["train", "val", "test", "test_r", "train@test_r", "val@test_r"]
+    available_splits = ["val", "test_abl", "train", "test_r", "train@test_r", "val@test_r", "val@test_abl", "train@test_abl"] #
     
     # Determine splits to evaluate
     if splits is None:
@@ -747,7 +767,9 @@ def evaluate_classifier(
     accelerator.print(f"Task type: {task_type}")
     accelerator.print(f"Num classes: {num_classes}")
     accelerator.print(f"Splits to evaluate: {splits}")
-    
+    if accelerator.is_main_process:
+        output_dir = Path(output_path) / "classifier_evaluation"
+        output_dir.mkdir(parents=True, exist_ok=True)
     # Check if weights exist
     if weights_path != "pretrained" and not Path(weights_path).exists():
         accelerator.print(f"\n✗ Weights not found: {weights_path}")
@@ -773,7 +795,7 @@ def evaluate_classifier(
         
         accelerator.print(f"\nEvaluating on {split} split...")
 
-        if "@" in split or split == "test_r":
+        if "@" in split or split in ["test_r", "test_abl"]:
             accelerator.print(f"  Applying class subset masking for split: {split}")
             active_model = MaskedClassifier(model, split=split)
             split_num_classes = int(active_model.mask.sum().item())
@@ -802,7 +824,7 @@ def evaluate_classifier(
             accelerator=accelerator,
             num_classes=split_num_classes,
             task_type=task_type,
-            split=split
+            split=split,
         )
         
         split_metrics[split] = metrics
@@ -815,8 +837,6 @@ def evaluate_classifier(
     
     # Save metrics (only on main process)
     if accelerator.is_main_process:
-        output_dir = Path(output_path) / "classifier_evaluation"
-        output_dir.mkdir(parents=True, exist_ok=True)
         metrics_file = output_dir / "metrics.json"
         
         metrics_data = load_or_create_metrics_json(metrics_file)

@@ -375,7 +375,6 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
             y_pred = y_pred.squeeze(1)
         num_classes = len(np.unique(test_set.dataset.dataset.targets))
         metrics = compute_metrics(y_true, y_pred, num_classes, task_type)
-        print(f"there are {num_classes}")
 
         res_path = results_path(args, eval_split, key=exp_key)
         if not res_path.exists():         

@@ -17,6 +17,9 @@ from typing import Tuple, Optional, Dict, Any
 from pathlib import Path
 from PIL import Image
 import torch.nn.functional as F
+from scipy.stats import spearmanr
+from scipy.ndimage import distance_transform_edt
+from scipy.spatial.distance import cdist
 
 # Global model instances (lazy-loaded)
 _lpips_model = None
@@ -48,6 +51,23 @@ DEPTH_MODEL_CONFIGS = {
     },
 }
 
+def clear_global_models():
+    """Explicitly purges all cached models from GPU memory."""
+    global _lpips_model, _depth_models, _hed_model, _ldc_model, _dists_model, _adists_model
+    
+    # 1. Clear individual models
+    _lpips_model = None
+    _hed_model = None
+    _ldc_model = None
+    _dists_model = None
+    _adists_model = None
+    
+    # 2. Clear dictionaries
+    _depth_models.clear()
+    
+    # 3. Force garbage collection and empty VRAM cache
+    torch.cuda.empty_cache()
+    print("Global model cache completely cleared from GPU.")
 
 def set_path_to_edge_model(edge_dir: Optional[str] = None) -> None:
     """
@@ -1241,57 +1261,64 @@ def batch_edge_similarity(batch_A, batch_B, model, method='ldc'):
  ####################################################################################################################
  #  Model Analysis
  # ##################################################################################################################   
+
 def _pairwise_dists_chunked(feats_A, feats_B, dists_model, chunk_size=16):
-    """
-    Computes pairwise DISTS between two sets of 3-channel maps
-    without materializing the full N*M batch at once.
-    feats_A: [N, 3, H, W]
-    feats_B: [M, 3, H, W]
-    Returns: numpy array [N, M]
-    """
+    """Computes pairwise DISTS between two sets of 3-channel maps in chunks."""
     N, M = feats_A.shape[0], feats_B.shape[0]
     out = np.zeros((N, M), dtype=np.float32)
 
     for i_start in range(0, N, chunk_size):
         i_end = min(i_start + chunk_size, N)
-        chunk_A = feats_A[i_start:i_end]  # [ci, 3, H, W]
+        chunk_A = feats_A[i_start:i_end]
         ci = chunk_A.shape[0]
 
         for j_start in range(0, M, chunk_size):
             j_end = min(j_start + chunk_size, M)
-            chunk_B = feats_B[j_start:j_end]  # [cj, 3, H, W]
+            chunk_B = feats_B[j_start:j_end]
             cj = chunk_B.shape[0]
 
-            # Only ci*cj pairs in memory at once
-            a_exp = chunk_A.repeat_interleave(cj, dim=0)   # [ci*cj, 3, H, W]
-            b_exp = chunk_B.repeat(ci, 1, 1, 1)             # [ci*cj, 3, H, W]
+            a_exp = chunk_A.repeat_interleave(cj, dim=0)
+            b_exp = chunk_B.repeat(ci, 1, 1, 1)
 
             with torch.no_grad():
-                scores = dists_model(a_exp, b_exp)           # [ci*cj]
+                scores = dists_model(a_exp, b_exp)
 
-            out[i_start:i_end, j_start:j_end] = (
-                scores.view(ci, cj).cpu().numpy()
-            )
-
-            # Free the pair batch immediately
+            out[i_start:i_end, j_start:j_end] = scores.view(ci, cj).cpu().numpy()
             del a_exp, b_exp, scores
-
+            
     return out
 
 
+def _build_dataset_cache(dataset, groups, common_classes, extract_fn, device):
+    """
+    Unified extraction wrapper. Replaces all repetitive '_extract_all_X' 
+    and individual map functions by evaluating per class on CPU.
+    """
+    cache = {}
+    for cls in common_classes:
+        images = [dataset[i][0] for i in groups[cls]]
+        if not images:
+            continue
+        batch = torch.stack(images).to(device)
+        cache[cls] = extract_fn(batch).cpu()
+        del batch
+        torch.cuda.empty_cache()
+    return cache
+
+
+# --- 2. SINGLE-PASS MODEL EXTRACTORS ---
+
 def _extract_depth_maps(batch, model_dict, mini_batch_size=8):
-    """Run depth model in mini-batches to avoid OOM on large batches."""
-    model = model_dict['model']
-    processor = model_dict['processor']
-    device = batch.device
+    """Extracts normalized depth maps in mini-batches."""
+    model, processor = model_dict['model'], model_dict['processor']
     all_maps = []
 
     for start in range(0, batch.shape[0], mini_batch_size):
-        chunk = batch[start:start + mini_batch_size]
-        images_list = [torch.clamp(img, 0, 1) for img in chunk]
+        chunk = torch.clamp(batch[start:start + mini_batch_size], 0, 1)
+        images_list = [img for img in chunk]
 
         with torch.no_grad():
-            inputs = processor(images=images_list, return_tensors="pt").to(device)
+            inputs = processor(images=images_list, return_tensors="pt").to(batch.device)
             outputs = model(**inputs)
 
         maps = torch.nn.functional.interpolate(
@@ -1304,11 +1331,11 @@ def _extract_depth_maps(batch, model_dict, mini_batch_size=8):
         maxs = maps.view(b, -1).max(1)[0].view(-1, 1, 1, 1)
         all_maps.append((maps - mins) / (maxs - mins + 1e-8))
 
-    return torch.cat(all_maps, dim=0)  # [N, 1, H, W]
+    return torch.cat(all_maps, dim=0)
 
 
 def _extract_edges(batch, model, method='ldc', mini_batch_size=8):
-    """Run edge model in mini-batches."""
+    """Extracts normalized edges in mini-batches."""
     device = batch.device
     all_edges = []
 
@@ -1317,8 +1344,7 @@ def _extract_edges(batch, model, method='ldc', mini_batch_size=8):
         with torch.no_grad():
             if method == 'ldc':
                 mean = torch.tensor([103.939, 116.779, 123.68]).view(1, 3, 1, 1).to(device)
-                out = model((chunk * 255.0) - mean)
-                edges = torch.sigmoid(out[-1])
+                edges = torch.sigmoid(model((chunk * 255.0) - mean)[-1])
             else:
                 edges = model(chunk)
 
@@ -1326,301 +1352,141 @@ def _extract_edges(batch, model, method='ldc', mini_batch_size=8):
         max_v = edges.view(b, -1).max(1)[0].view(-1, 1, 1, 1)
         all_edges.append(edges / (max_v + 1e-8))
 
-    return torch.cat(all_edges, dim=0)  # [N, 1, H, W]
-
-def _extract_depth_maps_cached(batch_A, batch_B, model_dict, mini_batch_size=8, intra=False):
-    """Extract depth maps, reusing batch_A result for batch_B when intra=True."""
-    maps_A = _extract_depth_maps(batch_A, model_dict, mini_batch_size)
-    maps_B = maps_A if intra else _extract_depth_maps(batch_B, model_dict, mini_batch_size)
-    return maps_A, maps_B
+    return torch.cat(all_edges, dim=0)
 
 
-def _extract_edges_cached(batch_A, batch_B, model, method='ldc', mini_batch_size=8, intra=False):
-    edges_A = _extract_edges(batch_A, model, method, mini_batch_size)
-    edges_B = edges_A if intra else _extract_edges(batch_B, model, method, mini_batch_size)
-    return edges_A, edges_B
+# --- 3. MAIN EVALUATION PIPELINES ---
 
-def _extract_all_depth_maps(set_, groups, common_classes, model_dict, device, mini_batch_size=8):
-    """
-    Pre-extract depth maps for ALL classes in one pass over the model.
-    Returns dict: {cls: tensor [N, 1, H, W]}
-    """
-    cache = {}
-    for cls in common_classes:
-        images = [set_[i][0] for i in groups[cls]]
-        if not images:
-            continue
-        batch = torch.stack(images).to(device)
-        cache[cls] = _extract_depth_maps(batch, model_dict, mini_batch_size).cpu()
-        # Store on CPU — we'll move to GPU per-chunk in DISTS
-        del batch
-        torch.cuda.empty_cache()
-    return cache
-
-
-def _extract_all_edges(set_, groups, common_classes, model, device, method='ldc', mini_batch_size=8):
-    cache = {}
-    for cls in common_classes:
-        images = [set_[i][0] for i in groups[cls]]
-        if not images:
-            continue
-        batch = torch.stack(images).to(device)
-        cache[cls] = _extract_edges(batch, model, method, mini_batch_size).cpu()
-        del batch
-        torch.cuda.empty_cache()
-    return cache
-
-def batch_depth_analysis(batch_A, batch_B, model_dict, dists_model, intra=False, dists_chunk=8, depth_mini_batch=8):
-
-    depth_A = _extract_depth_maps(batch_A, model_dict, depth_mini_batch)
-    depth_B = _extract_depth_maps(batch_B, model_dict, depth_mini_batch)
-    N, M = depth_A.shape[0], depth_B.shape[0]
-
-    # DISTS: chunked pairwise, no giant intermediate tensor
-    dA3 = depth_A.repeat(1, 3, 1, 1)
-    dB3 = depth_B.repeat(1, 3, 1, 1)
-    dists_grid = _pairwise_dists_chunked(dA3, dB3, dists_model, chunk_size=dists_chunk)
-
-    # CPU metrics unchanged
-    dA_np = depth_A.squeeze(1).cpu().numpy()
-    dB_np = depth_B.squeeze(1).cpu().numpy()
-    mae_grid = np.zeros((N, M), dtype=object)
-    ssim_grid = np.zeros((N, M), dtype=object)
-    spear_grid = np.zeros((N, M), dtype=object)
-    dists_grid = dists_grid.astype(object)
-
-    from scipy.stats import spearmanr
-    for i in range(N):
-        for j in range(M):
-            if intra and i == j:
-                mae_grid[i, j] = None
-                ssim_grid[i, j] = None
-                spear_grid[i, j] = None
-                dists_grid[i, j] = None
-                continue
-            mae_grid[i, j] = np.mean(np.abs(dA_np[i] - dB_np[j]))
-            ssim_grid[i, j] = ssim(dA_np[i], dB_np[j], data_range=1.0, channel_axis=-1)
-            corr, _ = spearmanr(dA_np[i].flatten(), dB_np[j].flatten())
-            spear_grid[i, j] = corr if not np.isnan(corr) else 0.0
-
-    return mae_grid, ssim_grid, spear_grid, dists_grid
-
-
-def batch_edge_analysis(batch_A, batch_B, model,  dists_model, method='ldc', intra=False, dists_chunk=8, edge_mini_batch=8):
-
-    edges_A = _extract_edges(batch_A, model, method, edge_mini_batch)
-    edges_B = _extract_edges(batch_B, model, method, edge_mini_batch)
-    N, M = edges_A.shape[0], edges_B.shape[0]
-
-    eA3 = edges_A.repeat(1, 3, 1, 1)
-    eB3 = edges_B.repeat(1, 3, 1, 1)
-    dists_grid = _pairwise_dists_chunked(eA3, eB3, dists_model, chunk_size=dists_chunk)
-
-    eA_np = edges_A.squeeze(1).cpu().numpy()
-    eB_np = edges_B.squeeze(1).cpu().numpy()
-    ssim_grid = np.zeros((N, M), dtype=object)
-    fom_grid  = np.zeros((N, M), dtype=object)
-    haus_grid = np.zeros((N, M), dtype=object)
-    dists_grid = dists_grid.astype(object)
-
-    from scipy.ndimage import distance_transform_edt
-    from scipy.spatial.distance import directed_hausdorff
-
-    for i in range(N):
-        bin_A = eA_np[i] > 0.1
-        pts_A = np.argwhere(bin_A)
-        dist_trans_A = distance_transform_edt(~bin_A)
-
-        for j in range(M):
-            if intra and i == j:
-                ssim_grid[i, j] = None
-                dists_grid[i, j] = None
-                fom_grid[i, j] = None
-                haus_grid[i, j] = None
-                continue
-            ssim_grid[i, j] = ssim(eA_np[i], eB_np[j], data_range=1.0, channel_axis=-1)
-            bin_B = eB_np[j] > 0.1
-            pts_B = np.argwhere(bin_B)
-
-            if np.any(bin_A) and np.any(bin_B):
-                d_i = dist_trans_A[bin_B]
-                fom_grid[i, j] = (
-                    np.sum(1.0 / (1.0 + (1.0/9.0) * (d_i ** 2)))
-                    / max(np.sum(bin_A), np.sum(bin_B))
-                )
-                h1 = directed_hausdorff(pts_A, pts_B)[0]
-                h2 = directed_hausdorff(pts_B, pts_A)[0]
-                haus_grid[i, j] = max(h1, h2)
-            else:
-                haus_grid[i, j] = 1000.0
-
-    return ssim_grid, dists_grid, fom_grid, haus_grid
-
-def calculate_depths_metrics(set_A, set_B, common_classes, model_name,
-                              groups_A, groups_B, device, intra):
+def calculate_depths_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra):
     depth_model = _get_depth_model(model_name)
-    dists_model = _get_dists_model().to(device)
-    model_results_per_class = {}
+    
+    # 1. Single pass extraction using our generic cacher
+    extract_fn = lambda b: _extract_depth_maps(b, depth_model, mini_batch_size=8)
+    cache_A = _build_dataset_cache(set_A, groups_A, common_classes, extract_fn, device)
+    cache_B = cache_A if intra else _build_dataset_cache(set_B, groups_B, common_classes, extract_fn, device)
 
-    try:
-        # Single pass through depth model for all classes
-        print(f"  Extracting depth maps for set_A...")
-        cache_A = _extract_all_depth_maps(set_A, groups_A, common_classes,
-                                           depth_model, device)
-        # Reuse cache_A entirely if intra, otherwise extract set_B
-        cache_B = cache_A if intra else _extract_all_depth_maps(
-            set_B, groups_B, common_classes, depth_model, device)
-
-
-        del depth_model
-        torch.cuda.empty_cache()
-
-        for cls in common_classes:
-            if cls not in cache_A or cls not in cache_B:
-                continue
-
-            # Move to GPU only for the DISTS chunk computation
-            depth_A = cache_A[cls].to(device)
-            depth_B = cache_B[cls].to(device)
-            N, M = depth_A.shape[0], depth_B.shape[0]
-
-            dA3 = depth_A.repeat(1, 3, 1, 1)
-            dB3 = depth_B.repeat(1, 3, 1, 1)
-            dists_grid = _pairwise_dists_chunked(dA3, dB3, dists_model, chunk_size=4)
-
-            del dA3, dB3
-            torch.cuda.empty_cache()
-
-            # CPU metrics
-            dA_np = depth_A.squeeze(1).cpu().numpy()
-            dB_np = depth_B.squeeze(1).cpu().numpy()
-            del depth_A, depth_B
-
-            mae_grid   = np.zeros((N, M), dtype=object)
-            ssim_grid  = np.zeros((N, M), dtype=object)
-            spear_grid = np.zeros((N, M), dtype=object)
-            dists_obj  = dists_grid.astype(object)
-
-            from scipy.stats import spearmanr
-            for i in range(N):
-                for j in range(M):
-                    if intra and i == j:
-                        mae_grid[i,j] = ssim_grid[i,j] = spear_grid[i,j] = dists_obj[i,j] = None
-                        continue
-                    mae_grid[i,j] = float(np.mean(np.abs(dA_np[i] - dB_np[j])))
-                    ssim_grid[i,j] = float(ssim(dA_np[i], dB_np[j], data_range=1.0))
-                    corr, _ = spearmanr(dA_np[i].flatten(), dB_np[j].flatten())
-                    spear_grid[i,j] = float(corr) if not np.isnan(corr) else 0.0
-
-            model_results_per_class[cls] = {
-                f"{model_name}_mae":   mae_grid.flatten(),
-                f"{model_name}_ssim":  ssim_grid.flatten(),
-                f"{model_name}_spear": spear_grid.flatten(),
-                f"{model_name}_dists": dists_obj.flatten(),
-            }
-
-    finally:
-        # depth_model already deleted above, but guard against early exception
-        if 'depth_model' in dir():
-            del depth_model
-        del dists_model
-        torch.cuda.empty_cache()
-
-    return model_results_per_class
-
-
-def calculate_edge_metrics(set_A, set_B, common_classes, model_name,
-                            groups_A, groups_B, device, intra):
-    if model_name == "hed":
-        edge_model = _get_hed_model().to(device).eval()
-    elif model_name == "ldc":
-        edge_model = _get_ldc_model().to(device)
-    else:
-        raise ValueError(f"Unknown edge model: {model_name}")
+    del depth_model
+    torch.cuda.empty_cache()
 
     dists_model = _get_dists_model().to(device)
     model_results_per_class = {}
 
-    try:
-        print(f"  Extracting edge maps for set_A...")
-        cache_A = _extract_all_edges(set_A, groups_A, common_classes,
-                                      edge_model, device, method=model_name)
-        cache_B = cache_A if intra else _extract_all_edges(
-            set_B, groups_B, common_classes, edge_model, device, method=model_name)
+    for cls in common_classes:
+        if cls not in cache_A or cls not in cache_B:
+            continue
 
-        # Edge model done — drop it before DISTS
-        del edge_model
-        torch.cuda.empty_cache()
+        dA = cache_A[cls].to(device)
+        dB = cache_B[cls].to(device)
+        N, M = dA.shape[0], dB.shape[0]
 
-        from scipy.ndimage import distance_transform_edt
-        from scipy.spatial.distance import cdist
-        MAX_PTS = 500
+        # Process DISTS safely
+        dists_grid = _pairwise_dists_chunked(dA.repeat(1, 3, 1, 1), dB.repeat(1, 3, 1, 1), dists_model, chunk_size=4)
+        
+        dA_np, dB_np = dA.squeeze(1).cpu().numpy(), dB.squeeze(1).cpu().numpy()
+        del dA, dB; torch.cuda.empty_cache()
 
-        for cls in common_classes:
-            if cls not in cache_A or cls not in cache_B:
-                continue
+        # Allocate arrays
+        mae, ssim_arr, spear = np.full((N, M), None), np.full((N, M), None), np.full((N, M), None)
+        dists_obj = dists_grid.astype(object)
 
-            edges_A = cache_A[cls].to(device)
-            edges_B = cache_B[cls].to(device)
-            N, M = edges_A.shape[0], edges_B.shape[0]
+        for i in range(N):
+            for j in range(M):
+                if intra and i == j:
+                    dists_obj[i, j] = None
+                    continue
+                mae[i, j] = float(np.mean(np.abs(dA_np[i] - dB_np[j])))
+                ssim_arr[i, j] = float(ssim(dA_np[i], dB_np[j], data_range=1.0))
+                corr, _ = spearmanr(dA_np[i].flatten(), dB_np[j].flatten())
+                spear[i, j] = float(corr) if not np.isnan(corr) else 0.0
 
-            eA3 = edges_A.repeat(1, 3, 1, 1)
-            eB3 = edges_B.repeat(1, 3, 1, 1)
-            dists_grid = _pairwise_dists_chunked(eA3, eB3, dists_model, chunk_size=4)
+        model_results_per_class[cls] = {
+            f"{model_name}_mae": mae.flatten(), f"{model_name}_ssim": ssim_arr.flatten(),
+            f"{model_name}_spear": spear.flatten(), f"{model_name}_dists": dists_obj.flatten(),
+        }
 
-            del eA3, eB3
-            torch.cuda.empty_cache()
+    del dists_model; torch.cuda.empty_cache()
+    for cls in list(cache_A.keys()):
+        cache_A[cls] = cache_A[cls].cpu()
+    if not intra and 'cache_B' in locals():
+        for cls in list(cache_B.keys()):
+            cache_B[cls] = cache_B[cls].cpu()
 
-            eA_np = edges_A.squeeze(1).cpu().numpy()
-            eB_np = edges_B.squeeze(1).cpu().numpy()
-            del edges_A, edges_B
-
-            ssim_grid  = np.zeros((N, M), dtype=object)
-            fom_grid   = np.zeros((N, M), dtype=object)
-            haus_grid  = np.zeros((N, M), dtype=object)
-            dists_obj  = dists_grid.astype(object)
-
-            for i in range(N):
-                bin_A = eA_np[i] > 0.1
-                pts_A = np.argwhere(bin_A)
-                pts_A_sub = pts_A[np.random.choice(len(pts_A), min(len(pts_A), MAX_PTS), replace=False)]
-                dist_trans_A = distance_transform_edt(~bin_A)
-
-                for j in range(M):
-                    if intra and i == j:
-                        ssim_grid[i,j] = fom_grid[i,j] = haus_grid[i,j] = dists_obj[i,j] = None
-                        continue
-
-                    ssim_grid[i,j] = float(ssim(eA_np[i], eB_np[j], data_range=1.0))
-                    bin_B = eB_np[j] > 0.1
-                    pts_B = np.argwhere(bin_B)
-
-                    if np.any(bin_A) and np.any(bin_B):
-                        d_i = dist_trans_A[bin_B]
-                        fom_grid[i,j] = float(
-                            np.sum(1.0 / (1.0 + (1.0/9.0) * (d_i**2)))
-                            / max(np.sum(bin_A), np.sum(bin_B))
-                        )
-                        pts_B_sub = pts_B[np.random.choice(len(pts_B), min(len(pts_B), MAX_PTS), replace=False)]
-                        D = cdist(pts_A_sub, pts_B_sub)
-                        haus_grid[i,j] = float(max(D.min(axis=1).max(), D.min(axis=0).max()))
-                    else:
-                        haus_grid[i,j] = 1000.0
-
-            model_results_per_class[cls] = {
-                f"{model_name}_ssim":  ssim_grid.flatten(),
-                f"{model_name}_dists": dists_obj.flatten(),
-                f"{model_name}_fom":   fom_grid.flatten(),
-                f"{model_name}_haus":  haus_grid.flatten(),
-            }
-
-    finally:
-        if 'edge_model' in dir():
-            del edge_model
-        del dists_model
-        torch.cuda.empty_cache()
-
+    del cache_A, cache_B
+    torch.cuda.empty_cache()
     return model_results_per_class
+
+
+def calculate_edge_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra):
+    edge_model = _get_ldc_model().to(device) if model_name == "ldc" else _get_hed_model().to(device).eval()
+
+    # 1. Single pass extraction using our generic cacher
+    extract_fn = lambda b: _extract_edges(b, edge_model, method=model_name, mini_batch_size=8)
+    cache_A = _build_dataset_cache(set_A, groups_A, common_classes, extract_fn, device)
+    cache_B = cache_A if intra else _build_dataset_cache(set_B, groups_B, common_classes, extract_fn, device)
+
+    del edge_model; torch.cuda.empty_cache()
+
+    dists_model = _get_dists_model().to(device)
+    model_results_per_class = {}
+    MAX_PTS = 500
+
+    for cls in common_classes:
+        if cls not in cache_A or cls not in cache_B:
+            continue
+
+        eA = cache_A[cls].to(device)
+        eB = cache_B[cls].to(device)
+        N, M = eA.shape[0], eB.shape[0]
+
+        dists_grid = _pairwise_dists_chunked(eA.repeat(1, 3, 1, 1), eB.repeat(1, 3, 1, 1), dists_model, chunk_size=4)
+        eA_np, eB_np = eA.squeeze(1).cpu().numpy(), eB.squeeze(1).cpu().numpy()
+        del eA, eB; torch.cuda.empty_cache()
+
+        ssim_arr, fom, haus = np.full((N, M), None), np.full((N, M), None), np.full((N, M), None)
+        dists_obj = dists_grid.astype(object)
+
+        for i in range(N):
+            bin_A = eA_np[i] > 0.1
+            pts_A = np.argwhere(bin_A)
+            if not np.any(bin_A): continue
+            
+            pts_A_sub = pts_A[np.random.choice(len(pts_A), min(len(pts_A), MAX_PTS), replace=False)]
+            dist_trans_A = distance_transform_edt(~bin_A)
+
+            for j in range(M):
+                if intra and i == j:
+                    dists_obj[i, j] = None
+                    continue
+
+                ssim_arr[i, j] = float(ssim(eA_np[i], eB_np[j], data_range=1.0))
+                bin_B = eB_np[j] > 0.1
+                pts_B = np.argwhere(bin_B)
+
+                if np.any(bin_B):
+                    d_i = dist_trans_A[bin_B]
+                    fom[i, j] = float(np.sum(1.0 / (1.0 + (1.0/9.0) * (d_i**2))) / max(np.sum(bin_A), np.sum(bin_B)))
+                    pts_B_sub = pts_B[np.random.choice(len(pts_B), min(len(pts_B), MAX_PTS), replace=False)]
+                    D = cdist(pts_A_sub, pts_B_sub)
+                    haus[i, j] = float(max(D.min(axis=1).max(), D.min(axis=0).max()))
+                else:
+                    haus[i, j] = 1000.0
+
+        model_results_per_class[cls] = {
+            f"{model_name}_ssim": ssim_arr.flatten(), f"{model_name}_dists": dists_obj.flatten(),
+            f"{model_name}_fom": fom.flatten(), f"{model_name}_haus": haus.flatten(),
+        }
+
+    del dists_model; torch.cuda.empty_cache()
+    for cls in list(cache_A.keys()):
+        cache_A[cls] = cache_A[cls].cpu()
+    if not intra and 'cache_B' in locals():
+        for cls in list(cache_B.keys()):
+            cache_B[cls] = cache_B[cls].cpu()
+
+    del cache_A, cache_B
+    torch.cuda.empty_cache()
+    return model_results_per_class
+
 
 def calculate_lpips_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra):
     model = _get_lpips_model().to(device).eval()

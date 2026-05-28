@@ -236,9 +236,9 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     # ---- embedding extraction (dino retrieval only) -------------------------
     embedding_dir = getattr(args, "embedding_dir", None)
     embedding_model = getattr(args, "embedding_model", None) or "vit_base_patch16_dinov3.lvd1689m"
-
-    if (
-        args.tta_method in ("adain_tta", "color_tta", "retristyle")
+    augmented_cache_dir = Path(args.augmented_cache) if getattr(args, "augmented_cache", None) else None
+    if (augmented_cache_dir is None
+        and args.tta_method in ("adain_tta", "color_tta", "retristyle")
         and args.retrieval_strategy == "dino"
         and embedding_dir is not None
     ):
@@ -271,7 +271,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     # ---- retrieval setup (lazy) ---------------------------------------------
     retriever = None
     ref_db = None
-    if args.tta_method in ("adain_tta", "color_tta", "retristyle"):
+    if augmented_cache_dir is None and args.tta_method in ("adain_tta", "color_tta", "retristyle"):
         accelerator.print("Building reference database (lazy loading)...")
         ref_db = build_reference_db(
             dataset=args.dataset,

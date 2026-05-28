@@ -39,7 +39,7 @@ PRETRAINED_CLASSIFIERS=("ViT-B-16" "dinov2_vitb14")
 # ── ImageNet datasets (primary) ──
 IMAGENET_DATASET="imagenet"
 IMAGENET_TRAIN_SPLIT="train"
-IMAGENET_TEST_SPLITS=("test_r" "test_a" "test_sketch" "test_v2" "testing")
+IMAGENET_TEST_SPLITS=("test_r" "test_a" "test_sketch" "test_v2" "testing" "test_r_c26")
 
 # ── All available datasets (uncomment when extending) ──
 # NATURAL_DATASETS=("pacs" "vlcs" "domainnet" "office_home" "terra_incognita")
@@ -47,9 +47,9 @@ IMAGENET_TEST_SPLITS=("test_r" "test_a" "test_sketch" "test_v2" "testing")
 
 # ── Retrieval / TTA settings ──
 EMBEDDING_MODEL="vit_base_patch16_dinov3.lvd1689m"
-RETRIEVAL_STRATEGIES=("random" "balanced_random" "dino" "metric" "balanced_metric")
+RETRIEVAL_STRATEGIES=("random" "balanced_random" "dino") #"metric" "balanced_metric")
 EVAL_STRATEGIES=("vanilla" "zero" "tpt")
-N_REFS_VALUES=(2 4 8 16 32)
+N_REFS_VALUES=(2 4 8 16)
 DEFAULT_N_VIEWS=64
 STYLE_BATCH_SIZE=8
 

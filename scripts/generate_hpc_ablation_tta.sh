@@ -32,7 +32,7 @@ mkdir -p "$TARGET_DIR"
 TTA_METHOD="retristyle"
 AUGMENTATION="none"
 DATASET="imagenet"
-SPLIT="test_r"
+SPLIT="test_r_c26"
 
 echo "========================================================================"
 echo "RetriStyle Ablation Suite — HPC Script Generator"
@@ -91,14 +91,13 @@ SPLIT="${SPLIT}"
 N_REFS=${NREFS}
 ${WEIGHTS_LINE}
 
-CONTAINER=${HPC_CONTAINER}
-DATA_PATH=${HPC_DATA_PATH}
-OUTPUT_PATH=${HPC_OUTPUT_PATH}
-EMBEDDING_DIR=${HPC_EMBEDDING_DIR}
-HF_MODELS_CACHE=${HPC_HF_CACHE}
-TORCH_MODELS_CACHE=${HPC_TORCH_CACHE}
-MODEL_DIR=${HPC_MODEL_DIR}
-LIVE_CODE=\$HOME/retristyle/retristyle
+CONTAINER=$(eval echo ${HPC_CONTAINER})
+DATA_PATH=$(eval echo ${HPC_DATA_PATH})
+OUTPUT_PATH=$(eval echo ${HPC_OUTPUT_PATH})
+EMBEDDING_DIR=$(eval echo ${HPC_EMBEDDING_DIR})
+HF_MODELS_CACHE=$(eval echo ${HPC_HF_CACHE})
+TORCH_MODELS_CACHE=$(eval echo ${HPC_TORCH_CACHE})
+LIVE_CODE=\$HPCVAULT/snapshots/retristyle
 
 echo "Ablation ${TAG}: \$CLASSIFIER | retr=\$RETRIEVAL_STRATEGY | eval=\$EVAL_STRATEGY | nr=\$N_REFS | seed=\$SEED"
 echo "Job: \$SLURM_JOB_ID | \$(date)"
@@ -112,20 +111,23 @@ ACCELERATE_CONFIG=\$(printf "/app/configs/gpu_%02d.yaml" \$GPU_COUNT)
 
 if [[ -n "\$TMPDIR" ]]; then
     echo "Unpacking Source ImageNet to SSD..."
-    rsync -ahW --progress \$HPCVAULT/data/${DATASET}_${SPLIT}.tar \$TMPDIR/
-    tar -xf \$TMPDIR/${DATASET}_${SPLIT}.tar -C \$TMPDIR/
+    rsync -ahW --progress \$HPCVAULT/data/imagenet_test_r_c26.tar \$TMPDIR/
+    rsync -ahW --progress \$HPCVAULT/data/imagenet_test_r.tar \$TMPDIR/
+    tar -xf \$TMPDIR/imagenet_test_r.tar -C \$TMPDIR/
+    tar -xf \$TMPDIR/imagenet_test_r_c26.tar -C \$TMPDIR/data/imagenet/imagenetr/
     EFFECTIVE_DATA_PATH=\$TMPDIR/data
 
     echo "Unpacking Augmented Cache to SSD..."
-    TARGET_EXTRACT_DIR="\$TMPDIR/data/augmented_cache/\$SEED/\$CLASSIFIER/\$TTA_METHOD"
     LOCAL_CACHE=\$TMPDIR/data/augmented_cache
+    TARGET_EXTRACT_DIR="\$LOCAL_CACHE/${BEST_RETRIEVAL}_${DATASET}_test_r_s\$SEED"
     mkdir -p \$LOCAL_CACHE \$TARGET_EXTRACT_DIR
 
-    TAR_FILE="${BEST_RETRIEVAL}_${BEST_N_REFS}_${DATASET}_${SPLIT}_s${SEED}.tar"
-    rsync -ahW --progress \$HPCVAULT/augmented_cache/${SPLIT}/complete/\$TAR_FILE \$TMPDIR/
+    TAR_FILE="${BEST_RETRIEVAL}_imagenet_test_r_s${SEED}.tar"
+    rsync -ahW --progress \$HPCVAULT/augmented_cache/test_r/complete/\$TAR_FILE \$TMPDIR/
     tar -xf \$TMPDIR/\$TAR_FILE -C \$TARGET_EXTRACT_DIR
 else
     EFFECTIVE_DATA_PATH=\$DATA_PATH
+    LOCAL_CACHE=\$TMPDIR/data/augmented_cache
 fi
 
 WEIGHTS_CLI=""
@@ -140,10 +142,11 @@ APPTAINERENV_http_proxy=\$http_proxy \\
 APPTAINERENV_https_proxy=\$https_proxy \\
 APPTAINERENV_HF_HOME=/app/hf_models \\
 APPTAINERENV_TORCH_HOME=/app/torch_models \\
-timeout 2h apptainer exec --nv \\
+timeout 5m apptainer exec --nv \\
     --pwd /app \\
     --bind \$EFFECTIVE_DATA_PATH:/app/data \\
     --bind \$OUTPUT_PATH:/app/results \\
+    --bind \$WORK/imagenet_subsets.json:/app/data/imagenet/imagenet_subsets.json \\
     --bind \$LOCAL_CACHE:/app/data/augmented_cache \\
     --bind \$HF_MODELS_CACHE:/app/hf_models \\
     --bind \$EMBEDDING_DIR:/app/data/embeddings \\

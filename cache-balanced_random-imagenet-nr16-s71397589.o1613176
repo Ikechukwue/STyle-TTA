@@ -1,0 +1,24 @@
+=== JOB_STATISTICS ===
+=== current date     : Thu May 21 05:29:45 AM CEST 2026
+= Job-ID             : 1613176 on tinygpu
+= Job-Name           : cache-balanced_random-imagenet-nr16-s71397589
+= Job-Command        : /home/hpc/barz/barz139h/retristyle/retristyle/scripts/generated/augmented_cache/test_r/cache_balanced_random_imagenet_nr16_s71397589.sh
+= Initial workdir    : /home/hpc/barz/barz139h/retristyle/retristyle
+= Queue/Partition    : a100
+= Slurm account      : barz with QOS=normal
+= Requested resources:  for 1-00:00:00
+= Elapsed runtime    : 22:03:13
+= Total RAM usage    : 215.6 GiB of requested  GiB (%)   
+= Node list          : tg092
+= Subm/Elig/Start/End: 2026-05-18T21:54:41 / 2026-05-18T21:54:41 / 2026-05-20T07:26:32 / 2026-05-21T05:29:45
+======================
+=== Quota infos ======
+    Path                 Used     SoftQ    HardQ    Gracetime  Filec    FileQ    FiHaQ    FileGrace    
+    /home/woody            21.4G  1000.0G  1500.0G        N/A     720    5,000K   7,500K        N/A    
+    /home/hpc            2396.1M   104.9G   209.7G        N/A   6,132      500K   1,000K        N/A    
+    /home/vault           261.7G  1048.6G  2097.2G        N/A   1,198      200K     400K        N/A    
+======================
+=== GPU utilization ==
+gpu_name, gpu_bus_id, pid, gpu_utilization [%], mem_utilization [%], max_memory_usage [MiB], time [ms]
+NVIDIA A100-SXM4-40GB, 00000000:01:00.0, 3182347, 80 %, 31 %, 9888 MiB, 79181562 ms
+NVIDIA A100-SXM4-40GB, 00000000:41:00.0, 3182348, 81 %, 31 %, 9888 MiB, 79181495 ms

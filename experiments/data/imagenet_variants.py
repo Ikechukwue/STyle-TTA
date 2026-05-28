@@ -140,7 +140,7 @@ class ImageNet(VisionDataset):
 
     VALID_SPLITS = [
         "train", "val", "test", "test_a", "test_r",
-        "test_c", "test_p", "test_sketch", "test_v2", "test_abl", "test_r_c26"
+        "test_c", "test_p", "test_sketch", "test_v2", "test_abl", "test_r_c26",
     ]
 
     def __init__(self, root_dir: str, split: str,

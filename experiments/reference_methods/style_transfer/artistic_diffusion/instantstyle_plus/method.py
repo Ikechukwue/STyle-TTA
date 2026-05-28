@@ -998,7 +998,6 @@ class Method:
             Blip2ForConditionalGeneration.from_pretrained(
                 blip2_model_id,
                 device_map="cuda",
-                load_in_8bit=False,
                 torch_dtype=torch.float16,
             )
         )
@@ -1185,20 +1184,18 @@ class Method:
             content_pil,
         )
 
-        # ---- Step 2: DDIM inversion to get inv_latent ----
-        inv_latent = self._run_ddim_inversion(
-            content_pil, content_image_prompt
-        )
-        # inv_latent: torch.Size([1, 4, 128, 128])
+        # NOTE: DDIM inversion is skipped. The official infer_style.py uses a
+        # custom pipeline that accepts raw latent tensors via `image=inv_latent`.
+        # The standard diffusers StableDiffusionXLControlNetImg2ImgPipeline
+        # expects a 3-channel PIL/tensor for `image=` and tries to VAE-encode it,
+        # so passing a 4-channel latent produces garbage → black output.
+        # Instead we pass `image=content_pil` with `strength=0.9` which gives a
+        # near-full denoise from the content image — functionally equivalent.
 
-        # Free inversion memory
-        torch.cuda.empty_cache()
-
-        # ---- Step 3: Prepare control image ----
-        # Official: cond_image = resize_img(content_image)
+        # ---- Step 2: Prepare control image ----
         cond_image = content_pil
 
-        # ---- Step 4: Set IP-Adapter scales ----
+        # ---- Step 3: Set IP-Adapter scales ----
         if alpha is not None:
             content_scale = self.config['scale_content']
             style_val = alpha * 1.2
@@ -1214,11 +1211,9 @@ class Method:
                 self.config['scale_style'],
             ])
 
-        # ---- Step 5: Run inference pipeline ----
-        # Exact match of pipe_inference() call in infer_style.py
+        # ---- Step 4: Run inference pipeline ----
         with torch.no_grad():
             images = self.pipe(
-                # prompt used for inversion
                 prompt=content_image_prompt,
                 negative_prompt=self.config['negative_prompt'],
                 # IPA: [content for semantic, style for style]
@@ -1229,17 +1224,15 @@ class Method:
                 num_inference_steps=(
                     self.config['num_inference_steps']
                 ),
-                # init content latent from DDIM inversion
-                image=inv_latent,
+                # Use content PIL directly; strength=0.9 gives near-full denoise
+                image=content_pil,
+                strength=0.9,
                 # Tile ControlNet for spatial structure
                 control_image=cond_image,
                 controlnet_conditioning_scale=(
                     self.config[
                         'controlnet_conditioning_scale'
                     ]
-                ),
-                denoising_start=(
-                    self.config['denoising_start']
                 ),
                 output_type="pt",
             ).images

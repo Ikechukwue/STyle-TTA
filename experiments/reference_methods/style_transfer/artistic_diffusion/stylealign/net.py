@@ -253,7 +253,8 @@ def encode_text_sdxl(model, prompt):
     proj_dim = model.text_encoder_2.config.projection_dim
     time_ids = model._get_add_time_ids(
         (1024, 1024), (0, 0), (1024, 1024), torch.float16, proj_dim).to(device)
-    return {"text_embeds": p2, "time_ids": time_ids}, emb
+    # Cast to float16 to match UNet weights
+    return {"text_embeds": p2.to(torch.float16), "time_ids": time_ids}, emb.to(torch.float16)
 
 
 def encode_text_sdxl_with_negative(model, prompt):
@@ -295,7 +296,7 @@ def ddim_inversion(model, x0_np, prompt="", num_steps=50, guidance_scale=1.0):
     model.scheduler.set_timesteps(num_steps, device=z0.device)
     cond, emb = encode_text_sdxl_with_negative(model, prompt)
     z = z0.clone().half()
-    all_z = [z0]
+    all_z = [z0.half()]  # Must match dtype of subsequent elements (all float16)
     for i in range(num_steps):
         t = model.scheduler.timesteps[num_steps - i - 1]
         z_in = torch.cat([z, z])

@@ -27,6 +27,7 @@ from torch import nn
 # - Values are import paths to modules exposing a `Method` class.
 _ART = "experiments.reference_methods.style_transfer.artistic"
 _DIFF = "experiments.reference_methods.style_transfer.artistic_diffusion"
+_FM = "experiments.reference_methods.style_transfer.flow_matching"
 _PHOTO = "experiments.reference_methods.style_transfer.photorealistic"
 
 METHOD_MODULES = {
@@ -37,8 +38,6 @@ METHOD_MODULES = {
     "aesfa": f"{_ART}.aesfa.method",
     "aespanet": f"{_ART}.aespanet.method",
     "artflow": f"{_ART}.artflow.method",
-    "avatarnet": f"{_ART}.avatarnet.method",
-    "cast": f"{_ART}.cast.method",
     "efdm": f"{_ART}.efdm.method",
     "iecontrast": f"{_ART}.iecontrast.method",
     "lst": f"{_ART}.lst.method",
@@ -47,18 +46,27 @@ METHOD_MODULES = {
     "sanet": f"{_ART}.sanet.method",
     "styleformer": f"{_ART}.styleformer.method",
     "stytr2": f"{_ART}.stytr2.method",
-    "ucast": f"{_ART}.ucast.method",
 
     # Artistic diffusion (training-free)
-    "styleid": f"{_DIFF}.styleid.method",
-    "stylessp": f"{_DIFF}.stylessp.method",
+    "diffstyle": f"{_DIFF}.diffstyle.method",
+    "diffuseit": f"{_DIFF}.diffuseit.method",
+    "inst": f"{_DIFF}.inst.method",
     "instantstyle": f"{_DIFF}.instantstyle.method",
     "instantstyle_plus": f"{_DIFF}.instantstyle_plus.method",
-    "inst": f"{_DIFF}.inst.method",
-    "diffuseit": f"{_DIFF}.diffuseit.method",
-    "diffstyle": f"{_DIFF}.diffstyle.method",
     "lsast": f"{_DIFF}.lsast.method",
     "stylealign": f"{_DIFF}.stylealign.method",
+    "styleid": f"{_DIFF}.styleid.method",
+    "stylessp": f"{_DIFF}.stylessp.method",
+
+    # Flow matching (FLUX family + VeloEdit)
+    "flux_dev": f"{_FM}.flux.flux_dev.method",
+    "flux_kontext": f"{_FM}.flux.flux_kontext.method",
+    "flux_krea": f"{_FM}.flux.flux_krea.method",
+    "flux_schnell": f"{_FM}.flux.flux_schnell.method",
+    "flux2_dev": f"{_FM}.flux.flux2_dev.method",
+    "flux2_klein_4b": f"{_FM}.flux.flux2_klein_4b.method",
+    "flux2_klein_9b": f"{_FM}.flux.flux2_klein_9b.method",
+    "veloedit": f"{_FM}.veloedit.method",
 
     # Photorealistic
     "modflows": f"{_PHOTO}.modflows.method",
@@ -66,17 +74,51 @@ METHOD_MODULES = {
     "photowct": f"{_PHOTO}.photowct.method",
     "deeppreset": f"{_PHOTO}.deeppreset.method",
     "photonas": f"{_PHOTO}.photonas.method",
+
+    # Own contributions (outside reference_methods/)
+    "lcs_veloedit": "experiments.lcs_veloedit.method",
+
+    # PhysFlowMatch — proposed method variants (live in physflowmatch/ package)
+    "physflowmatch": "physflowmatch.method",
+    "physflowmatch_gradient": "physflowmatch.method_gradient",
+    "physflowmatch_viscous": "physflowmatch.method_viscous",
+    "physflowmatch_schrodinger": "physflowmatch.method_schrodinger",
+    # PhysFlowMatch backbone variants
+    "physflowmatch_flux1_dev": "physflowmatch.method_flux1_dev",
+    "physflowmatch_flux1_schnell": "physflowmatch.method_flux1_schnell",
+    "physflowmatch_flux2_dev": "physflowmatch.method_flux2_dev",
+    "physflowmatch_flux2_klein_4b": "physflowmatch.method_flux2_klein_4b",
+    "physflowmatch_flux2_klein_9b": "physflowmatch.method_flux2_klein_9b",
 }
 
 _THIS_DIR = Path(__file__).resolve().parent
 _STYLE_TRANSFER_DIR = _THIS_DIR / "style_transfer"
+_EXPERIMENTS_DIR = _THIS_DIR.parent  # experiments/
 
 METHOD_FILES = {}
 for name, module in METHOD_MODULES.items():
+    if "style_transfer." not in module:
+        # Handled via override below (e.g. lcs_veloedit lives outside style_transfer/)
+        continue
     suffix_parts = module.split("style_transfer.", 1)[1].split(".")
     METHOD_FILES[name] = _STYLE_TRANSFER_DIR / Path(*suffix_parts[:-1]) / (
         f"{suffix_parts[-1]}.py"
     )
+
+# Own contributions that live outside the style_transfer/ subtree
+METHOD_FILES["lcs_veloedit"] = _EXPERIMENTS_DIR / "lcs_veloedit" / "method.py"
+
+# PhysFlowMatch package (top-level physflowmatch/)
+_PHYSFLOWMATCH_DIR = _EXPERIMENTS_DIR.parent / "physflowmatch"
+METHOD_FILES["physflowmatch"]              = _PHYSFLOWMATCH_DIR / "method.py"
+METHOD_FILES["physflowmatch_gradient"]    = _PHYSFLOWMATCH_DIR / "method_gradient.py"
+METHOD_FILES["physflowmatch_viscous"]     = _PHYSFLOWMATCH_DIR / "method_viscous.py"
+METHOD_FILES["physflowmatch_schrodinger"] = _PHYSFLOWMATCH_DIR / "method_schrodinger.py"
+METHOD_FILES["physflowmatch_flux1_dev"]      = _PHYSFLOWMATCH_DIR / "method_flux1_dev.py"
+METHOD_FILES["physflowmatch_flux1_schnell"]  = _PHYSFLOWMATCH_DIR / "method_flux1_schnell.py"
+METHOD_FILES["physflowmatch_flux2_dev"]      = _PHYSFLOWMATCH_DIR / "method_flux2_dev.py"
+METHOD_FILES["physflowmatch_flux2_klein_4b"] = _PHYSFLOWMATCH_DIR / "method_flux2_klein_4b.py"
+METHOD_FILES["physflowmatch_flux2_klein_9b"] = _PHYSFLOWMATCH_DIR / "method_flux2_klein_9b.py"
 
 
 def _ensure_style_transfer_namespace_package() -> None:
@@ -102,6 +144,35 @@ def _ensure_style_transfer_namespace_package() -> None:
     ns_pkg.__path__ = [str(_STYLE_TRANSFER_DIR)]
     ns_pkg.__file__ = str(_STYLE_TRANSFER_DIR)
     sys.modules[pkg_name] = ns_pkg
+
+    # Also register flow_matching as a sub-package so that imports like
+    # `from experiments.reference_methods.style_transfer.flow_matching.flux.base …`
+    # work when those files are loaded via importlib.util.spec_from_file_location.
+    _fm_dir = _STYLE_TRANSFER_DIR / "flow_matching"
+    _fm_pkg_name = f"{pkg_name}.flow_matching"
+    if _fm_pkg_name not in sys.modules:
+        fm_pkg = types.ModuleType(_fm_pkg_name)
+        fm_pkg.__path__ = [str(_fm_dir)]
+        fm_pkg.__file__ = str(_fm_dir)
+        sys.modules[_fm_pkg_name] = fm_pkg
+
+    _flux_dir = _fm_dir / "flux"
+    _flux_pkg_name = f"{_fm_pkg_name}.flux"
+    if _flux_pkg_name not in sys.modules:
+        flux_pkg = types.ModuleType(_flux_pkg_name)
+        flux_pkg.__path__ = [str(_flux_dir)]
+        flux_pkg.__file__ = str(_flux_dir)
+        sys.modules[_flux_pkg_name] = flux_pkg
+
+    # Register top-level physflowmatch package so that its sub-imports work
+    # when method files are loaded via importlib.util.spec_from_file_location.
+    _pfm_dir = _PHYSFLOWMATCH_DIR
+    _pfm_pkg_name = "physflowmatch"
+    if _pfm_pkg_name not in sys.modules and _pfm_dir.is_dir():
+        pfm_pkg = types.ModuleType(_pfm_pkg_name)
+        pfm_pkg.__path__ = [str(_pfm_dir)]
+        pfm_pkg.__file__ = str(_pfm_dir / "__init__.py")
+        sys.modules[_pfm_pkg_name] = pfm_pkg
 
 
 # Backward-compatible aliases
@@ -238,10 +309,10 @@ def _extract_network_container(method) -> nn.Module:
     if components:
         return nn.ModuleDict(components)
 
-    raise ValueError(
-        "Could not extract an nn.Module network container from method "
-        f"'{method.__class__.__name__}'."
-    )
+    # Fallback: method is a lazy-loading pipeline (e.g. diffusion models that
+    # load their weights on first forward pass).  Return an empty placeholder
+    # so accelerator.prepare() has something to work with.
+    return nn.ModuleDict()
 
 
 def create_color_transfer_method(

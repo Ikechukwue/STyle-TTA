@@ -120,6 +120,7 @@ class TrackedImageFolder(ImageFolder):
                     path = os.path.join(root, fname)
                     instances.append((path, target_idx))
         return instances
+    
 class ImageNet(VisionDataset):
     """
     Dataset class for ImageNet-1k and its distribution-shifted test variants.
@@ -134,11 +135,12 @@ class ImageNet(VisionDataset):
         - "test_p": ImageNet-P (perturbations).
         - "test_sketch": ImageNet-Sketch.
         - "test_v2": ImageNet-V2 (MatchedFrequency).
+        - "test_r_c26": ImageNet-R Ablation set.
     """
 
     VALID_SPLITS = [
         "train", "val", "test", "test_a", "test_r",
-        "test_c", "test_p", "test_sketch", "test_v2", "test_abl"
+        "test_c", "test_p", "test_sketch", "test_v2", "test_abl", "test_r_c26"
     ]
 
     def __init__(self, root_dir: str, split: str,
@@ -241,6 +243,11 @@ class ImageNet(VisionDataset):
 
         elif split == "test_r":
             path = os.path.join(root_dir, 'imagenetr','imagenet-r')
+            self._check_dir(path, "ImageNet-R")
+            return ImageFolder(path)
+        
+        elif split == "test_r_c26":
+            path = os.path.join(root_dir, 'imagenetr','imagenet-r-c26')
             self._check_dir(path, "ImageNet-R")
             return ImageFolder(path)
 

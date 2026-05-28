@@ -13,7 +13,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
+### $WEIGHTS=if $MODEL in needs_weights, ./data/models/$Weigth_name($Model) else None
 python -m experiments.style_transfer_evaluation \
+    --method "$MODEL" \
+    --model_weights "$WEIGHTS" \
     --data_path "$DATA_PATH" \
     --weights_dir "$WEIGHTS_DIR" \
     --output_dir "$OUTPUT_PATH/style_transfer_eval" \

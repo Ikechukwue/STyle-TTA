@@ -96,8 +96,6 @@ class Method:
 
         if alpha is None:
             alpha = self.alpha
-        content = content * 255.0
-        style = style * 255.0
 
         input_device = content.device
         if str(self.device) != str(input_device):
@@ -108,11 +106,10 @@ class Method:
         with torch.no_grad():
             content_feat = self.network.encode(content)
             style_feat = self.network.encode(style)
-            print(f"New Feature Mean: {content_feat.mean().item()}")
             feat = adaptive_instance_normalization(content_feat, style_feat)
             feat = feat * alpha + content_feat * (1 - alpha)
             output = self.network.decoder(feat)
-        return (output / 255.0).clamp(0, 1)
+        return output.clamp(0, 1)
 
     # ------------------------------------------------------------------
     def _initialize_network(self, weights_path: Path):

@@ -90,13 +90,11 @@ Notes:
 """
 
 from .method import Method as MASTMethod
-from .net import MASTNet, vgg, decoder, Multi_Adaptation_Module
+from .net import MASTNet, Multi_Adaptation_Module
 
 __all__ = [
     'MASTMethod',
     'MASTNet',
-    'vgg',
-    'decoder',
     'Multi_Adaptation_Module',
 ]
 

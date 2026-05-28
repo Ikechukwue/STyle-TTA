@@ -17,6 +17,7 @@ Pretrained weights download:
 
 from pathlib import Path
 from typing import Optional
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -30,7 +31,7 @@ from color_matcher import ColorMatcher
 # 2. Copy guided_diffusion folder to this directory
 from experiments.reference_methods.style_transfer.artistic_diffusion.diffuseit.guided_diffusion.script_util import create_model_and_diffusion
 
-from .utils import Loss_vit, CLIPWrapper, ImageAugmentations
+from experiments.reference_methods.style_transfer.artistic_diffusion.diffuseit.utils import Loss_vit, CLIPWrapper, ImageAugmentations
 
 
 # TensorDict for multi-CLIP model aggregation
@@ -199,9 +200,9 @@ class Method:
         """
         return {
             # Core diffusion parameters (official defaults from arguments.py)
-            'timestep_respacing': '100',  # Number of diffusion steps
-            'skip_timesteps': 40,  # Steps to skip during diffusion
-            'diff_iter': 50,  # Diffusion iterations for ViT use_dir
+            'timestep_respacing': '200',  # Number of diffusion steps
+            'skip_timesteps': 80,  # Steps to skip during diffusion
+            'diff_iter': 100,  # Diffusion iterations for ViT use_dir
             'model_output_size': 256,  # Resolution of diffusion model
             
             # CLIP guidance parameters
@@ -713,8 +714,13 @@ class Method:
         with torch.enable_grad():
             x = x.detach().requires_grad_()
             
-            # Unscale timestep
+            # t_unscaled: maps spaced index → 0-999 scale for use_dir / diff_iter comparisons
+            # and for p_mean_variance (which expects 0-999 timesteps).
             t_unscaled = self._unscale_timestep(t)
+            # t_spaced: raw spaced index (0..num_timesteps-1) for _noisy_aug array indexing.
+            # sqrt_one_minus_alphas_cumprod has num_timesteps (e.g. 200) elements, so we
+            # must index with the spaced value, NOT the 0-999 unscaled value.
+            t_spaced = int(t[0].item())
             
             # Get prediction from diffusion model
             # Note: model_kwargs is empty for unconditional model
@@ -738,8 +744,8 @@ class Method:
             
             # 1. CLIP Loss (Only for text-guided mode, i.e., target_image is None)
             if self.target_image is None and self.clip_guidance_lambda != 0:
-                # Apply noisy augmentation for CLIP
-                x_clip = self._noisy_aug(t_unscaled[0].item(), x, out["pred_xstart"])
+                # Apply noisy augmentation for CLIP (use spaced index for array lookup)
+                x_clip = self._noisy_aug(t_spaced, x, out["pred_xstart"])
                 # Encode with CLIP (convert to [0, 1] range)
                 pred = self.clip_net.encode_image(0.5 * x_clip + 0.5, ncuts=self.aug_num)
                 # Compute CLIP loss against target embedding
@@ -749,9 +755,9 @@ class Method:
                     self.loss_prev = clip_loss.detach().clone()
             
             # 2. ViT Loss
-            # Use noisy augmentation if enabled
+            # Use noisy augmentation if enabled (use spaced index for array lookup)
             if self.use_noise_aug_all:
-                x_in = self._noisy_aug(t_unscaled[0].item(), x, out["pred_xstart"])
+                x_in = self._noisy_aug(t_spaced, x, out["pred_xstart"])
             else:
                 x_in = out["pred_xstart"]
             
@@ -798,7 +804,11 @@ class Method:
             return -torch.autograd.grad(loss, x)[0]
 
     def _unscale_timestep(self, t):
-        unscaled_timestep = (t * (self.diffusion.num_timesteps / 1000)).long()
+        # t is a spaced index in [0, num_timesteps-1] (e.g. 0-199 for 200-step diffusion).
+        # Map it to the 0-999 scale used by diffusion internals and for use_dir comparisons.
+        # Original (wrong): t * (num_timesteps / 1000) → 0-199 * 0.2 = 0-39 (always < diff_iter=100)
+        # Fixed: t * (1000 / num_timesteps) → 0-199 * 5 = 0-995 (correctly spans 0-999)
+        unscaled_timestep = (t * (1000 / self.diffusion.num_timesteps)).long()
         return unscaled_timestep
 
     def _noisy_aug(self, t, x, x_hat):
@@ -834,6 +844,11 @@ class Method:
             method='mkl'  # Use Monge-Kantorovich method
         )
         
+        # MKL eigendecomposition can yield complex values; take the real part
+        if np.iscomplexobj(matched_np):
+            matched_np = matched_np.real
+        matched_np = matched_np.astype(np.float32)
+
         # Convert back to tensor
         matched = torch.from_numpy(matched_np).permute(2, 0, 1).unsqueeze(0)
         return matched.to(style.device)

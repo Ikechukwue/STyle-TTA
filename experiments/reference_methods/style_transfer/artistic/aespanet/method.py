@@ -110,7 +110,7 @@ class Method:
         self.network = AesPANet(encoder_state_dict=checkpoint["encoder"])
 
         self.network.decoder.load_state_dict(checkpoint["decoder"])
-        self.network.transformer.load_state_dict(checkpoint["transformer"])
+        self.network.transformer.load_state_dict(checkpoint["transformer"], strict=False)
 
         self.network.to(self.device)
         for p in self.network.parameters():

@@ -21,157 +21,31 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
-
+from matplotlib.backends.backend_pdf import PdfPages
 import pandas as pd
-
 from typing import Dict, List, Optional, Tuple
-import numpy as np
-import nltk
-from nltk.corpus import wordnet as wn
-from scipy.cluster.hierarchy import linkage, leaves_list
-from scipy.spatial.distance import squareform
+import matplotlib as mpl
+mpl.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+HAS_MPL = True
 
+from experiments.reporting.helpers import *
 
-try:
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import matplotlib.ticker as ticker
-    HAS_MPL = True
-except ImportError:
-    HAS_MPL = False
-
-try:
-    import seaborn as sns
-    HAS_SNS = True
-except ImportError:
-    HAS_SNS = False
-
-
-def _load_json(path: Path) -> dict:
-    with open(path) as f:
-        return json.load(f)
-
-
-def _find_json(directory: Path, pattern: str = "*.json") -> List[Path]:
-    if not directory.exists():
-        return []
-    return sorted(directory.glob(pattern))
-
-
-def _setup_style():
-    """Configure matplotlib for publication-quality plots."""
-    if HAS_SNS:
-        sns.set_theme(style="whitegrid", font_scale=1.1)
-    plt.rcParams.update({
-        "figure.dpi": 150,
-        "savefig.dpi": 300,
-        "savefig.bbox": "tight",
-        "font.size": 11,
-        "axes.titlesize": 13,
-        "axes.labelsize": 12,
-    })
-
-def _get_names(split:str,
-                subset_json: str = "./data/imagenet/imagenet_subsets.json",
-                name_json:str = "./data/imagenet/imagenet1k/imagenet_class_index.json" ):
-    all_ids = _load_json(name_json)
-    name_dict = {}
-    for v in all_ids.values():
-        name_dict[v[0]] = v[1]
-
-    split_names = []
-    sub_ids = _load_json(subset_json)
-    split_ids = sub_ids[split]
-
-    split_names = [name_dict[id] for id in split_ids]
-    return split_names 
-
-
-
-def get_wordnet_taxonomic_order(name_json_path: str = "./data/imagenet/imagenet1k/imagenet_class_index.json") -> list[int]:
-    """
-    Computes a taxonomic sort order for classes using true WordNet path similarity.
-    Groups classes by their lowest common subsumers via hierarchical clustering.
-    
-    Returns:
-        list[int]: A list of class indices sorted by their WordNet hierarchy proximity.
-    """
-    # Ensure WordNet data is available in the environment
-    try:
-        wn.ensure_loaded()
-    except LookupError:
-        nltk.download('wordnet', quiet=True)
-        nltk.download('omw-1.4', quiet=True)
-
-    # 1. Load the core map to extract WNIDs (e.g., "n02119789")
-    try:
-        with open(name_json_path) as f:
-            class_index_map = json.load(f)
-    except Exception as e:
-        print(f"Error loading class index map: {e}")
-        return []
-
-    # 2. Resolve WNIDs to actual WordNet Synsets
-    resolved_synsets = {}
-    valid_class_indices = []
-    
-    for idx_str, (wnid, _) in class_index_map.items():
-        idx = int(idx_str)
-        try:
-            # Parse ImageNet format: n02119789 -> offset 2119789, pos noun ('n')
-            offset = int(wnid[1:])
-            pos = wnid[0]
-            synset = wn.synset_from_pos_and_offset(pos, offset)
-            resolved_synsets[idx] = synset
-            valid_class_indices.append(idx)
-        except Exception:
-            # Skip or handle invalid mappings gracefully
-            continue
-
-    # Sort indices to establish a deterministic baseline matrix
-    valid_class_indices.sort()
-    n_classes = len(valid_class_indices)
-    
-    if n_classes == 0:
-        return []
-
-    # 3. Build a Distance Matrix based on WordNet Path Similarity
-    # Similarity is bounded (0, 1], where 1.0 means identical synsets.
-    # Distance = 1.0 - Similarity
-    distance_matrix = np.zeros((n_classes, n_classes))
-    
-    for i in range(n_classes):
-        syn_i = resolved_synsets[valid_class_indices[i]]
-        for j in range(i, n_classes):
-            syn_j = resolved_synsets[valid_class_indices[j]]
-            
-            # Compute path similarity (looks at shortest path in hypernym tree)
-            sim = syn_i.path_similarity(syn_j)
-            if sim is None:
-                sim = 0.001 # Fallback minimum connectivity if branches are distinct
-                
-            dist = 1.0 - sim
-            distance_matrix[i, j] = dist
-            distance_matrix[j, i] = dist
-
-    # 4. Perform Hierarchical Clustering to group by lowest mappings
-    # Convert square distance matrix to condensed form for scipy linkage
-    from scipy.spatial.distance import squareform
-    condensed_distances = squareform(distance_matrix)
-    
-    # Use Ward's minimum variance algorithm to create clean, compact thematic groups
-    row_linkage = linkage(condensed_distances, method="ward")
-    
-    # Extract the optimized leaves order from the tree
-    sorted_matrix_indices = leaves_list(row_linkage)
-    
-    # Map back to your original class integers
-    sorted_class_order = [valid_class_indices[i] for i in sorted_matrix_indices]
-    
-    return sorted_class_order
+METRIC_DIRECTIONS = {
+    "ssim_mean": " (↑)",
+    "lpips_score_mean": " (↓)",  # LPIPS is a distance/error score; lower is better!
+    "histogramm_distance_mean": " (↓)",
+    "color_moment_distance_mean": " (↓)",
+    "edge_similarity_mean": " (↑)",
+    "ldc_dists_mean": " (↓)",
+    "ldc_fom_mean": " (↑)",      # Figure of merit; higher is better
+    "depthanything_v2_large_mae_mean": " (↓)", # Mean Absolute Error; lower is better
+    "dpt_large_mae_mean": " (↓)",
+    "depthanything_v2_large_spear_mean": " (↑)", # Spearman correlation; higher is better
+    "dpt_large_spear_mean": " (↑)"
+}
 # =========================================================================
 # 1. Style Transfer Method Comparison (Grouped Bar)
 # =========================================================================
@@ -184,7 +58,7 @@ def plot_style_transfer_comparison(results_dir: Path, output_dir: Path, args):
         print("  [skip] Style transfer comparison not found")
         return
 
-    data = _load_json(f)
+    data = load_json(f)
     methods, ssim_vals, lpips_vals, edge_vals = [], [], [], []
     for name, m in sorted(data.items()):
         if "error" in m:
@@ -236,14 +110,14 @@ def plot_ablation_bars(results_dir: Path, output_dir: Path, ablation_type: str, 
     abl_dir = results_dir / "ablation"  / "tta_inference" / "results" / "imagenet" / args.split
     if not abl_dir.exists():
         abl_dir = results_dir / "ablation"
-    files = _find_json(abl_dir, "*.json")
+    files = find_json(abl_dir, "*.json")
     if not files:
         print(f"  [skip] No ablation results for {ablation_type}")
         return
 
     grouped: Dict[str, List[float]] = {}
     for f in files:
-        data = _load_json(f)
+        data = load_json(f)
         if ablation_type == "retrieval":
             key = data.get("retrieval_strategy", "?")
         elif ablation_type == "eval":
@@ -290,14 +164,14 @@ def plot_nrefs_sweep(results_dir: Path, output_dir: Path, args):
     abl_dir = results_dir / "ablation" / args.split / "tta_inference" / "results"
     if not abl_dir.exists():
         abl_dir = results_dir / "ablation"
-    files = _find_json(abl_dir, "*.json")
+    files = find_json(abl_dir, "*.json")
     if not files:
         print("  [skip] No n_refs sweep results")
         return
 
     grouped: Dict[Tuple[int, str], List[float]] = {}
     for f in files:
-        data = _load_json(f)
+        data = load_json(f)
         nr = data.get("n_refs")
         clf = data.get("classifier", "?")
         acc = data.get("metrics", {}).get("accuracy")
@@ -339,14 +213,14 @@ def plot_hybrid_tta(results_dir: Path, output_dir: Path, args):
     hybrid_dir = results_dir / "hybrid_tta"
     if not hybrid_dir.exists():
         hybrid_dir = results_dir / "hybrid_tta"
-    files = _find_json(hybrid_dir, "*_results.json")
+    files = find_json(hybrid_dir, "*_results.json")
     if not files:
         print("  [skip] No hybrid TTA results")
         return
 
     grouped: Dict[Tuple[float, str], List[float]] = {}
     for f in files:
-        data = _load_json(f)
+        data = load_json(f)
         geo = data.get("geo_frac")
         clf = data.get("classifier", "?")
         acc = data.get("metrics", {}).get("accuracy")
@@ -387,8 +261,8 @@ def plot_accuracy_vs_ece(results_dir: Path, output_dir: Path, args):
     for pattern in ["thesis/geometric_tta", "thesis/ablation", "thesis/hybrid_tta",
                     "geometric_tta", "ablation", "hybrid_tta"]:
         d = results_dir / pattern / f"{args.split}/tta_inference/results"
-        for f in _find_json(d, "*.json"):
-            data = _load_json(f)
+        for f in find_json(d, "*.json"):
+            data = load_json(f)
             m = data.get("metrics", {})
             if "accuracy" in m and "ece" in m:
                 all_points.append({
@@ -421,39 +295,34 @@ def plot_accuracy_vs_ece(results_dir: Path, output_dir: Path, args):
     plt.close(fig)
     print(f"  [saved] {out}")
 
-def plot_domain_shift_analysis(results_dir: Path, output_dir: Path, args):
+
+# =========================================================================
+# 6. Domain Difference
+# =========================================================================
+def plot_domain_shift_analysis(data_baseline: dict, data_shifted: dict, output_dir: Path, args):
     """
-    Generates a publication-quality publication grid separating domain shift 
-    metrics into categorical groups with error bars.
+    Generates a publication-quality grid separating domain shift 
+    metrics into categorical groups, showing baseline vs shifted side-by-side.
     """
-    # Assuming your data is saved in your results directory
-    f = results_dir / "domain_stats" / "_imagenet_and_test_r.json"
-    if not f.exists():
-        print("  [skip] Domain shift analysis JSON not found")
+    stats_base = data_baseline.get("global_summary", {})
+    stats_shift = data_shifted.get("global_summary", {})
+    
+    if not stats_base or not stats_shift:
+        print("  [skip] Missing global summaries for comparison.")
         return
 
-    data = _load_json(f)
-    global_stats = data.get("global_summary", {})
-    if not global_stats:
-        return
-
-    # Define logical groups for bounded metrics [0, 1] to avoid scaling issues
     metric_groups = {
         "Perceptual & Structure": [
             ("SSIM", "ssim_mean", "ssim_std"),
-            #("Luminance SSIM", "luminance_ssim_mean", "luminance_ssim_std"),
             ("LPIPS Score", "lpips_score_mean", "lpips_score_std"),
         ],
         "Color & Distribution": [
             ("Histogram Dist.", "histogramm_distance_mean", "histogramm_distance_std"),
             ("Color Moment Dist.", "color_moment_distance_mean", "color_moment_distance_std"),
-            #("Wasserstein Dist.", "wasserstein_distance_mean", "wasserstein_distance_std"),
         ],
         "Edges & Boundaries": [
             ("Edge Similarity", "edge_similarity_mean", "edge_similarity_std"),
-            #("HED Distance", "hed_dists_mean", "hed_dists_std"),
             ("LDC Distance", "ldc_dists_mean", "ldc_dists_std"),
-            #("HED Figure of Merit", "hed_fom_mean", "hed_fom_std"),
             ("LDC Figure of Merit", "ldc_fom_mean", "ldc_fom_std"),
         ],
         "Depth & Geometry": [
@@ -464,205 +333,185 @@ def plot_domain_shift_analysis(results_dir: Path, output_dir: Path, args):
         ]
     }
 
-    # Setup 2x2 subplot grid
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(15, 11))
     axes = axes.flatten()
     colors = plt.get_cmap("Set2").colors
 
     for idx, (group_name, metrics) in enumerate(metric_groups.items()):
         ax = axes[idx]
         
-        labels, means, stds = [], [], []
+        labels = []
+        means_base, stds_base = [], []
+        means_shift, stds_shift = [], []
+        
         for name, mean_k, std_k in metrics:
-            if mean_k in global_stats:
-                labels.append(name)
-                means.append(global_stats[mean_k])
-                stds.append(global_stats.get(std_k, 0))
+            if mean_k in stats_base and mean_k in stats_shift:
+                direction_arrow = METRIC_DIRECTIONS.get(mean_k, "")
+                labels.append(f"{name}{direction_arrow}")
+
+                means_base.append(stats_base[mean_k])
+                stds_base.append(stats_base.get(std_k, 0))
+                means_shift.append(stats_shift[mean_k])
+                stds_shift.append(stats_shift.get(std_k, 0))
 
         if not labels:
             ax.text(0.5, 0.5, "No Data", ha='center', va='center')
             continue
 
         y_pos = np.arange(len(labels))
-        # Plot horizontal bars with standard deviation error bars
-        bars = ax.barh(y_pos, means, xerr=stds, align='center', alpha=0.8, 
-                       color=colors[:len(labels)], edgecolor='none', capsize=5)
+        bar_height = 0.35  # Dynamic width scaling to prevent overlapping
+        
+        # Plot Baseline Bars
+        bars_base = ax.barh(y_pos - bar_height/2, means_base, xerr=stds_base, 
+                            height=bar_height, align='center', alpha=0.5, 
+                            color='gray', edgecolor='none', capsize=4, label='Baseline')
+        
+        # Plot Shifted Domain Bars
+        bars_shift = ax.barh(y_pos + bar_height/2, means_shift, xerr=stds_shift, 
+                             height=bar_height, align='center', alpha=0.9, 
+                             color=colors[:len(labels)], edgecolor='none', capsize=4, label='Shifted')
         
         ax.set_yticks(y_pos)
         ax.set_yticklabels(labels, fontsize=10)
-        ax.invert_yaxis()  # Top-down order
+        ax.invert_yaxis()  # Top-down tracking order
         ax.set_title(group_name, fontsize=12, fontweight="bold", pad=10)
-        ax.set_xlim(0, 1.1)  # All these metrics are bounded near/within [0, 1]
-        ax.grid(axis='x', linestyle='--', alpha=0.7)
+        ax.set_xlim(0, 1.15)
+        ax.grid(axis='x', linestyle='--', alpha=0.5)
+        
+        if idx == 0:
+            ax.legend(loc='upper right', fontsize=9)
 
-        # Add data values on top of the bars
-        for bar, mean in zip(bars, means):
-            width = bar.get_width()
-            ax.text(width + 0.02, bar.get_y() + bar.get_height()/2, f'{mean:.2f}', 
-                    ha='left', va='center', fontsize=9, fontweight='semibold')
+        # Print inline value metrics cleanly on bars
+        for b_base, b_shift in zip(bars_base, bars_shift):
+            w_base = b_base.get_width()
+            w_shift = b_shift.get_width()
+            ax.text(w_base + 0.01, b_base.get_y() + b_base.get_height()/2, f'{w_base:.2f}', 
+                    ha='left', va='center', fontsize=8, color='dimgray')
+            ax.text(w_shift + 0.01, b_shift.get_y() + b_shift.get_height()/2, f'{w_shift:.2f}', 
+                    ha='left', va='center', fontsize=8, fontweight='bold')
 
-    fig.suptitle("Domain Shift Metric Analysis Summary", fontsize=16, fontweight="bold", y=0.98)
-    fig.tight_layout()
+    fig.suptitle("Domain Shift Metric Analysis Baseline Comparison Summary", fontsize=16, fontweight="bold", y=0.98)
+    fig.subplots_adjust(top=0.90, bottom=0.08, left=0.15, right=0.95, hspace=0.25, wspace=0.25)
     
     out = output_dir / "domain_shift_metrics_summary.pdf"
-    fig.savefig(out)
+    fig.savefig(out, bbox_inches='tight')
     plt.close(fig)
     print(f"  [saved] {out}")
 
-try:
-    from matplotlib.backends.backend_pdf import PdfPages
-    HAS_MPL = True
-except ImportError:
-    HAS_MPL = False
-
-def plot_domain_shift_class_scatter_per_group(results_dir: Path, output_dir: Path, args=None):
+def plot_domain_shift_class_scatter_per_group(data_baseline: dict, data_shifted: dict, output_dir: Path, args=None):
     """
-    Generates spacious class-wise scatter plots for domain shift metrics.
-    Saves a single clean multi-page PDF document (one page per group) 
-    AND exports separate standalone files inside a dedicated subfolder pipeline.
+    Generates class-wise scatter plots for domain shift metrics splitting each metric
+    into Baseline vs Shifted visual pairs sharing the same coordinate mapping.
     """
-    f = results_dir / "domain_stats" / "_imagenet_and_test_r.json"
-    if not f.exists():
-        print("  [skip] Class domain shift scatter data not found")
+    summaries_base = data_baseline.get("class_summaries", {})
+    summaries_shift = data_shifted.get("class_summaries", {})
+    name_list = get_names(args.split)
+    
+    if not summaries_base or not summaries_shift:
+        print("  [skip] Comprehensive multi-set class summary datasets missing")
         return
 
-    data = _load_json(f)
-    class_summaries = data.get("class_summaries", {})
-    name_list = _get_names(args.split)
-    if not class_summaries:
-        print("  [skip] No class-wise summaries available")
-        return
-
-    # Define groups for bounded metrics [0, 1] 
     metric_groups = {
-        "perceptual_structure": ("Perceptual & Structure Metrics", [
-            ("ssim_mean", "SSIM"),
-            #("luminance_ssim_mean", "Luminance SSIM"),
-            ("lpips_score_mean", "LPIPS Score"),
-        ]),
-        "color_distribution": ("Color & Distribution Metrics", [
-            ("histogramm_distance_mean", "Histogram Dist."),
-            ("color_moment_distance_mean", "Color Moment Dist."),
-            #("wasserstein_distance_mean", "Wasserstein Dist."),
-        ]),
-        "edges_boundaries": ("Edges & Boundaries Metrics", [
-            ("edge_similarity_mean", "Edge Similarity"),
-            #("hed_dists_mean", "HED Distance"),
-            ("ldc_dists_mean", "LDC Distance"),
-            #("hed_fom_mean", "HED Figure of Merit"),
-            ("ldc_fom_mean", "LDC Figure of Merit"),
-        ]),
-        "depth_geometry": ("Depth & Geometry Metrics", [
-            ("depthanything_v2_large_mae_mean", "DepthAnything MAE"),
-            ("dpt_large_mae_mean", "DPT MAE"),
-            ("depthanything_v2_large_spear_mean", "DepthAnything Spear."),
-            ("dpt_large_spear_mean", "DPT Spearman"),
-        ])
+        "perceptual_structure": ("Perceptual & Structure Metrics", [("ssim_mean", "SSIM"), ("lpips_score_mean", "LPIPS Score")]),
+        "color_distribution": ("Color & Distribution Metrics", [("histogramm_distance_mean", "Histogram Dist."), ("color_moment_distance_mean", "Color Moment Dist.")]),
+        "edges_boundaries": ("Edges & Boundaries Metrics", [("edge_similarity_mean", "Edge Similarity"), ("ldc_dists_mean", "LDC Distance"), ("ldc_fom_mean", "LDC Figure of Merit")]),
+        "depth_geometry": ("Depth & Geometry Metrics", [("depthanything_v2_large_mae_mean", "DepthAnything MAE"), ("dpt_large_mae_mean", "DPT MAE"), ("depthanything_v2_large_spear_mean", "DepthAnything Spear."), ("dpt_large_spear_mean", "DPT Spearman")])
     }
 
-    # FIX 1: Gather data map structured correctly by metric key string
-    classes_data = {}
-    for class_id, metrics in class_summaries.items():
-        # Get human-readable name for the class ID (e.g. "tench")
-        class_name = name_list[int(class_id)]
-        for k, val in metrics.items():
-            if k.endswith("_mean"):
-                # Key on the metric string (e.g., 'ssim_mean'), append tuple of (class_id, value)
-                classes_data.setdefault(k, []).append((class_id, val))
+    # Restructure data dictionaries for sequential reading
+    def parse_set(source):
+        parsed = {}
+        for class_id, metrics in source.items():
+            for k, val in metrics.items():
+                if k.endswith("_mean"):
+                    parsed.setdefault(k, []).append((class_id, val))
+        return parsed
 
-    unique_classes = sorted(list(class_summaries.keys()), key=int)
-    color_map = plt.cm.get_cmap("tab20", max(len(unique_classes), 2))
+    classes_base = parse_set(summaries_base)
+    classes_shift = parse_set(summaries_shift)
+
+    unique_classes = sorted(list(summaries_base.keys()), key=int)
+    color_map = mpl.colormaps["tab20"].resampled(max(len(unique_classes), 2))
     class_colors = {cls: color_map(i) for i, cls in enumerate(unique_classes)}
 
-    # Create the dedicated subfolder directory path for isolated assets
     subfolder_dir = output_dir / "domain_shift_groups"
     subfolder_dir.mkdir(parents=True, exist_ok=True)
-
-    # Master path configuration for the multi-page output target
     multipage_pdf_path = output_dir / "domain_shift_class_scatter_multipage.pdf"
     
-    print(f"  [processing] Splitting charts into isolated pages and individual files...")
+    print(f"  [processing] Splitting charts into baseline vs shift paired structures...")
 
-    # Open multi-page document context manager stream
     with PdfPages(multipage_pdf_path) as pdf:
         for group_id, (group_name, metrics_list) in metric_groups.items():
-            # Create a broad, short landscape figure ideal for single metric rows
-            fig, ax = plt.subplots(figsize=(10, 4.5))
+            # Height expanded dynamically based on metric list scale to avoid tight clipping warnings
+            fig, ax = plt.subplots(figsize=(11, len(metrics_list) * 2.2))
             
             y_ticks = []
             y_labels = []
+            y_counter = 0
             
-            for y_idx, (metric_key, display_name) in enumerate(metrics_list):
-                if metric_key not in classes_data:
+            for metric_key, display_name in metrics_list:
+                if metric_key not in classes_base or metric_key not in classes_shift:
                     continue
-                    
-                y_ticks.append(y_idx)
-                y_labels.append(display_name)
                 
-                # Plot layout backdrop alignment grid
-                ax.axhline(y_idx, color='gray', linestyle=':', alpha=0.3, zorder=1)
+                direction_arrow = METRIC_DIRECTIONS.get(metric_key, "")
+                # --- LANE 1: Baseline Generation Row ---
+                y_ticks.append(y_counter)
+                y_labels.append(f"{display_name}{direction_arrow}\n(Base)")
+                ax.axhline(y_counter, color='gray', linestyle=':', alpha=0.2, zorder=1)
                 
-                # FIX 2: Correctly unpacking class_id (as string) and metric value
-                for class_id, val in classes_data[metric_key]:
-                    # Seed deterministic class jitter to preserve visualization spacing 
+                for class_id, val in classes_base[metric_key]:
                     np.random.seed(int(class_id) + 42)
-                    jitter = np.random.uniform(-0.06, 0.06)
-                    
-                    # Look up class human readable label for the legend
+                    jitter = np.random.uniform(-0.08, 0.08)
+                    ax.scatter(val, y_counter + jitter, color=class_colors[class_id], 
+                               edgecolor='black', linewidth=0.5, s=70, alpha=0.4, marker='o', zorder=2)
+
+                # --- LANE 2: Shifted Generation Row ---
+                y_ticks.append(y_counter + 1)
+                y_labels.append(f"{display_name}\n(Shift)")
+                ax.axhline(y_counter + 1, color='gray', linestyle=':', alpha=0.2, zorder=1)
+                
+                for class_id, val in classes_shift[metric_key]:
+                    np.random.seed(int(class_id) + 42)
+                    jitter = np.random.uniform(-0.08, 0.08)
                     class_name = name_list[int(class_id)]
-                    
-                    ax.scatter(val, y_idx + jitter, 
-                               color=class_colors[class_id], 
-                               edgecolor='black', linewidth=0.6,
-                               s=85, alpha=0.9, zorder=2,
-                               label=class_name if y_idx == 0 else "")
+                    ax.scatter(val, y_counter + 1 + jitter, color=class_colors[class_id], 
+                               edgecolor='black', linewidth=0.7, s=80, alpha=0.9, marker='s', zorder=2,
+                               label=class_name if y_counter == 0 else "")
+
+                # Insert dark separating barrier between metric blocks
+                ax.axhline(y_counter + 1.6, color='black', linestyle='-', alpha=0.15)
+                y_counter += 2.5
 
             ax.set_yticks(y_ticks)
-            ax.set_yticklabels(y_labels, fontsize=11)
-            ax.set_ylim(-0.6, len(metrics_list) - 0.4)
+            ax.set_yticklabels(y_labels, fontsize=9.5)
+            ax.set_ylim(-0.7, y_counter - 1.2)
             ax.invert_yaxis()
             ax.set_xlim(-0.05, 1.05)
-            ax.set_xlabel("Metric Value Space", fontsize=10, labelpad=6)
-            ax.set_title(group_name, fontsize=13, fontweight="bold", pad=12)
+            ax.set_xlabel("Globally Normalized Metric Space [0, 1]", fontsize=10, labelpad=8)
+            ax.set_title(group_name, fontsize=13, fontweight="bold", pad=15)
             ax.grid(axis='x', linestyle='--', alpha=0.5)
 
-            # Localized clean plot area legends
             handles, labels = ax.get_legend_handles_labels()
             by_label = dict(zip(labels, handles))
             if by_label:
-                ax.legend(by_label.values(), by_label.keys(), 
-                          loc='upper right', frameon=True, fontsize=9.5)
+                ax.legend(by_label.values(), by_label.keys(), loc='upper right', 
+                          frameon=True, fontsize=8.5, bbox_to_anchor=(1.18, 1.0))
 
-            fig.tight_layout()
-            
-            # Target 1: Commit visualization block as a new separate page in the master PDF document stream
+            fig.subplots_adjust(top=0.88, bottom=0.15, left=0.24, right=0.85)
             pdf.savefig(fig, bbox_inches='tight')
             
-            # Target 2: Save an explicit standalone isolated figure image inside the directory path
             individual_out = subfolder_dir / f"domain_shift_{group_id}.pdf"
             fig.savefig(individual_out, bbox_inches='tight')
             plt.close(fig)
 
     print(f"  [saved multi-page] {multipage_pdf_path}")
-    print(f"  [saved individual groups] check directory: {subfolder_dir}/")
 
-
-
-def plot_metric_correlation_heatmap(results_dir: Path, output_dir: Path, args=None):
+def plot_metric_correlation_heatmap(data:dict, output_dir: Path, args=None):
     """
     Computes and plots a Pearson correlation heatmap across all domain shift metrics
     to identify statistical redundancy and streamline the thesis narrative.
     """
-    if not HAS_SNS:
-        print("  [skip] Seaborn not installed. Skipping correlation matrix.")
-        return
 
-    f = results_dir / "domain_stats" / "_imagenet_and_test_r.json"
-    if not f.exists():
-        print("  [skip] Metrics JSON not found for correlation analysis.")
-        return
-
-    data = _load_json(f)
     class_summaries = data.get("class_summaries", {})
     if not class_summaries:
         return
@@ -738,7 +587,7 @@ def plot_metric_correlation_heatmap(results_dir: Path, output_dir: Path, args=No
     
     print(f"  [saved correlation map] {out_file}")
 
-def plot_domain_shift_class_rankings_by_group(results_dir: Path, output_dir: Path, args=None):
+def plot_domain_shift_class_rankings_by_group(data:dict, output_dir: Path, args=None):
     """
     Generates isolated, standalone PDF files for each metric group saved inside a 
     dedicated subfolder pipeline. Parallel columns list class names ordered from best to worst.
@@ -746,12 +595,7 @@ def plot_domain_shift_class_rankings_by_group(results_dir: Path, output_dir: Pat
     The top 20 classes from the FIRST metric column are tracked across all subsequent 
     metric columns on that page using matching color fills for easy visual scanning.
     """
-    f = results_dir / "domain_stats" / "_imagenet_and_test_r.json"
-    if not f.exists():
-        print("  [skip] Metrics JSON not found for rankings analysis.")
-        return
 
-    data = _load_json(f)
     class_summaries = data.get("class_summaries", {})
     if not class_summaries:
         print("  [skip] No class-wise summaries available for rankings.")
@@ -759,7 +603,7 @@ def plot_domain_shift_class_rankings_by_group(results_dir: Path, output_dir: Pat
 
     split_str = args.split if args else "test_r"
     try:
-        name_list = _get_names(split_str)
+        name_list = get_names(split_str)
     except Exception:
         name_list = [f"Class {i}" for i in range(1000)]
 
@@ -902,14 +746,25 @@ def plot_domain_shift_class_rankings_by_group(results_dir: Path, output_dir: Pat
 #  =========================================================================
 # Main
 # =========================================================================
-def generate_all_plots(args):
-    if not HAS_MPL:
-        print("ERROR: matplotlib not installed. Install with: pip install matplotlib seaborn")
-        return
+def normalize_data(args):
 
     results_dir = Path(args.results_dir)
+    test_data_path = results_dir / "domain_stats" / f"imagenet_{args.split}" / f"0_30_imagenet_{args.split}.json"
+    base_data_path = results_dir / "domain_stats" / "imagenet_val" / f"0_30_imagenet_val_{args.split}.json"
+    if not test_data_path.exists() or not base_data_path.exists():
+        print("[skip] One or both dataset JSON files are missing.")
+        return
+    raw_data_a = load_json(test_data_path)
+    raw_data_b = load_json(base_data_path)
+
+    norm_data_a, norm_data_b = normalize_values_inter(raw_data_a, raw_data_b)
+
+    return norm_data_a, norm_data_b
+
+def generate_all_plots(args):
+    results_dir = Path(args.results_dir)
     output_dir = Path(args.output_dir)
-    _setup_style()
+    setup_style()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
@@ -923,9 +778,11 @@ def generate_all_plots(args):
     #plot_nrefs_sweep(results_dir, output_dir, args)
     #plot_hybrid_tta(results_dir, output_dir, args)
     #plot_accuracy_vs_ece(results_dir, output_dir, args)
-    #plot_domain_shift_analysis(results_dir, output_dir, args)
-    #plot_domain_shift_class_scatter_per_group(results_dir, output_dir, args)
-    plot_domain_shift_class_rankings_by_group(results_dir, output_dir, args)
+
+    data_a, data_baseline = normalize_data(args)
+    plot_domain_shift_analysis(data_a, data_baseline, output_dir, args)
+    plot_domain_shift_class_scatter_per_group(data_a, data_baseline, output_dir, args)
+    #plot_domain_shift_class_rankings_by_group(data, output_dir, args)
 
     print(f"\nAll figures written to {output_dir}/")
 

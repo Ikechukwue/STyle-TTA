@@ -60,6 +60,7 @@ checkpoints/
 results/
 logs/
 models/
+assets/
 # Make sure it doesn't ignore that folder 
 !**/data/__init__.py
 !experiments/data/*.py

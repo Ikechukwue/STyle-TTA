@@ -139,14 +139,16 @@ class Method:
             self.text_encoder.get_input_embeddings().weight[placeholder_id] = \
                 self.text_encoder.get_input_embeddings().weight[init_id].clone()
 
-        # Prepare training
-        emb_layer = self.text_encoder.get_input_embeddings()
-        emb_layer.requires_grad_(False)
-        orig_weight = emb_layer.weight.data.clone()
+        # Cast text encoder to float32 for TI training (float16 leaf tensors don't support autograd)
+        self.text_encoder.float()
 
-        # Only optimize the placeholder embedding
-        opt_emb = emb_layer.weight[placeholder_id:placeholder_id + 1].clone().detach().requires_grad_(True)
-        optimizer = torch.optim.Adam([opt_emb], lr=cfg.ti_lr)
+        # Prepare training: enable grad only on embedding weight
+        emb_layer = self.text_encoder.get_input_embeddings()
+        orig_weight = emb_layer.weight.data.clone()
+        for param in self.text_encoder.parameters():
+            param.requires_grad_(False)
+        emb_layer.weight.requires_grad_(True)
+        optimizer = torch.optim.Adam([emb_layer.weight], lr=cfg.ti_lr)
 
         # Encode style image
         with torch.no_grad():
@@ -160,42 +162,43 @@ class Method:
         self.scheduler.set_timesteps(self.scheduler.config.num_train_timesteps)
         self.text_encoder.train()
 
-        for step in tqdm(range(cfg.ti_steps), desc="Learning style embedding"):
-            # Inject current embedding
-            with torch.no_grad():
-                emb_layer.weight[placeholder_id] = opt_emb[0].to(emb_layer.weight.dtype)
+        with torch.enable_grad():  # override outer torch.no_grad() from evaluation framework
+            for step in tqdm(range(cfg.ti_steps), desc="Learning style embedding"):
+                # Random timestep
+                t = torch.randint(0, self.scheduler.config.num_train_timesteps,
+                                  (1,), device=self.device).long()
+                noise = torch.randn_like(z_style)
+                z_noisy = self.scheduler.add_noise(z_style, noise, t)
 
-            # Random timestep
-            t = torch.randint(0, self.scheduler.config.num_train_timesteps,
-                              (1,), device=self.device).long()
-            noise = torch.randn_like(z_style)
-            z_noisy = self.scheduler.add_noise(z_style, noise, t)
+                # Get text conditioning (grad flows through emb_layer.weight)
+                encoder_output = self.text_encoder(ids)[0].to(torch.float16)
 
-            # Get text conditioning
-            encoder_output = self.text_encoder(ids)[0].to(torch.float16)
+                # Predict noise
+                noise_pred = self.unet(z_noisy, t, encoder_hidden_states=encoder_output).sample
 
-            # Predict noise
-            noise_pred = self.unet(z_noisy, t, encoder_hidden_states=encoder_output).sample
+                loss = F.mse_loss(noise_pred.float(), noise.float())
+                loss.backward()
 
-            loss = F.mse_loss(noise_pred.float(), noise.float())
-            loss.backward()
-
-            # Only update placeholder embedding
-            with torch.no_grad():
-                grad = emb_layer.weight.grad
-                if grad is not None:
-                    opt_emb.grad = grad[placeholder_id:placeholder_id + 1].float()
-            optimizer.step()
-            optimizer.zero_grad()
-            self.text_encoder.zero_grad()
+                # Zero out gradients for all non-placeholder tokens, keep only placeholder
+                with torch.no_grad():
+                    if emb_layer.weight.grad is not None:
+                        grad_placeholder = emb_layer.weight.grad[placeholder_id].clone()
+                        emb_layer.weight.grad.zero_()
+                        emb_layer.weight.grad[placeholder_id] = grad_placeholder
+                optimizer.step()
+                optimizer.zero_grad()
 
         self.text_encoder.eval()
-        self.style_embedding = opt_emb.detach().to(torch.float16)
+        self.style_embedding = emb_layer.weight[placeholder_id:placeholder_id + 1].detach().to(torch.float16)
 
         # Restore original embeddings except placeholder
+        emb_layer.weight.requires_grad_(False)
         with torch.no_grad():
             emb_layer.weight.data = orig_weight
             emb_layer.weight[placeholder_id] = self.style_embedding[0]
+
+        # Cast back to float16 for inference
+        self.text_encoder.half()
 
     # ── text encoding ──────────────────────────────────────────────────
     @torch.no_grad()
@@ -217,7 +220,6 @@ class Method:
         return torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0)
 
     # ── inference ──────────────────────────────────────────────────────
-    @torch.no_grad()
     def __call__(self, content, style):
         """
         Parameters
@@ -228,6 +230,10 @@ class Method:
         -------
         Tensor [1,3,H,W] in [0,1]
         """
+        # Reset per-call: style embedding must be re-learned for each new style image.
+        # Without this, all calls after the first reuse the first style's embedding.
+        self.style_embedding = None
+
         cfg = self.cfg
         size = self.get_native_image_size()
 
@@ -237,38 +243,39 @@ class Method:
         s = F.interpolate(style.to(self.device), size=(size, size),
                           mode='bilinear', align_corners=False)
 
-        # Learn style embedding on-the-fly if not pre-loaded
+        # Learn style embedding on-the-fly if not pre-loaded (requires grad)
         if self.style_embedding is None:
             self._learn_style_embedding(s)
 
-        # Encode text with style embedding
-        prompt = f"a painting in the style of {cfg.placeholder_token}"
-        style_emb = self._get_text_embeddings(prompt)
-        uncond_emb = self._get_text_embeddings("")
+        with torch.no_grad():
+            # Encode text with style embedding
+            prompt = f"a painting in the style of {cfg.placeholder_token}"
+            style_emb = self._get_text_embeddings(prompt)
+            uncond_emb = self._get_text_embeddings("")
 
-        # DDIM-invert content image
-        z_content = self._encode_image(c)
-        z_T = self._ddim_inversion(z_content, uncond_emb, cfg.num_inference_steps)
+            # DDIM-invert content image
+            z_content = self._encode_image(c)
+            z_T = self._ddim_inversion(z_content, uncond_emb, cfg.num_inference_steps)
 
-        # Denoise with style conditioning
-        self.scheduler.set_timesteps(cfg.num_inference_steps)
-        # Apply strength: skip first (1-strength) of steps
-        start_step = int(cfg.num_inference_steps * (1 - cfg.strength))
-        timesteps = self.scheduler.timesteps[start_step:]
+            # Denoise with style conditioning
+            self.scheduler.set_timesteps(cfg.num_inference_steps)
+            # Apply strength: skip first (1-strength) of steps
+            start_step = int(cfg.num_inference_steps * (1 - cfg.strength))
+            timesteps = self.scheduler.timesteps[start_step:]
 
-        # Interpolate between inverted content and noise based on strength
-        z = z_T.clone()
-        for t in tqdm(timesteps, desc="Denoising"):
-            z_in = torch.cat([z, z])
-            t_batch = t.unsqueeze(0).to(self.device)
-            emb = torch.cat([uncond_emb, style_emb])
-            noise_pred = self.unet(z_in, t_batch, encoder_hidden_states=emb).sample
-            noise_u, noise_c = noise_pred.chunk(2)
-            noise_pred = noise_u + cfg.guidance_scale * (noise_c - noise_u)
-            z = self.scheduler.step(noise_pred, t, z).prev_sample
+            # Interpolate between inverted content and noise based on strength
+            z = z_T.clone()
+            for t in tqdm(timesteps, desc="Denoising"):
+                z_in = torch.cat([z, z])
+                t_batch = t.unsqueeze(0).to(self.device)
+                emb = torch.cat([uncond_emb, style_emb])
+                noise_pred = self.unet(z_in, t_batch, encoder_hidden_states=emb).sample
+                noise_u, noise_c = noise_pred.chunk(2)
+                noise_pred = noise_u + cfg.guidance_scale * (noise_c - noise_u)
+                z = self.scheduler.step(noise_pred, t, z).prev_sample
 
-        # Decode
-        z = z / self.vae.config.scaling_factor
-        img = self.vae.decode(z).sample
-        img = (img + 1) / 2
-        return img.clamp(0, 1).to(content.device)
+            # Decode
+            z = z / self.vae.config.scaling_factor
+            img = self.vae.decode(z).sample
+            img = (img + 1) / 2
+            return img.clamp(0, 1).to(content.device)

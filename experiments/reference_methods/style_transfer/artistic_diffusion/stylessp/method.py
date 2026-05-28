@@ -6,7 +6,11 @@ import torch
 import torchvision
 from torchvision import transforms
 from typing import Optional, Dict, Tuple, List
-from transformers import AutoProcessor, Blip2ForConditionalGeneration, DPTForDepthEstimation, DPTFeatureExtractor, CLIPVisionModelWithProjection
+from transformers import AutoProcessor, Blip2ForConditionalGeneration, DPTForDepthEstimation, CLIPVisionModelWithProjection
+try:
+    from transformers import DPTImageProcessor as DPTFeatureExtractor
+except ImportError:
+    from transformers import DPTFeatureExtractor
 from diffusers import DDIMScheduler, UniPCMultistepScheduler, AutoencoderKL, ControlNetModel
 from diffusers.models.controlnets.multicontrolnet import MultiControlNetModel
 from diffusers.utils import load_image
@@ -197,7 +201,7 @@ class Method:
             MODEL_ID = "Salesforce/blip2-flan-t5-xl"
             self.blip_processor = AutoProcessor.from_pretrained(MODEL_ID)
             self.blip_model = Blip2ForConditionalGeneration.from_pretrained(
-                MODEL_ID, device_map=self.device, load_in_8bit=False, torch_dtype=torch.float16
+                MODEL_ID, device_map=self.device, torch_dtype=torch.float16
             )
             self.blip_model.eval()
             # Expose for factory
@@ -276,7 +280,7 @@ class Method:
     def get_depth_map(self, image):
         if self.depth_estimator is None:
             self.depth_estimator = DPTForDepthEstimation.from_pretrained("Intel/dpt-hybrid-midas").to(self.device)
-            self.depth_feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-hybrid-midas")
+            self.depth_feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large")
             
         image_tensor = self.depth_feature_extractor(images=image, return_tensors="pt").pixel_values.to(self.device)
         with torch.no_grad(), torch.autocast(self.device):

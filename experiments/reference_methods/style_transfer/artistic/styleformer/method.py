@@ -457,9 +457,14 @@ class Method:
         if self.network is None:
             raise RuntimeError("Network not initialized.")
 
+        # StyleFormer was trained with ImageNet-normalised inputs
+        mean = torch.tensor([0.485, 0.456, 0.406], device=content.device).view(1, 3, 1, 1)
+        std  = torch.tensor([0.229, 0.224, 0.225], device=content.device).view(1, 3, 1, 1)
+        c_norm = (content - mean) / std
+        s_norm = (style   - mean) / std
         with torch.no_grad():
-            output = self.network(content, style)
-
+            output_norm = self.network(c_norm, s_norm)
+        output = output_norm * std + mean
         return output.clamp(0, 1)
 
     # ── weight loading ──────────────────────────────────────────────────────
@@ -490,6 +495,21 @@ class Method:
         self.network.vgg.load_state_dict(checkpoint['vgg'])
         self.network.model.load_state_dict(checkpoint['model'])
         self.network.decoder.load_state_dict(checkpoint['decoder'])
+
+        # The official VGG (networks.py) has NO 1×1 conv at position 0 — it starts
+        # directly with ReflectionPad2d + Conv2d(3, 64).  Our local VGG copy adds an
+        # extra Conv2d(3, 3, 1×1) at slice1[0] which the checkpoint never trained
+        # (checkpoint keys 'a'/'b' only cover StyleFormer+decoder; VGG is frozen).
+        # That randomly-initialised layer corrupts all downstream features and causes
+        # the pink/green colour artefacts.  Reset it to identity so inputs pass
+        # through unchanged, making our VGG functionally identical to the official.
+        with torch.no_grad():
+            w = self.network.vgg.slice1[0].weight  # shape (3, 3, 1, 1)
+            w.zero_()
+            w[0, 0, 0, 0] = 1.0
+            w[1, 1, 0, 0] = 1.0
+            w[2, 2, 0, 0] = 1.0
+            self.network.vgg.slice1[0].bias.zero_()
 
         self.network.to(self.device)
 

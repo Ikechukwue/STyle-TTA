@@ -60,6 +60,9 @@ class Method:
         self.pipe = StableDiffusionXLPipeline.from_pretrained(
             cfg.base_model, scheduler=scheduler, torch_dtype=torch.float16,
         ).to(self.device)
+        # Ensure all submodels are in float16 to avoid dtype mismatches
+        self.pipe.text_encoder.to(torch.float16)
+        self.pipe.text_encoder_2.to(torch.float16)
 
         self.handler = Handler(self.pipe)
         self.sa_args = StyleAlignedArgs(
@@ -114,24 +117,25 @@ class Method:
         c_np = np.array(c_pil)
         s_np = np.array(s_pil)
 
-        # DDIM-invert both images
-        zts_style = ddim_inversion(
-            self.pipe, s_np, prompt=cfg.prompt,
-            num_steps=cfg.num_inference_steps,
-            guidance_scale=cfg.inv_guidance_scale,
-        )
-        zts_content = ddim_inversion(
-            self.pipe, c_np, prompt=cfg.prompt,
-            num_steps=cfg.num_inference_steps,
-            guidance_scale=cfg.inv_guidance_scale,
-        )
+        # DDIM-invert both images (autocast ensures consistent float16 throughout)
+        with torch.autocast("cuda", dtype=torch.float16):
+            zts_style = ddim_inversion(
+                self.pipe, s_np, prompt=cfg.prompt,
+                num_steps=cfg.num_inference_steps,
+                guidance_scale=cfg.inv_guidance_scale,
+            )
+            zts_content = ddim_inversion(
+                self.pipe, c_np, prompt=cfg.prompt,
+                num_steps=cfg.num_inference_steps,
+                guidance_scale=cfg.inv_guidance_scale,
+            )
 
         offset = cfg.inversion_offset
         zT_style, cb_style = make_inversion_callback(zts_style, offset=offset)
         zT_content, cb_content = make_inversion_callback(zts_content, offset=offset)
 
-        # Stack latents: [style_ref, content_target]
-        latents = torch.cat([zT_style, zT_content])
+        # Stack latents: [style_ref, content_target] → [2, C, H, W]
+        latents = torch.stack([zT_style, zT_content])
 
         # Register shared attention
         self.handler.register(self.sa_args)
@@ -145,13 +149,14 @@ class Method:
 
         # Run pipeline with 2-image batch (reference + target)
         prompts = [cfg.prompt, cfg.prompt]
-        images = self.pipe(
-            prompt=prompts,
-            latents=latents,
-            callback_on_step_end=combined_cb,
-            num_inference_steps=cfg.num_inference_steps,
-            guidance_scale=cfg.guidance_scale,
-        ).images
+        with torch.autocast("cuda", dtype=torch.float16):
+            images = self.pipe(
+                prompt=prompts,
+                latents=latents,
+                callback_on_step_end=combined_cb,
+                num_inference_steps=cfg.num_inference_steps,
+                guidance_scale=cfg.guidance_scale,
+            ).images
 
         # Remove shared attention
         self.handler.remove()

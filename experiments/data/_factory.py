@@ -35,7 +35,7 @@ from experiments.data.colored_mnist import ColoredMNIST
 from experiments.data.nico import NICO
 from experiments.data.metashift import MetaShift
 from experiments.data.openmibood import OpenMIBOOD
-
+from experiments.data.assets import Assets
 
 class CustomDataset(VisionDataset):
     def __init__(
@@ -77,6 +77,19 @@ class CustomDataset(VisionDataset):
                                             use_subset=use_subset,
                                             subset_size=subset_size,
                                             subset_seed=subset_seed)
+        elif dataset_name.lower() == "assets":
+            # root_dir becomes something like: "data/assets"
+            root_dir = os.path.join(data_path, dataset_name)
+            
+            self.dataset = Assets(
+                root_dir=root_dir,
+                split=split, # e.g. "set_20" or "set_40"
+                transform=transform,
+                target_transform=target_transform,
+                use_subset=use_subset,
+                subset_size=subset_size,
+                subset_seed=subset_seed
+            )
 
         elif dataset_name.lower() == "peripheral_blood":
             # Create the root directory to the data if it does not exist

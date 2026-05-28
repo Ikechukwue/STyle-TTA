@@ -55,7 +55,7 @@ class Method:
         self.config = self.get_default_config()
 
         if model_path is None:
-            model_path = "./data/models/style_transfer/diffstyle.pt"
+            model_path = "/data/local/colorist/models/pretrained/diffstyle.pt"
         
         self._initialize_network(model_path)
 
@@ -111,10 +111,10 @@ class Method:
     def get_default_config(self):
         return {
             "t_edit": 400,  # Timestep threshold for h-space editing
-            "hs_coeff": 0.3,  # Slerp ratio (h_gamma in official) - 0.3 for style mixing
-            "n_inv_step": 50,  # Number of inversion steps
+            "hs_coeff": 0.4,  # Slerp ratio (h_gamma in official) - 0.4 for cross-domain
+            "n_inv_step": 1000,  # Number of inversion steps
             "n_gen_step": 1000,  # Number of generation steps
-            "t_noise": 200,  # Quality boosting threshold (t_boost) - 0 for out-of-domain
+            "t_noise": 0,  # Quality boosting threshold (t_boost) - 0 for out-of-domain
             "dt_lambda": 1.0,  # Sampling calibration factor (0.9985 for masked style mixing)
             "dt_end": 950,  # dt_lambda application threshold
             "omega": 0.0,  # Style calibration parameter
@@ -250,7 +250,9 @@ class Method:
             eta = 1.0 if int(i) <= t_noise else 0.0
             
             # Denoise with content h-injection
-            # hs_coeff = [1 - h_gamma] where h_gamma is the slerp ratio
+            # Official: pass --hs_coeff $h_gamma directly (0.4 for cross-domain)
+            # UNet slerp: slerp(1 - hs_coeff[0], h_style, h_content)
+            # hs_coeff[0]=0.4 → slerp(0.6, h_style, h_content) = 60% toward content ✓
             x, _, _, _ = denoising_step(
                 x, t, t_next,
                 models=self.model,
@@ -261,7 +263,7 @@ class Method:
                 learn_sigma=self.learn_sigma,
                 index=0,  # Use index 0 for injection
                 t_edit=t_edit,
-                hs_coeff=[1 - hs_coeff_val],  # Official format: [1 - h_gamma]
+                hs_coeff=[hs_coeff_val],  # Direct: matches official --hs_coeff $h_gamma
                 delta_h=content_h,
                 dt_lambda=dt_lambda,
                 dt_end=dt_end,

@@ -126,8 +126,13 @@ class Method:
         with torch.no_grad():
             emb.weight[pid] = emb.weight[init_id].clone()
 
-        opt_emb = emb.weight[pid:pid + 1].clone().detach().requires_grad_(True)
-        optimizer = torch.optim.Adam([opt_emb], lr=cfg.ti_lr)
+        # Cast text encoder to float32 for TI training (float16 leaf tensors don't support autograd)
+        self.text_encoder.float()
+
+        for param in self.text_encoder.parameters():
+            param.requires_grad_(False)
+        emb.weight.requires_grad_(True)
+        optimizer = torch.optim.Adam([emb.weight], lr=cfg.ti_lr)
 
         with torch.no_grad():
             x = style_tensor.to(self.device, torch.float16) * 2 - 1
@@ -139,27 +144,34 @@ class Method:
                              truncation=True, return_tensors="pt").input_ids.to(self.device)
 
         self.text_encoder.train()
-        for _ in tqdm(range(cfg.ti_steps), desc="Learning style"):
-            with torch.no_grad():
-                emb.weight[pid] = opt_emb[0].to(emb.weight.dtype)
-            t = torch.randint(0, 1000, (1,), device=self.device).long()
-            noise = torch.randn_like(z)
-            z_noisy = self.scheduler.add_noise(z, noise, t)
-            enc_out = self.text_encoder(ids)[0].to(torch.float16)
-            pred = self.unet(z_noisy, t, encoder_hidden_states=enc_out).sample
-            loss = F.mse_loss(pred.float(), noise.float())
-            loss.backward()
-            with torch.no_grad():
-                if emb.weight.grad is not None:
-                    opt_emb.grad = emb.weight.grad[pid:pid + 1].float()
-            optimizer.step()
-            optimizer.zero_grad()
-            self.text_encoder.zero_grad()
+        orig_weight = emb.weight.data.clone()
+        with torch.enable_grad():  # override outer torch.no_grad() from evaluation framework
+            for _ in tqdm(range(cfg.ti_steps), desc="Learning style"):
+                t = torch.randint(0, 1000, (1,), device=self.device).long()
+                noise = torch.randn_like(z)
+                z_noisy = self.scheduler.add_noise(z, noise, t)
+                enc_out = self.text_encoder(ids)[0].to(torch.float16)
+                pred = self.unet(z_noisy, t, encoder_hidden_states=enc_out).sample
+                loss = F.mse_loss(pred.float(), noise.float())
+                loss.backward()
+                # Zero out gradients for non-placeholder tokens
+                with torch.no_grad():
+                    if emb.weight.grad is not None:
+                        grad_pid = emb.weight.grad[pid].clone()
+                        emb.weight.grad.zero_()
+                        emb.weight.grad[pid] = grad_pid
+                optimizer.step()
+                optimizer.zero_grad()
 
         self.text_encoder.eval()
-        self.style_embedding = opt_emb.detach().to(torch.float16)
+        self.style_embedding = emb.weight[pid:pid + 1].detach().to(torch.float16)
+        emb.weight.requires_grad_(False)
         with torch.no_grad():
+            emb.weight.data = orig_weight
             emb.weight[pid] = self.style_embedding[0]
+
+        # Cast back to float16 for inference
+        self.text_encoder.half()
 
     # ── helpers ────────────────────────────────────────────────────────
     def _extract_canny(self, tensor):
@@ -177,7 +189,6 @@ class Method:
         return self.text_encoder(ids)[0].to(torch.float16)
 
     # ── inference ──────────────────────────────────────────────────────
-    @torch.no_grad()
     def __call__(self, content, style):
         """
         Parameters
@@ -191,55 +202,73 @@ class Method:
         cfg = self.cfg
         size = self.get_native_image_size()
 
+        # Reset per-call: re-learn style embedding for each new style image.
+        # Without this, all calls after the first reuse the first style's embedding.
+        self.style_embedding = None
+
         c = F.interpolate(content.to(self.device), (size, size),
                           mode='bilinear', align_corners=False)
         s = F.interpolate(style.to(self.device), (size, size),
                           mode='bilinear', align_corners=False)
 
-        # Learn style if needed
-        if self.style_embedding is None:
-            self._learn_style_embedding(s)
+        # Learn style embedding via textual inversion (requires grad)
+        self._learn_style_embedding(s)
 
-        # Extract canny from content
-        canny = self._extract_canny(c).to(self.device, torch.float16)
+        with torch.no_grad():
+            # Extract canny from content
+            canny = self._extract_canny(c).to(self.device, torch.float16)
 
-        # Text embeddings
-        prompt = f"a painting in the style of {cfg.placeholder_token}"
-        cond = self._get_text_emb(prompt)
-        uncond = self._get_text_emb("")
+            # Text embeddings
+            prompt = f"a painting in the style of {cfg.placeholder_token}"
+            cond = self._get_text_emb(prompt)
+            uncond = self._get_text_emb("")
 
-        # Start from random noise (ControlNet handles content preservation)
-        self.scheduler.set_timesteps(cfg.num_inference_steps)
-        z = torch.randn(1, 4, size // 8, size // 8,
-                        device=self.device, dtype=torch.float16)
-        z = z * self.scheduler.init_noise_sigma
+            # Start from a noised content latent (img2img at strength=0.7).
+            # Official LSAST uses DDIM img2img: encode content → add 70% noise →
+            # denoise from that timestep. This anchors output colors to the
+            # content image; pure random noise makes ControlNet the only
+            # structural anchor and produces wrong / random colors.
+            strength = 0.7
+            self.scheduler.set_timesteps(cfg.num_inference_steps)
+            start_step = int(cfg.num_inference_steps * (1.0 - strength))
 
-        for t in tqdm(self.scheduler.timesteps, desc="Denoising"):
-            z_in = torch.cat([z, z])
-            emb = torch.cat([uncond, cond])
-            canny_in = torch.cat([canny, canny])
+            # Encode content image to latent space (VAE expects [-1, 1])
+            with torch.no_grad():
+                z_c = self.vae.encode(
+                    c.to(torch.float16) * 2.0 - 1.0
+                ).latent_dist.mean * self.vae.config.scaling_factor
 
-            # ControlNet
-            down, mid = self.controlnet(
-                z_in, t, encoder_hidden_states=emb,
-                controlnet_cond=canny_in,
-                conditioning_scale=cfg.controlnet_conditioning_scale,
-                return_dict=False,
-            )
+            # Add noise corresponding to the start timestep
+            t_start = self.scheduler.timesteps[start_step]
+            noise = torch.randn_like(z_c)
+            z = self.scheduler.add_noise(z_c, noise, t_start.unsqueeze(0))
 
-            # UNet with ControlNet residuals
-            noise_pred = self.unet(
-                z_in, t, encoder_hidden_states=emb,
-                down_block_additional_residuals=down,
-                mid_block_additional_residual=mid,
-            ).sample
+            for t in tqdm(self.scheduler.timesteps[start_step:], desc="Denoising"):
+                z_in = torch.cat([z, z])
+                emb = torch.cat([uncond, cond])
+                canny_in = torch.cat([canny, canny])
 
-            noise_u, noise_c = noise_pred.chunk(2)
-            noise_pred = noise_u + cfg.guidance_scale * (noise_c - noise_u)
-            z = self.scheduler.step(noise_pred, t, z).prev_sample
+                # ControlNet
+                down, mid = self.controlnet(
+                    z_in, t, encoder_hidden_states=emb,
+                    controlnet_cond=canny_in,
+                    conditioning_scale=cfg.controlnet_conditioning_scale,
+                    return_dict=False,
+                )
 
-        # Decode
-        z = z / self.vae.config.scaling_factor
-        img = self.vae.decode(z).sample
-        img = (img + 1) / 2
-        return img.clamp(0, 1).to(content.device)
+                # UNet with ControlNet residuals
+                noise_pred = self.unet(
+                    z_in, t, encoder_hidden_states=emb,
+                    down_block_additional_residuals=down,
+                    mid_block_additional_residual=mid,
+                ).sample
+
+                noise_u, noise_c = noise_pred.chunk(2)
+                noise_pred = noise_u + cfg.guidance_scale * (noise_c - noise_u)
+                z = self.scheduler.step(noise_pred, t, z).prev_sample
+
+            # Decode
+            z = z / self.vae.config.scaling_factor
+            img = self.vae.decode(z).sample
+            img = (img + 1) / 2
+            return img.clamp(0, 1).to(content.device)

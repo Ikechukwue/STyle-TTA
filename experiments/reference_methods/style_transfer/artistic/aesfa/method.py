@@ -43,7 +43,7 @@ class Method:
 
     @staticmethod
     def get_native_image_size():
-        return None  # arbitrary resolution
+        return 256
 
     # ── network setup ──────────────────────────────────────────────────────
     def _initialize_network(self, weights):

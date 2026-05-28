@@ -170,6 +170,13 @@ class CLIPLinearProbeClassifier(nn.Module):
         # If input is 2D (B, D), it's already features: skip backbone
         else:
             features = x
+        
+        with torch.no_grad():
+            norms = torch.norm(features, p=2, dim=-1)
+            is_normalized = torch.allclose(norms, torch.ones_like(norms), atol=1e-4)
+
+        if not is_normalized:
+            features = F.normalize(features, p=2, dim=-1)
                 
         return self.head(features)
 
@@ -212,8 +219,7 @@ class DINOv2Classifier(nn.Module):
         #self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
-        # Normalize
-        #x = (images - self.mean) / self.std
+
         # If input is 4D (B, C, H, W), it's an image: run through backbone
         x = images
         if x.ndim == 4:
@@ -222,6 +228,13 @@ class DINOv2Classifier(nn.Module):
         # If input is 2D (B, D), it's already features: skip backbone
         else:
             features = x
+
+        with torch.no_grad():
+            norms = torch.norm(features, p=2, dim=-1)
+            is_normalized = torch.allclose(norms, torch.ones_like(norms), atol=1e-4)
+
+        if not is_normalized:
+            features = F.normalize(features, p=2, dim=-1)
         
         return self.head(features)
 

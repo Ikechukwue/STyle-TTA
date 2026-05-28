@@ -88,8 +88,8 @@ class Method:
 
         self.network.eval()
         with torch.no_grad():
-            z_c = self.network(content, forward=True, style=None)
-            z_s = self.network(style, forward=True, style=None)
+            z_c = self.network(content, forward=True)
+            z_s = self.network(style, forward=True)
             output = self.network(z_c, forward=False, style=z_s)
         return output.clamp(0, 1)
 

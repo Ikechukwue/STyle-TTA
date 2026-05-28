@@ -107,12 +107,14 @@ def prepare_datasets(args):
             transform=transform, use_subset=True, subset_size=args.sub_size, subset_seed=42,
         )
     else:
+        # Dataset of the relevant Split 
         set_A = create_dataset(
-            args.dataset, args.data_path, args.split,
+            args.dataset, args.data_path, "val@test_r", #args.split,
             transform=transform,
         )
+        # Dataset of Train-Subset with overlapping classes
         set_B = create_dataset(
-            args.dataset, args.data_path, f"train@{args.split}",
+            args.dataset, args.data_path, "train@test_r",  #f"train@{args.split}",
             transform=transform,
         )
     
@@ -232,18 +234,21 @@ def classes_analysis(set_A, set_B, args):
 
     return {"global_summary": summary, "class_summaries": class_summaries}
 
+
+# Main Function
 def domain_analysis(args):
     output_dir = Path(args.output_dir)
     result_dir = output_dir / f"{args.dataset}_{args.split}"
     result_dir.mkdir(parents=True, exist_ok=True)
     result_name = f"{args.max_classes}_{args.max_samples}"
     # 1. Prepare Datasets
+    # A is of the split (content) and B is from the dataset subset (reference)
     set_A, set_B = prepare_datasets(args) 
 
     if args.mode == "intra":
-        for i, set_ in enumerate([set_A, set_B]):
+        for i, set_ in enumerate([set_A]):#, set_B]):
             results = classes_analysis(set_, set_, args)
-            suffix = f"_{args.dataset}.json" if i == 1 else f"_{args.split}.json"
+            suffix = f"_{args.dataset}_of_{args.split}.json" if i == 1 else f"_{args.split}.json"
             result_name = result_name + suffix
             _save_json(result_dir / result_name, results)
     else:    
@@ -262,6 +267,7 @@ def get_args():
                         help="Path to the root data directory")
     parser.add_argument("--split", type=str, default="test_r", 
                         help="First split to compare (e.g., train, val)")
+
 
     
     # --- Analysis Mode ---

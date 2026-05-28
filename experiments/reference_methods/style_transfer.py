@@ -8,8 +8,6 @@ using the same protocol as color_space_evaluation.py
 
 Now supports multi-GPU evaluation using HuggingFace Accelerate library.
 """
-import os
-import sys
 import time
 import json
 import argparse
@@ -22,34 +20,39 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 from torchvision.utils import save_image
 from tqdm import tqdm
-from typing import Dict, List, Tuple, Optional, Callable
+from typing import Dict, List, Tuple, Optional
 from accelerate import Accelerator
 
 # Import data utilities
 from experiments.data import create_dataset, ImageFolder
 
 # Import evaluation metrics helper functions
-from experiments.metrics.content_metrics import set_path_to_edge_model, _get_edges, _get_depth_map
+from experiments.metrics.edge_metrics import set_edge_model_dir, get_edges
+from experiments.metrics.depth_metrics import get_depth_map
 
 # Import evaluation metrics
 from experiments.metrics.color_metrics import (
-    compute_wasserstein_distance,
+    compute_wasserstein,
     compute_histogram_distance,
-    compute_color_moment_distance,
-    compute_fid,
-    compute_artfid,
-    compute_gatys_style_loss
+    compute_color_moment,
+    compute_gatys_style_loss,
 )
-from experiments.metrics.content_metrics import (
+from experiments.metrics.distribution_metrics import compute_fid_tensor
+from experiments.metrics.combined_metrics import compute_artfid_tensor
+from experiments.metrics.feature_metrics import (
     compute_luminance_ssim,
     compute_ssim,
-    compute_lpips_distance,
-    compute_edge_similarity,
-    compute_depth_consistency,
+    compute_lpips,
+)
+from experiments.metrics.edge_metrics import (
+    compute_edge_ssim,
     compute_edge_dists,
     compute_edge_adists,
+)
+from experiments.metrics.depth_metrics import (
+    compute_depth_spearman,
     compute_depth_dists,
-    compute_depth_adists
+    compute_depth_adists,
 )
 
 from experiments.utils import ResizeWhileRetainAspectRatio, random_seed, worker_seed
@@ -90,7 +93,7 @@ def resize_image_tensor(img: torch.Tensor, target_size: int) -> torch.Tensor:
     return resized
 
 
-def save_edge_maps(img: torch.Tensor, file_path_prefix: str, methods: List[str] = ['hed', 'ldc', 'sobel']) -> None:
+def save_edge_maps(img: torch.Tensor, file_path_prefix: str, methods: List[str] = ['ldc']) -> None:
     """
     Compute and save edge maps for an image using all specified methods.
     
@@ -104,7 +107,7 @@ def save_edge_maps(img: torch.Tensor, file_path_prefix: str, methods: List[str] 
             # Create file path with method name
             file_path = f"{file_path_prefix}_{method}.png"
 
-            edges = _get_edges(img, method=method)  # Returns torch.Tensor [1, H, W]
+            edges = get_edges(img, method=method)  # Returns torch.Tensor [1, H, W]
             
             # Convert grayscale to RGB for saving
             edges = edges.repeat(3, 1, 1)  # [1, H, W] -> [3, H, W]
@@ -114,7 +117,7 @@ def save_edge_maps(img: torch.Tensor, file_path_prefix: str, methods: List[str] 
             print(f"Failed to save edge map for {method}: {e}")
 
 
-def save_depth_maps(img: torch.Tensor, file_path_prefix: str, methods: List[str] = ['depthpro', 'depthanything_v2_large', 'dpt_large']) -> None:
+def save_depth_maps(img: torch.Tensor, file_path_prefix: str, methods: List[str] = ['depthanything_v2_large']) -> None:
     """
     Compute and save depth maps for an image using all specified methods.
     
@@ -129,7 +132,7 @@ def save_depth_maps(img: torch.Tensor, file_path_prefix: str, methods: List[str]
             # Create file path with method name
             file_path = f"{file_path_prefix}_{method}.png"
                         
-            depth = _get_depth_map(img, method=method)  # Returns torch.Tensor [1, H, W]
+            depth = get_depth_map(img, method=method)  # Returns torch.Tensor [1, H, W]
             
             # Normalize depth to [0, 1] range
             depth_norm = (depth - depth.min()) / (depth.max() - depth.min() + 1e-8)
@@ -340,8 +343,8 @@ def evaluate_color_transfer(
     num_images_source: int = 20,
     num_images_reference: int = 20,
     num_workers: int = 4,
-    edge_methods: List[str] = ['ldc', 'hed', 'sobel'],
-    depth_methods: List[str] = ['depthanything_v2_large', 'depthpro', 'dpt_large'],
+    edge_methods: List[str] = ['ldc'],
+    depth_methods: List[str] = ['depthanything_v2_large'],
     edge_models_dir: Optional[str] = None,
     all_combinations: bool = False,
 ):
@@ -394,15 +397,6 @@ def evaluate_color_transfer(
 
     # Load the reference method
     accelerator.print(f"\nLoading {method_name} model...")
-    # model, native_size = load_reference_method(
-    #     method_name, 
-    #     model_weights
-    # )
-    
-    # # Prepare model for distributed evaluation
-    # model = accelerator.prepare(model)
-
-    # Load the method and the underlying model
     color_transfer_transform, color_transfer_model = create_style_transfer_method(
         method_name=method_name,
         pretrained_weights=model_weights
@@ -418,6 +412,11 @@ def evaluate_color_transfer(
         accelerator.print(f"Warning: Color transfer method does not have get_native_image_size(), using input_size: {input_size}")
         native_size = input_size
 
+    # Fall back to requested input_size if the method returns None
+    if native_size is None:
+        accelerator.print(f"  → native_size is None, using requested input_size: {input_size}")
+        native_size = input_size
+
     accelerator.print(f"✓ Model loaded successfully")
     accelerator.print(f"✓ Method native image size: {native_size}x{native_size}")
     
@@ -429,7 +428,7 @@ def evaluate_color_transfer(
     
     # Set model paths for edge/depth if provided
     if edge_models_dir is not None:
-        set_path_to_edge_model(edge_dir=edge_models_dir)
+        set_edge_model_dir(path=edge_models_dir)
         accelerator.print(f"Model paths configured:")
         if edge_models_dir:
             accelerator.print(f"  Edge models: {edge_models_dir}")
@@ -703,22 +702,25 @@ def evaluate_color_transfer(
         metrics = {}
         
         # Color metrics (per-image, compare output vs reference)
-        metrics["wasserstein_distance"] = compute_wasserstein_distance(output_tensor, reference_tensor, "rgb")
-        metrics["kl_divergence"], metrics["js_divergence"], metrics["chi_square"], metrics["histogram_intersection"] = \
-            compute_histogram_distance(output_tensor, reference_tensor)
-        metrics["color_moment_distance"] = compute_color_moment_distance(output_tensor, reference_tensor)
+        metrics["wasserstein_distance"] = compute_wasserstein(output_tensor, reference_tensor, "rgb").value
+        hist_group = compute_histogram_distance(output_tensor, reference_tensor)
+        metrics["kl_divergence"] = hist_group.metrics["histogram_kl"].value
+        metrics["js_divergence"] = hist_group.metrics["histogram_js"].value
+        metrics["chi_square"] = hist_group.metrics["histogram_chi2"].value
+        metrics["histogram_intersection"] = hist_group.metrics["histogram_intersection"].value
+        metrics["color_moment_distance"] = compute_color_moment(output_tensor, reference_tensor).value
         
         # Content metrics (per-image, compare output vs source)
-        metrics["luminance_ssim"] = compute_luminance_ssim(source_tensor, output_tensor)
-        metrics["ssim"] = compute_ssim(source_tensor, output_tensor)
-        metrics["lpips"] = compute_lpips_distance(source_tensor, output_tensor)
+        metrics["luminance_ssim"] = compute_luminance_ssim(source_tensor, output_tensor).value
+        metrics["ssim"] = compute_ssim(source_tensor, output_tensor).value
+        metrics["lpips"] = compute_lpips(source_tensor, output_tensor).value
         
         # Edge similarity metrics (output vs source)
         for edge_method in edge_methods:
             try:
-                metrics[f"edge_similarity_{edge_method}"] = compute_edge_similarity(source_tensor, output_tensor, method=edge_method)
-                metrics[f"edge_dists_{edge_method}"] = compute_edge_dists(source_tensor, output_tensor, method=edge_method)
-                metrics[f"edge_adists_{edge_method}"] = compute_edge_adists(source_tensor, output_tensor, method=edge_method)
+                metrics[f"edge_similarity_{edge_method}"] = compute_edge_ssim(source_tensor, output_tensor, method=edge_method).value
+                metrics[f"edge_dists_{edge_method}"] = compute_edge_dists(source_tensor, output_tensor, method=edge_method).value
+                metrics[f"edge_adists_{edge_method}"] = compute_edge_adists(source_tensor, output_tensor, method=edge_method).value
             except Exception as e:
                 accelerator.print(f"Edge metrics ({edge_method}) failed: {e}")
                 metrics[f"edge_similarity_{edge_method}"] = None
@@ -728,9 +730,9 @@ def evaluate_color_transfer(
         # Depth consistency metrics (output vs source)
         for depth_method in depth_methods:
             try:
-                metrics[f"depth_consistency_{depth_method}"] = compute_depth_consistency(source_tensor, output_tensor, method=depth_method)
-                metrics[f"depth_dists_{depth_method}"] = compute_depth_dists(source_tensor, output_tensor, method=depth_method)
-                metrics[f"depth_adists_{depth_method}"] = compute_depth_adists(source_tensor, output_tensor, method=depth_method)
+                metrics[f"depth_consistency_{depth_method}"] = compute_depth_spearman(source_tensor, output_tensor, method=depth_method).value
+                metrics[f"depth_dists_{depth_method}"] = compute_depth_dists(source_tensor, output_tensor, method=depth_method).value
+                metrics[f"depth_adists_{depth_method}"] = compute_depth_adists(source_tensor, output_tensor, method=depth_method).value
             except Exception as e:
                 accelerator.print(f"Depth metrics ({depth_method}) failed: {e}")
                 metrics[f"depth_consistency_{depth_method}"] = None
@@ -767,7 +769,7 @@ def evaluate_color_transfer(
     
     accelerator.print(f"Computing FID between {all_outputs.shape[0]} outputs and {all_references.shape[0]} references...")
     try:
-        fid_score = compute_fid(all_outputs, all_references)
+        fid_score = compute_fid_tensor(all_outputs, all_references).value
         accelerator.print(f"FID: {fid_score:.4f}")
     except Exception as e:
         accelerator.print(f"FID computation failed: {e}")
@@ -797,7 +799,7 @@ def evaluate_color_transfer(
             output_batch = output_batch[:min_batch]
             reference_batch = reference_batch[:min_batch]
             
-            gatys_loss = compute_gatys_style_loss(output_batch, reference_batch)
+            gatys_loss = compute_gatys_style_loss(output_batch, reference_batch).value
             gatys_scores.append(gatys_loss)
         except Exception as e:
             accelerator.print(f"Gatys style loss failed on batch: {e}")
@@ -818,7 +820,7 @@ def evaluate_color_transfer(
         # Compute ArtFID if both FID and LPIPS are available
         if fid_score is not None and metrics.get("lpips") is not None:
             try:
-                metrics["artfid"] = compute_artfid(fid_score, metrics["lpips"])
+                metrics["artfid"] = compute_artfid_tensor(fid_score, metrics["lpips"]).value
             except Exception as e:
                 accelerator.print(f"ArtFID computation failed: {e}")
                 metrics["artfid"] = None
@@ -925,7 +927,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_weights', type=str, default=None, help='Path to the color transfer model weights (if applicable)')
     
     # Dataset arguments
-    parser.add_argument('--data_path', type=str, default='/data/local/colorist/data', help='Path to datasets')
+    parser.add_argument('--data_path', type=str, default='./data', help='Path to datasets')
     parser.add_argument('--dataset_source', type=str, required=True, help='Source dataset name')
     parser.add_argument('--dataset_reference', type=str, required=True, help='Reference dataset name')
     parser.add_argument('--dataset_split_source', type=str, default='train', help='Source dataset split')
@@ -938,12 +940,12 @@ if __name__ == "__main__":
     parser.add_argument('--all_combinations', action='store_true', help='Evaluate all N×M combinations instead of pairwise')
     
     # Evaluation arguments
-    parser.add_argument('--edge_methods', nargs='+', default=['ldc', 'hed', 'sobel'], help='Edge detection methods for evaluation')
-    parser.add_argument('--depth_methods', nargs='+', default=['depthanything_v2_large', 'depthpro', 'dpt_large'], help='Depth estimation methods for evaluation')
+    parser.add_argument('--edge_methods', nargs='+', default=['ldc'], help='Edge detection methods for evaluation')
+    parser.add_argument('--depth_methods', nargs='+', default=['depthanything_v2_large'], help='Depth estimation methods for evaluation')
     parser.add_argument('--edge_models_dir', type=str, default=None, help='Directory containing edge detection model weights')
     
     # Output arguments
-    parser.add_argument('--output_path', type=str, default='./experiments/results/reference_methods', help='Path to save results')
+    parser.add_argument('--output_path', type=str, default='./results/reference_methods', help='Path to save results')
     parser.add_argument('--seed', type=int, default=265017005, help='Random seed for reproducibility')
     
     # Device arguments

@@ -32,7 +32,7 @@ mkdir -p "$TARGET_DIR"
 TTA_METHOD="retristyle"
 AUGMENTATION="none"
 DATASET="imagenet"
-SPLIT="test_abl"
+SPLIT="test_r"
 
 echo "========================================================================"
 echo "RetriStyle Ablation Suite — HPC Script Generator"

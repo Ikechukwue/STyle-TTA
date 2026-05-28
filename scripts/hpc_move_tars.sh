@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Configuration
-SOURCE_BASE="$HPCVAULT/augmented_cache/test_abl"
-DEST_BASE="$HPCVAULT/augmented_cache/test_abl/complete"
+SOURCE_BASE="$HPCVAULT/augmented_cache/test_r"
+DEST_BASE="$HPCVAULT/augmented_cache/test_r/complete"
 mkdir -p "$DEST_BASE"
 
 # Loop through each experiment subfolder

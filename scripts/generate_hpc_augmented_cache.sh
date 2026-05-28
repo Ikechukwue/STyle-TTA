@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 DATASET="imagenet"
-SPLIT="test_r"
+SPLIT="test_abl"
 N_REFS=16
 
 TARGET_DIR="${SCRIPT_DIR}/generated/augmented_cache/${SPLIT}"
@@ -53,18 +53,23 @@ export https_proxy=http://proxy.nhr.fau.de:80
 CONTAINER=$(eval echo ${HPC_CONTAINER})
 DATA_PATH=$(eval echo ${HPC_DATA_PATH})
 EMBEDDING_DIR=$(eval echo ${HPC_EMBEDDING_DIR})
-FINAL_DEST=\$HPCVAULT/augmented_cache/${SPLIT}/"${RETRIEVAL}_${N_REFS}_${DATASET}_${SPLIT}_s${SEED}"
+FINAL_DEST=\$HPCVAULT/augmented_cache/${SPLIT}/"${RETRIEVAL}_${DATASET}_${SPLIT}_s${SEED}"
 HF_MODELS_CACHE=$(eval echo ${HPC_HF_CACHE})
 TORCH_MODELS_CACHE=$(eval echo ${HPC_TORCH_CACHE})
-LIVE_CODE=\$HOME/retristyle/retristyle
+LIVE_CODE=${HPC_LIVE_CODE}
+GPU_DEVICES="\${CUDA_VISIBLE_DEVICES:-0}"
+GPU_COUNT=\$(echo \$GPU_DEVICES | tr ',' '\n' | wc -l)
+ACCELERATE_CONFIG=\$(printf "/app/configs/gpu_%02d.yaml" \$GPU_COUNT)
 
 echo "Starting Job: \$(date)"
 mkdir -p "\$FINAL_DEST" "\$EMBEDDING_DIR"
 
 if [[ -n "\$TMPDIR" ]]; then
     echo "Staging data to SSD..."
-    # Note: Ensure this tar path is correct!
-    tar -xf \$HPCVAULT/data/imagenet_test_r.tar -C \$TMPDIR/
+
+    rsync -ah --progress \$HPCVAULT/data/imagenet_test_r.tar "\$TMPDIR/tar_stage/"
+
+    tar -xf "\$TMPDIR/tar_stage/imagenet_test_r.tar" -C \$TMPDIR/
     EFFECTIVE_DATA_PATH=\$TMPDIR/data
 
     LOCAL_CACHE=\$TMPDIR/stylized_out
@@ -85,15 +90,17 @@ fi
 APPTAINERENV_PYTHONPATH=/app \\
 APPTAINERENV_HF_HOME=/app/hf_models \\
 APPTAINERENV_TORCH_HOME=/app/torch_models \\
-timeout 20h apptainer exec --nv \\
+timeout 22h apptainer exec --nv \\
+    --pwd /app \\
+    --bind \$LIVE_CODE:/app \\
     --bind \$EFFECTIVE_DATA_PATH:/app/data \\
     --bind \$LOCAL_CACHE:/app/cache \\
-    --bind \$LIVE_CODE:/app \\
     --bind \$EMBEDDING_DIR:/app/data/embeddings \\
     --bind \$HF_MODELS_CACHE:/app/hf_models \\
     --bind \$TORCH_MODELS_CACHE:/app/torch_models \\
     \$CONTAINER \\
-    accelerate launch -m experiments.tta.acc_generate_augmented_images \\
+    accelerate launch --config_file \$ACCELERATE_CONFIG \\
+        -m experiments.tta.acc_generate_augmented_images \\
         --dataset ${DATASET} --data_path /app/data --split ${SPLIT} \\
         --tta_method retristyle \\
         --retrieval_strategy ${RETRIEVAL} \\

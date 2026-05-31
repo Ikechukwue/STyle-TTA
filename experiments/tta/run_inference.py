@@ -123,6 +123,15 @@ from .checkpoint import (
 from .reference_db_setup import build_reference_db, materialise_images, build_retriever
 from .extract_embeddings import extract_and_cache, embeddings_exist, cache_features
 
+class DummyReferenceDB:
+    def __init__(self, *args, **kwargs):
+        pass
+    def __len__(self):
+        return 0
+
+class DummyRetriever:
+    def __init__(self, *args, **kwargs):
+        pass
 
 # Color transfer factory — lazy import
 def _lazy_create_color_transfer_method(method_name: str, pretrained_weights=None):
@@ -271,6 +280,12 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     # ---- retrieval setup (lazy) ---------------------------------------------
     retriever = None
     ref_db = None
+
+    if augmented_cache_dir is not None:
+        ref_db = DummyReferenceDB()
+        retriever = DummyRetriever()
+        accelerator.print("Using dummy stub components (cache active).")
+
     if augmented_cache_dir is None and args.tta_method in ("adain_tta", "color_tta", "retristyle"):
         accelerator.print("Building reference database (lazy loading)...")
         ref_db = build_reference_db(

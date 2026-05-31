@@ -102,109 +102,190 @@ def plot_style_transfer_comparison(results_dir: Path, output_dir: Path, args):
     print(f"  [saved] {out}")
 
 
+
+
 # =========================================================================
-# 2. Ablation Bar Charts
+# 2. Ablation Bar Charts (Grouped by Classifier)
 # =========================================================================
-def plot_ablation_bars(results_dir: Path, output_dir: Path, ablation_type: str, args):
-    """Bar chart for a specific ablation axis."""
-    abl_dir = results_dir / "ablation"  / "tta_inference" / "results" / "imagenet" / args.split
-    if not abl_dir.exists():
-        abl_dir = results_dir / "ablation"
-    files = find_json(abl_dir, "*.json")
+def plot_ablation_bars(results_dir: Path, output_dir: Path, ablation_type: str, args, 
+                       best_retrieval="dino", best_eval="zero", best_n_refs=16):
+    """
+    Generates a bar chart cleanly isolating a single ablation axis.
+    Filters out background sweep noise and groups data clearly.
+    """
+    abl_dir = results_dir / "ablation"
+    if (results_dir / "ablation" / "tta_inference" / "results").exists():
+        abl_dir = results_dir / "ablation" / "tta_inference" / "results" / args.dataset / args.split
+        
+    files = list(abl_dir.glob("**/*.json"))
     if not files:
-        print(f"  [skip] No ablation results for {ablation_type}")
+        print(f"  [skip] No ablation results found in {abl_dir} for {ablation_type}")
         return
 
-    grouped: Dict[str, List[float]] = {}
+    # Structure: grouped[classifier][strategy_key] = [accuracies]
+    grouped: Dict[str, Dict[str, List[float]]] = {}
+    
     for f in files:
-        data = load_json(f)
+        try:
+            import json
+            with open(f, 'r') as fh:
+                data = json.load(fh)
+        except Exception:
+            continue
+            
+        # Extract metrics safely
+        acc = data.get("metrics", {}).get("accuracy")
+        if acc is None:
+            continue
+            
+        clf = data.get("classifier", "?")
+        retr = data.get("retrieval_strategy", "none")
+        ev_strat = data.get("eval_strategy", "none")
+        nr = data.get("n_refs", 0)
+        
+        # --- Strict Filtering Axes ---
         if ablation_type == "retrieval":
-            key = data.get("retrieval_strategy", "?")
+            # Isolate retrieval: hold evaluation strategy and n_refs steady
+            if str(ev_strat) != str(best_eval) or int(nr) != int(best_n_refs):
+                continue
+            key = retr
+            
         elif ablation_type == "eval":
-            key = data.get("eval_strategy", "?")
+            # Isolate evaluation: hold retrieval strategy and n_refs steady
+            if str(retr) != str(best_retrieval) or int(nr) != int(best_n_refs):
+                continue
+            key = ev_strat
+            
         elif ablation_type == "nrefs":
-            key = str(data.get("n_refs", "?"))
+            # Isolate n_refs: hold retrieval and evaluation strategies steady
+            if str(retr) != str(best_retrieval) or str(ev_strat) != str(best_eval):
+                continue
+            key = str(nr)
         else:
             continue
-        acc = data.get("metrics", {}).get("accuracy")
-        if acc is not None:
-            grouped.setdefault(key, []).append(acc * 100)
+
+        grouped.setdefault(clf, {}).setdefault(key, []).append(acc * 100)
 
     if not grouped:
+        print(f"  [skip] No matching files survived the clean filtering for axis: {ablation_type}")
         return
 
-    labels = sorted(grouped.keys(), key=lambda x: np.mean(grouped[x]), reverse=True)
-    means = [np.mean(grouped[k]) for k in labels]
-    stds = [np.std(grouped[k]) for k in labels]
+    # Create a plot for each classifier so data remains unpolluted
+    for clf, strategy_dict in grouped.items():
+        labels = sorted(strategy_dict.keys())
+        means = [np.mean(strategy_dict[k]) for k in labels]
+        stds = [np.std(strategy_dict[k]) for k in labels]
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-    bars = ax.bar(labels, means, yerr=stds, capsize=4,
-                  color=plt.cm.tab10(np.arange(len(labels)) % 10))
-    ax.set_ylabel("Accuracy (%)")
-    ax.set_title(f"{ablation_type.capitalize()} Strategy Ablation")
-    ax.set_ylim(bottom=max(0, min(means) - 10))
+        fig, ax = plt.subplots(figsize=(7, 4.5))
+        bars = ax.bar(labels, means, yerr=stds, capsize=4,
+                      color=plt.cm.Set2(np.arange(len(labels)) % 8), width=0.5)
+        
+        ax.set_ylabel("Accuracy (%)")
+        ax.set_title(f"{clf} — {ablation_type.capitalize()} Strategy Ablation")
+        
+        # Dynamic padding for the Y-axis label spacing
+        ymin = max(0, min(means) - 5)
+        ymax = min(100, max(means) + 5)
+        ax.set_ylim(bottom=ymin, top=ymax)
+        ax.grid(axis='y', linestyle='--', alpha=0.3)
 
-    # Value labels
-    for bar, m in zip(bars, means):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
-                f"{m:.1f}", ha="center", va="bottom", fontsize=9)
+        # Draw values cleanly above individual bars
+        for bar, m in zip(bars, means):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.3,
+                    f"{m:.1f}%", ha="center", va="bottom", fontsize=9, fontweight='bold')
 
-    fig.tight_layout()
-    out = output_dir / f"ablation_{ablation_type}.pdf"
-    fig.savefig(out)
-    plt.close(fig)
-    print(f"  [saved] {out}")
+        fig.tight_layout()
+        clf_clean = clf.replace("/", "_").replace("-", "_")
+        out = output_dir / f"ablation_{ablation_type}_{clf_clean}.pdf"
+        fig.savefig(out, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  [saved] Grouped Bar Plot: {out}")
 
 
 # =========================================================================
-# 3. n_refs Line Plot
+# 3. n_refs Line Plot 
 # =========================================================================
-def plot_nrefs_sweep(results_dir: Path, output_dir: Path, args):
-    """Line plot of accuracy vs n_refs per classifier."""
-    abl_dir = results_dir / "ablation" / args.split / "tta_inference" / "results"
-    if not abl_dir.exists():
-        abl_dir = results_dir / "ablation"
-    files = find_json(abl_dir, "*.json")
+def plot_nrefs_sweep(results_dir: Path, output_dir: Path, args, 
+                     best_retrieval="dino", best_eval="zero"):
+    """
+    Plots validation accuracies tracking alongside increasing scale parameters,
+    filtering out mixed experimental configurations.
+    """
+    abl_dir = results_dir / "ablation"
+    if (results_dir / "ablation" / "tta_inference" / "results").exists():
+        abl_dir = results_dir / "ablation" / "tta_inference" / "results" / args.dataset / args.split
+        
+    files = list(abl_dir.glob("**/*.json"))
     if not files:
-        print("  [skip] No n_refs sweep results")
+        print("  [skip] No n_refs sweep results found")
         return
 
+    # Structure: grouped[(n_refs, classifier)] = [accuracies]
     grouped: Dict[Tuple[int, str], List[float]] = {}
+    
     for f in files:
-        data = load_json(f)
+        try:
+            import json
+            with open(f, 'r') as fh:
+                data = json.load(fh)
+        except Exception:
+            continue
+            
+        retr = data.get("retrieval_strategy", "none")
+        ev_strat = data.get("eval_strategy", "none")
+        
+        # CRITICAL FILTER: Only process configurations using the true isolated baseline components
+        if str(retr) != str(best_retrieval) or str(ev_strat) != str(best_eval):
+            continue
+
         nr = data.get("n_refs")
         clf = data.get("classifier", "?")
         acc = data.get("metrics", {}).get("accuracy")
+        
         if nr is not None and acc is not None:
-            grouped.setdefault((nr, clf), []).append(acc * 100)
+            grouped.setdefault((int(nr), clf), []).append(acc * 100)
 
     if not grouped:
+        print("  [skip] No pure n_refs configurations matching baseline evaluation parameters survived.")
         return
 
     classifiers = sorted(set(k[1] for k in grouped))
-    nrefs = sorted(set(k[0] for k in grouped))
+    nrefs_available = sorted(set(k[0] for k in grouped))
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    for i, clf in enumerate(classifiers):
-        means = [np.mean(grouped.get((nr, clf), [0])) for nr in nrefs]
-        stds = [np.std(grouped.get((nr, clf), [0])) for nr in nrefs]
-        ax.errorbar(nrefs, means, yerr=stds, marker="o", label=clf, capsize=3)
+    
+    for clf in classifiers:
+        means = []
+        stds = []
+        valid_nrefs = []
+        
+        for nr in nrefs_available:
+            scores = grouped.get((nr, clf))
+            if scores:  # Verify this classifier hit this tracking resolution step
+                means.append(np.mean(scores))
+                stds.append(np.std(scores))
+                valid_nrefs.append(nr)
+                
+        ax.errorbar(valid_nrefs, means, yerr=stds, marker="o", markersize=5, 
+                    linewidth=1.5, label=clf, capsize=4)
 
-    ax.set_xlabel("Number of Style References ($n_{refs}$)")
-    ax.set_ylabel("Accuracy (%)")
-    ax.set_title("Style-Transfer TTA: $n_{refs}$ Sweep")
-    ax.legend(fontsize=8, loc="lower right")
+    ax.set_xlabel("Number of Style References ($n_{refs}$)", fontsize=10)
+    ax.set_ylabel("Accuracy (%)", fontsize=10)
+    ax.set_title(f"Style-Transfer TTA Scale Sweep (Using {best_retrieval.upper()} + {best_eval.capitalize()})", fontsize=11, fontweight='bold')
+    
     ax.set_xscale("log", base=2)
     ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
-    ax.set_xticks(nrefs)
-
+    ax.set_xticks(nrefs_available)
+    ax.grid(True, which="both", linestyle=":", alpha=0.5)
+    
+    ax.legend(fontsize=9, loc="best")
     fig.tight_layout()
-    out = output_dir / "nrefs_sweep.pdf"
-    fig.savefig(out)
+    out_dir = output_dir / "ablation"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / "nrefs_sweep_filtered.pdf"
+    fig.savefig(out, bbox_inches='tight')
     plt.close(fig)
-    print(f"  [saved] {out}")
-
-
+    print(f"  [saved] Pure Line Plot: {out}")
 # =========================================================================
 # 4. Hybrid TTA Mixing Ratios
 # =========================================================================
@@ -260,7 +341,7 @@ def plot_accuracy_vs_ece(results_dir: Path, output_dir: Path, args):
     all_points = []
     for pattern in ["thesis/geometric_tta", "thesis/ablation", "thesis/hybrid_tta",
                     "geometric_tta", "ablation", "hybrid_tta"]:
-        d = results_dir / pattern / f"{args.split}/tta_inference/results"
+        d = results_dir / pattern / f"tta_inference/results/{args.dataset}/{args.split}"
         for f in find_json(d, "*.json"):
             data = load_json(f)
             m = data.get("metrics", {})
@@ -771,17 +852,25 @@ def generate_all_plots(args):
     print("Result Visualisation")
     print("=" * 60)
 
-    #plot_style_transfer_comparison(results_dir, output_dir, args)
-    #plot_ablation_bars(results_dir, output_dir, "retrieval", args)
-    #plot_ablation_bars(results_dir, output_dir, "eval", args)
-    #plot_ablation_bars(results_dir, output_dir, "nrefs", args)
-    #plot_nrefs_sweep(results_dir, output_dir, args)
-    #plot_hybrid_tta(results_dir, output_dir, args)
-    #plot_accuracy_vs_ece(results_dir, output_dir, args)
+    anchors = {
+            "best_retrieval": "dino",  # The strategy held constant for Eval/nrefs plots
+            "best_eval": "zero",       # The strategy held constant for Retrieval/nrefs plots
+            "best_n_refs": 16          # The count held constant for Retrieval/Eval plots
+        }
 
-    data_a, data_baseline = normalize_data(args)
-    plot_domain_shift_analysis(data_a, data_baseline, output_dir, args)
-    plot_domain_shift_class_scatter_per_group(data_a, data_baseline, output_dir, args)
+    plot_style_transfer_comparison(results_dir, output_dir, args)
+    plot_ablation_bars(results_dir, output_dir, "retrieval", args, **anchors)
+    plot_ablation_bars(results_dir, output_dir, "eval", args, **anchors)
+    plot_ablation_bars(results_dir, output_dir, "nrefs", args, **anchors)
+    plot_nrefs_sweep(results_dir, output_dir, args,
+                        best_retrieval=anchors["best_retrieval"], 
+                        best_eval=anchors["best_eval"])
+    #plot_hybrid_tta(results_dir, output_dir, args)
+    plot_accuracy_vs_ece(results_dir, output_dir, args)
+
+    #data_a, data_baseline = normalize_data(args)
+    #plot_domain_shift_analysis(data_a, data_baseline, output_dir, args)
+    #plot_domain_shift_class_scatter_per_group(data_a, data_baseline, output_dir, args)
     #plot_domain_shift_class_rankings_by_group(data, output_dir, args)
 
     print(f"\nAll figures written to {output_dir}/")

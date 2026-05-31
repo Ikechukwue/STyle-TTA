@@ -25,7 +25,7 @@ HPC_HF_CACHE='$WORK/model_cache/hf'
 HPC_TORCH_CACHE='$WORK/model_cache/torch'
 HPC_LIVE_CODE='$HPCVAULT/snapshots/retristyle_20260518'
 # ── Default experiment settings ──
-DEFAULT_SEED=265017005
+DEFAULT_SEED=71397589
 ALL_SEEDS=(71397589 133560673 265017005)
 
 # ── Classifiers ──
@@ -49,7 +49,7 @@ IMAGENET_TEST_SPLITS=("test_r" "test_a" "test_sketch" "test_v2" "testing" "test_
 EMBEDDING_MODEL="vit_base_patch16_dinov3.lvd1689m"
 RETRIEVAL_STRATEGIES=("random" "balanced_random" "dino") #"metric" "balanced_metric")
 EVAL_STRATEGIES=("vanilla" "zero" "tpt")
-N_REFS_VALUES=(2 4 8 16)
+N_REFS_VALUES=(2 4 8 16 32)
 DEFAULT_N_VIEWS=64
 STYLE_BATCH_SIZE=8
 

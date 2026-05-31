@@ -2,8 +2,8 @@ from pathlib import Path
 import json
 from typing import Dict, List, Optional, Tuple
 import numpy as np
-import nltk
-from nltk.corpus import wordnet as wn
+#import nltk
+#from nltk.corpus import wordnet as wn
 from scipy.cluster.hierarchy import linkage, leaves_list
 from scipy.spatial.distance import squareform
 try:

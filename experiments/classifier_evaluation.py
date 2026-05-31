@@ -301,9 +301,11 @@ def compute_metrics(
                     random_state=42
                     )
             else:
+
                 y_true_sub = y_true_squeezed
-                y_pred_sub = y_pred  
-            auc = roc_auc_score(y_true_sub, y_pred_sub, multi_class="ovr")
+                y_pred_sub = y_pred 
+            all_classes = np.arange(num_classes) 
+            auc = roc_auc_score(y_true_sub, y_pred_sub, multi_class="ovr", labels=all_classes)
         except Exception as e:
             print(f"  [Warning] Global AUC calculation fallback triggered: {e}")
             auc = 0.0

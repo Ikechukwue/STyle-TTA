@@ -49,14 +49,13 @@ echo "========================================================================"
 
 COUNTER=0
 
-# Helper: generate one SLURM script
-# Args: SUBDIR CLF EVAL RETR NREFS SEED TAG
+
 gen_script() {
     local SUBDIR=$1 CLF=$2 EVAL=$3 RETR=$4 NREFS=$5 SEED=$6 TAG=$7
-    is_pretrained "$CLF" && return 0
+    is_pretrained "$CLF" && return 0 ################################################################# GET RID AFTER RETRAINNIG 
     local CLF_SAFE=$(safe_name "$CLF")
 
-    local TIER=$(gpu_tier_for_nrefs "$NREFS")
+    local TIER=$(echo "gpu:a100:1 a100")
     local GPU_CONFIG=$(echo "$TIER" | awk '{print $1}')
     local PARTITION=$(echo "$TIER" | awk '{print $2}')
 
@@ -119,10 +118,10 @@ if [[ -n "\$TMPDIR" ]]; then
 
     echo "Unpacking Augmented Cache to SSD..."
     LOCAL_CACHE=\$TMPDIR/data/augmented_cache
-    TARGET_EXTRACT_DIR="\$LOCAL_CACHE/${BEST_RETRIEVAL}_${DATASET}_test_r_s\$SEED"
+    TARGET_EXTRACT_DIR="\$LOCAL_CACHE/${RETR}_${DATASET}_test_r_c26_s\$SEED"
     mkdir -p \$LOCAL_CACHE \$TARGET_EXTRACT_DIR
 
-    TAR_FILE="${BEST_RETRIEVAL}_imagenet_test_r_s${SEED}.tar"
+    TAR_FILE="${RETR}_imagenet_test_r_s${SEED}.tar"
     rsync -ahW --progress \$HPCVAULT/augmented_cache/test_r/complete/\$TAR_FILE \$TMPDIR/
     tar -xf \$TMPDIR/\$TAR_FILE -C \$TARGET_EXTRACT_DIR
 else
@@ -142,11 +141,11 @@ APPTAINERENV_http_proxy=\$http_proxy \\
 APPTAINERENV_https_proxy=\$https_proxy \\
 APPTAINERENV_HF_HOME=/app/hf_models \\
 APPTAINERENV_TORCH_HOME=/app/torch_models \\
-timeout 5m apptainer exec --nv \\
+timeout 15m apptainer exec --nv \\
     --pwd /app \\
     --bind \$EFFECTIVE_DATA_PATH:/app/data \\
     --bind \$OUTPUT_PATH:/app/results \\
-    --bind \$WORK/imagenet_subsets.json:/app/data/imagenet/imagenet_subsets.json \\
+    --bind \$HOME/retristyle/data/imagenet/imagenet_subsets.json:/app/data/imagenet/imagenet_subsets.json \\
     --bind \$LOCAL_CACHE:/app/data/augmented_cache \\
     --bind \$HF_MODELS_CACHE:/app/hf_models \\
     --bind \$EMBEDDING_DIR:/app/data/embeddings \\
@@ -165,7 +164,7 @@ timeout 5m apptainer exec --nv \\
         --augmented_cache /app/data/augmented_cache \\
         --embedding_dir /app/data/embeddings \\
         --seed \$SEED \\
-        --output_path /app/results
+        --output_path /app/results/ablation
 
 EXIT_CODE=\$?
 echo "Done: \$EXIT_CODE | \$(date)"
@@ -184,6 +183,10 @@ echo "A) Generating retrieval strategy ablation..."
 for CLF in "${ALL_CLASSIFIERS[@]}"; do
 for RETR in "${RETRIEVAL_STRATEGIES[@]}"; do
 for SEED in "${ALL_SEEDS[@]}"; do
+    # FIX: Skip generating dino scripts if the seed is not 7139758
+    if [ "${RETR}" == "dino" ] && [ "${SEED}" != "71397589" ]; then
+        continue
+    fi
     gen_script "retrieval" "$CLF" "$BEST_EVAL" "$RETR" "$BEST_N_REFS" "$SEED" "retr"
 done; done; done
 
@@ -194,6 +197,10 @@ echo "B) Generating eval strategy ablation..."
 for CLF in "${ALL_CLASSIFIERS[@]}"; do
 for EVAL in "${EVAL_STRATEGIES[@]}"; do
 for SEED in "${ALL_SEEDS[@]}"; do
+    # FIX: If BEST_RETRIEVAL is dino, only generate for seed 7139758
+    if [[ "$BEST_RETRIEVAL" == "dino" && "$SEED" != "71397589" ]]; then
+        continue
+    fi
     gen_script "eval_strategy" "$CLF" "$EVAL" "$BEST_RETRIEVAL" "$BEST_N_REFS" "$SEED" "eval"
 done; done; done
 
@@ -204,10 +211,13 @@ echo "C) Generating n_refs sweep..."
 for CLF in "${ALL_CLASSIFIERS[@]}"; do
 for NR in "${N_REFS_VALUES[@]}"; do
 for SEED in "${ALL_SEEDS[@]}"; do
+    # FIX: If BEST_RETRIEVAL is dino, only generate for seed 7139758
+    if [[ "$BEST_RETRIEVAL" == "dino" && "$SEED" != "71397589" ]]; then
+        continue
+    fi
     gen_script "n_refs" "$CLF" "$BEST_EVAL" "$BEST_RETRIEVAL" "$NR" "$SEED" "nrefs"
 done; done; done
-
-# ============================================================================
+# ============================================================================#
 # Submit-all
 # ============================================================================
 cat > "${TARGET_DIR}/submit_all.sh" << 'SUBMIT'

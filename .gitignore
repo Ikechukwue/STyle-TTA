@@ -46,6 +46,7 @@ wandb/
 # Outputs
 outputs/
 figures/
+*.o*
 # Docker & Apptainer artifacts
 *.sif
 *.tar

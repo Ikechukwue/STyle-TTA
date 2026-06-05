@@ -538,9 +538,8 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
                 dataset=args.dataset,
                 style_batch_size=getattr(args, "style_batch_size", None),
             )
-            cache_root = augmented_cache_dir / str(args.seed) / args.classifier / args.tta_method
+            cache_root = augmented_cache_dir / f"{args.retrieval_strategy}_{args.dataset}_{args.split}_s{str(args.seed)}"
             if args.classifier in ["ViT-B-16", "dinov2_vitb14"]:
-
                 views = cache_features(sample_idx=sample_idx,
                                        views=views,
                                        backbone=model.backbone,

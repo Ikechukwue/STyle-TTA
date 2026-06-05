@@ -95,7 +95,8 @@ from experiments.reference_methods.TTA import GeometricTTA, TENT
 # RetriStyle
 from retristyle.infer_style_base import StyleIDMethod
 from retristyle.ensemble_utils import FOODSFilter
-
+# Adain 
+from experiments.reference_methods.style_transfer.artistic.adain.method import Method as AdaINMethod
 # Package-local imports
 from .constants import (
     DEFAULT_SEED,
@@ -122,6 +123,7 @@ from .checkpoint import (
 )
 from .reference_db_setup import build_reference_db, materialise_images, build_retriever
 from .extract_embeddings import extract_and_cache, embeddings_exist, cache_features
+
 
 class DummyReferenceDB:
     def __init__(self, *args, **kwargs):
@@ -246,7 +248,10 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     embedding_dir = getattr(args, "embedding_dir", None)
     embedding_model = getattr(args, "embedding_model", None) or "vit_base_patch16_dinov3.lvd1689m"
     augmented_cache_dir = Path(args.augmented_cache) if getattr(args, "augmented_cache", None) else None
-    if (augmented_cache_dir is None
+    samples_dir = augmented_cache_dir / f"{args.retrieval_strategy}_{args.dataset}_{args.split}_s{str(args.seed)}"
+    sample_dir = samples_dir if samples_dir.exists() else None
+    
+    if (sample_dir is None
         and args.tta_method in ("adain_tta", "color_tta", "retristyle")
         and args.retrieval_strategy == "dino"
         and embedding_dir is not None
@@ -281,12 +286,13 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     retriever = None
     ref_db = None
 
-    if augmented_cache_dir is not None:
+    
+    if sample_dir is not None:
         ref_db = DummyReferenceDB()
         retriever = DummyRetriever()
         accelerator.print("Using dummy stub components (cache active).")
 
-    if augmented_cache_dir is None and args.tta_method in ("adain_tta", "color_tta", "retristyle"):
+    if sample_dir is None and args.tta_method in ("adain_tta", "color_tta", "retristyle"):
         accelerator.print("Building reference database (lazy loading)...")
         ref_db = build_reference_db(
             dataset=args.dataset,
@@ -318,13 +324,17 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
         )
         ct_model = accelerator.prepare(ct_model)
         accelerator.print("  Color-transfer method ready")
-
     # ---- RetriStyle / StyleID diffusion (lazy) ------------------------------
     retristyle_infer = None
     if args.tta_method == "retristyle":
         accelerator.print("Initialising StyleID diffusion...")
         retristyle_infer = StyleIDMethod()
         accelerator.print("  StyleID diffusion ready")
+    # ---- Adain based Styletransfer ------------------------------------------
+    if args.tta_method == "adain_tta":
+        accelerator.print("Initialising AdaIN...")
+        retristyle_infer = AdaINMethod(pretrained_weights=Path(args.method_weights) / "adain.pth")
+        accelerator.print("  AdaIN  ready")
 
     # ---- TENT setup ---------------------------------------------------------
     tent = None
@@ -691,6 +701,8 @@ def build_parser() -> argparse.ArgumentParser:
                    choices=AVAILABLE_TTA_METHODS)
     p.add_argument("--eval_strategy", type=str, default="zero",
                    choices=AVAILABLE_EVAL_STRATEGIES)
+    p.add_argument("--method_weights", type=str, default="./data/models/style_transfer",
+                   help="Path to the methods weights")
 
     # retrieval
     p.add_argument("--retrieval_strategy", type=str, default="random",

@@ -188,12 +188,9 @@ def prepare_dataloaders(
     if classifier == 'dinov2_vitb14' and input_size % 14 != 0:
         raise ValueError(f"DINOv2 requires input_size divisible by 14, got {input_size}")
     
-    if classifier == "ViT-B-16":
-        mean=(0.48145466, 0.4578275, 0.40821073)
-        std=(0.26862954, 0.26130258, 0.27577711)
-    else:
-        mean=NORMALIZATION_MEAN[dataset]
-        std=NORMALIZATION_STD[dataset]
+    stats_name = dataset if not "ViT" in classifier else "ViT"
+    mean=NORMALIZATION_MEAN[stats_name]
+    std=NORMALIZATION_STD[stats_name]
 
     extract = kwargs.get("extraction", False)
 
@@ -266,15 +263,14 @@ def prepare_dataloaders(
     #     train_set = ColorTransferDataset(train_set, transform=train_transform)
 
     if extract and (classifier== "dinov2_vitb14" or classifier== "ViT-B-16"):
-        cache = Path(f"./data/feature_cache/{classifier}")
+        cache = Path(f"./data/embeddings/{classifier}")
         if cache.exists():
             print(f"Loading cached features from {cache}")
             train_data = torch.load(cache / 'train.pt', weights_only=True)
-            x_train = F.normalize(train_data["features"])
-            train_set = TensorDataset(x_train, train_data["labels"])
+            train_set = TensorDataset(train_data["features"], train_data["labels"])
+            
             val_data = torch.load(cache / 'val.pt', weights_only=True)
-            x_val = F.normalize(val_data["features"])
-            val_set = TensorDataset(x_val, val_data["labels"])
+            val_set = TensorDataset(val_data["features"], val_data["labels"])
         else:
             raise FileNotFoundError("Could not find cache dict")
     else:

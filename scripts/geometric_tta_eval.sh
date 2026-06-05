@@ -17,7 +17,7 @@ CLASSIFIER="ViT-B-16"
 EVAL_STRATEGY="zero"
 SEED=$DEFAULT_SEED
 DATASET="imagenet"
-SPLIT="test_r"
+SPLIT="test_r_c26"
 
 while [[ $# -gt 0 ]]; do
     case $1 in

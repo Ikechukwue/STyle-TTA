@@ -242,7 +242,12 @@ def evaluate_single_method(
 def run_evaluation(args: argparse.Namespace):
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-
+    results_path = output_dir / "all_methods_comparison.json" 
+    prev = {}         
+    if results_path.exists():
+        with open(results_path, "r") as f:
+            prev =json.load(f)
+    
     print("="*72)
     print("Style Transfer Method Evaluation")
     print("="*72)
@@ -293,6 +298,9 @@ def run_evaluation(args: argparse.Namespace):
             method_list = [m for m in method_list if m in args.methods]
 
         for method_name in method_list:
+            if args.skip and method_name in prev:
+                continue
+
             # Determine weights path
             if method_name in TRAINING_FREE_METHODS:
                 weights_path = None
@@ -329,7 +337,7 @@ def run_evaluation(args: argparse.Namespace):
                       f"({elapsed:.0f}s)")
 
     # Save combined results
-    results_path = output_dir / "all_methods_comparison.json"
+    
     with open(results_path, "w") as f:
         json.dump(all_results, f, indent=2, default=str)
     print(f"\n  [saved] {results_path}")
@@ -360,7 +368,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--data_path", type=str, required=True)
-    p.add_argument("--weights_dir", type=str, default="/data/local/retristyle/models/style_transfer")
+    p.add_argument("--weights_dir", type=str, default="./data/models/style_transfer")
     p.add_argument("--output_dir", type=str, default="./results/style_transfer_eval")
     p.add_argument("--content_dataset", type=str, default="imagenet")
     p.add_argument("--content_split", type=str, default="test_r")
@@ -370,6 +378,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--n_style", type=int, default=40)
     p.add_argument("--input_size", type=int, default=256)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--skip", type=bool, default=False)
     p.add_argument("--methods", nargs="*", default=None,
                    help="Specific methods to evaluate (default: all)")
     return p

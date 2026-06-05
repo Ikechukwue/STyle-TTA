@@ -42,7 +42,7 @@ def model_run(set_A, set_B, common_classes, model_name, groups_A, groups_B, devi
     torch.cuda.empty_cache()
     return model_results_per_class
 
-def model_analysis(set_A, set_B, common_classes, groups_A, groups_B, models, intra):
+def pixel_model_analysis(set_A, set_B, common_classes, groups_A, groups_B, models, intra):
     metrics_report = {}
     device = "cuda" if torch.cuda.is_available() else "cpu"
 

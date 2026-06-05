@@ -27,7 +27,6 @@ Usage::
 """
 
 from __future__ import annotations
-
 from pathlib import Path
 from typing import List, Optional
 from tqdm import tqdm
@@ -91,7 +90,7 @@ class CLIPZeroShotClassifier(nn.Module):
         try:
             # Try to use timm's ImageNet class map
             import json
-            data_dir = 'data/imagenet/imagenet1k'
+            data_dir = Path('./data/imagenet/imagenet1k')
             idx_to_label = data_dir / "imagenet_class_index.json"
             if idx_to_label.exists():
                 with open(idx_to_label) as f:
@@ -128,8 +127,9 @@ class CLIPZeroShotClassifier(nn.Module):
         return super().eval()
 
 
+
 class CLIPLinearProbeClassifier(nn.Module):
-    """CLIP visual encoder + trainable linear head."""
+    """CLIP visual encoder + trainable linear head with logit scaling."""
 
     def __init__(
         self,
@@ -149,6 +149,11 @@ class CLIPLinearProbeClassifier(nn.Module):
         self.backbone.eval()
         self.backbone.requires_grad_(False)
 
+        # 1. Grab CLIP's learned logit scale parameter
+        # We clamp or clone it without gradients to keep the linear probe true to form,
+        # or leave requires_grad=True if you want the temperature to adapt to your dataset.
+        self.logit_scale = nn.Parameter(self.backbone.logit_scale.data.clone(), requires_grad=False)
+
         # Determine feature dimension
         with torch.no_grad():
             dummy = torch.randn(1, 3, 224, 224, device=self.device)
@@ -162,24 +167,21 @@ class CLIPLinearProbeClassifier(nn.Module):
         return self.backbone.encode_image(images)
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
-        # If input is 4D (B, C, H, W), it's an image: run through backbone
-        x = images
-        if x.ndim == 4:
+        # If 4D image, pass through the backbone to get features
+        if images.ndim == 4:
             with torch.no_grad():
                 features = self.backbone.encode_image(images)
-        # If input is 2D (B, D), it's already features: skip backbone
         else:
-            features = x
+            features = images
+
+        # CLIP works best when features are L2 normalized 
+        features = F.normalize(features, p=2, dim=-1)
         
-        with torch.no_grad():
-            norms = torch.norm(features, p=2, dim=-1)
-            is_normalized = torch.allclose(norms, torch.ones_like(norms), atol=1e-4)
-
-        if not is_normalized:
-            features = F.normalize(features, p=2, dim=-1)
-                
-        return self.head(features)
-
+        # 2. Compute raw logits
+        logits = self.head(features)
+        
+        # 3. Scale logits by CLIP's temperature before returning to CrossEntropyLoss
+        return logits * self.logit_scale.exp()
 
 # ====================================================================
 # DINOv2 Linear Probe Classifier
@@ -219,26 +221,14 @@ class DINOv2Classifier(nn.Module):
         #self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
-
-        # If input is 4D (B, C, H, W), it's an image: run through backbone
-        x = images
-        if x.ndim == 4:
+        # If 4D image, pass through the backbone to get features
+        if images.ndim == 4:
             with torch.no_grad():
-                features = self.backbone(x)
-        # If input is 2D (B, D), it's already features: skip backbone
+                features = self.backbone(images)
         else:
-            features = x
-
-        with torch.no_grad():
-            norms = torch.norm(features, p=2, dim=-1)
-            is_normalized = torch.allclose(norms, torch.ones_like(norms), atol=1e-4)
-
-        if not is_normalized:
-            features = F.normalize(features, p=2, dim=-1)
+            features = images
         
         return self.head(features)
-
-
 # ====================================================================
 # Factory functions
 # ====================================================================
@@ -271,12 +261,19 @@ def load_clip_classifier(
         )
         if weights_path is not None and Path(weights_path).exists():
             state = torch.load(weights_path, map_location=device, weights_only=True)
-            if "head" in state:
-                model.head.load_state_dict(state["head"])
+            head_state = {
+                k.replace("head.", ""): v
+                for k, v in state.items()
+                if k.startswith("head.")
+            }
+
+            if head_state:
+                model.head.load_state_dict(head_state)
             else:
+                # Legacy format: state dict is already just the head
                 model.head.load_state_dict(state, strict=False)
-        
-    model.eval()
+                    
+                model.eval()
     return model
 
 
@@ -294,10 +291,18 @@ def load_dinov2_classifier(
     )
     if weights_path is not None and Path(weights_path).exists():
         state = torch.load(weights_path, map_location=device, weights_only=True)
-        if "head" in state:
-            model.head.load_state_dict(state["head"])
+        head_state = {
+            k.replace("head.", ""): v
+            for k, v in state.items()
+            if k.startswith("head.")
+        }
+
+        if head_state:
+            model.head.load_state_dict(head_state)
         else:
-            model.head.load_state_dict(state, strict=False)
+            # Legacy format: state dict is already just the head
+            model.head.load_state_dict(state, strict=False)        
+
 
     model.eval()
     return model
@@ -349,7 +354,7 @@ if __name__=="__main__":
     
     print("Start")
     
-    for model_name in ["ViT-B-16"]:
+    for model_name in ["ViT-B-16", "dinov2_vitb14"]:
         if model_name == "ViT-B-16":
             model = load_clip_classifier(model_name=model_name, num_classes=1000, device="cuda")
             backbone = model.backbone
@@ -357,7 +362,6 @@ if __name__=="__main__":
             model = load_dinov2_classifier(num_classes=1000, device="cuda")
             backbone = model.backbone
         print("Loaded Model")
-        extract = {"extraction": True}
         train_loader, val_loader, _ = prepare_dataloaders(dataset="imagenet", 
                                         data_path="./data",
                                         input_size=224,
@@ -367,7 +371,6 @@ if __name__=="__main__":
                                         augmentations=[],
                                         g=g,
                                         classifier=model_name,
-                                        kwargs=extract
                                         )
         print("Prepared Dataloader successfully")
         # Train Features
@@ -375,7 +378,7 @@ if __name__=="__main__":
         _ = extract_and_cache_features(
             backbone=backbone,
             dataloader=train_loader,
-            cache_path=f"./data/feature_cache/{model_name}/train.pt",
+            cache_path=f"./data/embeddings/{model_name}/train.pt",
             device=device
         )
 
@@ -384,6 +387,6 @@ if __name__=="__main__":
         _ = extract_and_cache_features(
             backbone=backbone,
             dataloader=val_loader,
-            cache_path=f"./data/feature_cache/{model_name}/val.pt",
+            cache_path=f"./data/embeddings/{model_name}/val.pt",
             device=device
         ) 

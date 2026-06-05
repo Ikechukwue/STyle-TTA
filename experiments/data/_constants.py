@@ -11,6 +11,13 @@ Constant values.
 # ============================================
 # Mean calculated from the training sets
 NORMALIZATION_MEAN = {
+
+    #######################
+    # Classifier-specific 
+    "ViT" : (0.48145466, 0.4578275, 0.40821073),
+
+    #######################
+
     # Camelyon17WILDS (default dataset splits)
     "camelyon17wilds": (0.7440, 0.5895, 0.7214),
 
@@ -86,6 +93,13 @@ NORMALIZATION_MEAN = {
 
 # STD calculated from the training sets
 NORMALIZATION_STD = {
+
+    #######################
+    # Classifier-specific 
+    "ViT" : (0.26862954, 0.26130258, 0.27577711),
+
+    #######################
+
     # Camelyon17WILDS (default dataset splits)
     "camelyon17wilds": (0.1787, 0.2131, 0.1721),
 

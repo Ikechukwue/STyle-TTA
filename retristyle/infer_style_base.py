@@ -755,3 +755,4 @@ class StyleIDMethod:
             import itertools
             return itertools.chain(self.vae.parameters(), self.unet.parameters())
         return iter([])
+

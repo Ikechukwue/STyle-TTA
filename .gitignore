@@ -56,12 +56,14 @@ retristyle-*.sif
 docker-compose.override.yml
 
 # Data directories (large files)
-data/
+**/data/*
 checkpoints/
 results/
 logs/
 models/
 assets/
+*.pdf
+*.o*
 # Make sure it doesn't ignore that folder 
 !**/data/__init__.py
 !experiments/data/*.py
@@ -82,7 +84,7 @@ assets/
 .Trash-*
 
 # Auto-generated HPC scripts
-scripts/generated/
+scripts/
 
 # Temporary files
 *.tmp

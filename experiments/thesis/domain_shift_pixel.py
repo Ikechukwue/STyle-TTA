@@ -258,13 +258,18 @@ def domain_analysis(args):
 
 
 def get_args():
-    parser = argparse.ArgumentParser(description="Domain Analysis: ImageNet-1k vs ImageNet-1k")
+    parser = argparse.ArgumentParser(description="Domain Analysis: ImageNet-1k vs ImageNet Subsets")
 
     # --- Data Paths ---
     parser.add_argument("--dataset", type=str, default="imagenet", 
                         help="Dataset name")
     parser.add_argument("--data_path", type=str, default= "./data", 
                         help="Path to the root data directory")
+    parser.add_argument("--embedding_path", type=str, default= "./data/embeddings", 
+                        help="Path to the root embeddings directory")
+    #---- Work Configs ------
+    parser.add_argument("--space", type=str, default= "embedding", choices=["pixel", "embedding"], 
+                        help="On which of the two levels (embedding or pixel) should it be compared")
     parser.add_argument("--split", type=str, default="test_r", 
                         help="First split to compare (e.g., train, val)")
 

@@ -44,7 +44,7 @@ def setup_style():
         "axes.labelsize": 12,
     })
 
-def get_names(split:str,
+def get_names(split:str = "test_r",
                 subset_json: str = "./data/imagenet/imagenet_subsets.json",
                 name_json:str = "./data/imagenet/imagenet1k/imagenet_class_index.json" ):
     all_ids = load_json(name_json)

@@ -328,6 +328,7 @@ def prepare_dataloader(
     batch_size: int,
     num_workers: int,
     g: Generator,
+    classifier: Optional[str] = None,
 ) -> DataLoader:
     """
     Prepare a dataloader for evaluation.
@@ -345,11 +346,14 @@ def prepare_dataloader(
         DataLoader for the specified split
     """
     # Standard evaluation transform
+    # CLIP models (for now only those with ViT) need their own std,mean values
+    stats_name = dataset if not "ViT" in classifier else "ViT"
+
     transform = v2.Compose([
         v2.ToImage(),
         v2.ToDtype(torch.float32, scale=True),
         ResizeWhileRetainAspectRatio(size=input_size),
-        v2.Normalize(mean=NORMALIZATION_MEAN[dataset], std=NORMALIZATION_STD[dataset])
+        v2.Normalize(mean=NORMALIZATION_MEAN[stats_name], std=NORMALIZATION_STD[stats_name])
     ])
     
     # Load dataset
@@ -376,7 +380,7 @@ def prepare_dataloader(
 # =============================================================================
 # CLIP / DINOv2 classifier names
 # =============================================================================
-_CLIP_CLASSIFIERS = {"ViT-B-16", "ViT-L-14", "ViT-B-32"}
+_CLIP_CLASSIFIERS = {"ViT-B-16", "ViT-L-14", "ViT-B-32", "ViT-B-16@Zero"}
 _DINOV2_CLASSIFIERS = {"dinov2_vitb14", "dinov2_vitl14", "dinov2_vits14", "dinov2_vitg14"}
 
 
@@ -782,9 +786,14 @@ def evaluate_classifier(
     
     # Load model
     accelerator.print(f"\nLoading model...")
+    if "@" in classifier:
+        classifier_name = classifier.split("@")[0]
+    else:
+        classifier_name = classifier
+        
     model = load_classifier(
         weights_path=weights_path,
-        classifier=classifier,
+        classifier=classifier_name,
         num_classes=num_classes,
         device=accelerator.device
     )
@@ -815,7 +824,8 @@ def evaluate_classifier(
             input_size=input_size,
             batch_size=batch_size,
             num_workers=num_workers,
-            g=g
+            g=g,
+            classifier=classifier_name
         )
         dataloader = accelerator.prepare(dataloader)
         

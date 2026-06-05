@@ -299,7 +299,7 @@ def main():
             )
             method_name = args.color_method or "adain"
             accelerator.print(f"Loading color-transfer method: {method_name}")
-            color_transfer_fn, _ = create_color_transfer_method(method_name)
+            color_transfer_fn, _ = create_color_transfer_method(method_name, args.method_weights)
 
     # ---- effective view count -----------------------------------------------
     if args.tta_method in RETRIEVAL_TTA_METHODS:

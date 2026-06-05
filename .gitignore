@@ -84,7 +84,7 @@ assets/
 .Trash-*
 
 # Auto-generated HPC scripts
-scripts/
+scripts/generated/
 
 # Temporary files
 *.tmp

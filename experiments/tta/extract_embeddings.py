@@ -128,18 +128,21 @@ def extract_embeddings(
     )
 
     all_emb: List[torch.Tensor] = []
-    for imgs, _ in tqdm(loader, desc=f"Embedding ({model_name})", leave=False):
+    all_labels = []
+    for imgs, labels in tqdm(loader, desc=f"Embedding ({model_name})", leave=False):
         # imgs: (B, 3, H, W) in [0,1] — apply timm transforms per-image
         batch = torch.stack([tfm(img) for img in imgs]).to(dev)
         emb = model(batch)  # (B, D)
         all_emb.append(emb.cpu())
+        all_labels.append(labels)
 
+    labels = torch.cat(all_labels, dim=0)
     embeddings = torch.cat(all_emb, dim=0)
     embeddings = F.normalize(embeddings.float(), dim=1)
 
     del model
     torch.cuda.empty_cache()
-    return embeddings
+    return embeddings, labels
 
 
 def extract_and_cache(
@@ -176,16 +179,16 @@ def extract_and_cache(
         dataset_name=dataset_name,
         data_path=data_path,
         split=split,
-        transform=transform,
+        transform=v2.ToImage(),
     )
 
-    embs = extract_embeddings(
+    embs, labels = extract_embeddings(
         ds, model_name=model_name,
         batch_size=batch_size, num_workers=num_workers, device=device,
     )
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({"embeddings": embs, "model_name": model_name, "split": split,
+    torch.save({"embeddings": embs, "labels":labels,"model_name": model_name, "split": split,
                  "dataset": dataset_name, "n": embs.shape[0], "dim": embs.shape[1]}, out)
     print(f"  [saved] {out}  ({embs.shape[0]} × {embs.shape[1]})")
     return out

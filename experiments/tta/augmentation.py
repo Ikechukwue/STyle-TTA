@@ -256,7 +256,7 @@ def augment_views(
         # forward pass (one content inversion + one batched style
         # inversion + one batched sampling).
         if (
-            tta_method in ("retristyle", "adain_tta")
+            tta_method in ("retristyle")
             and chunked
             and B > 1
         ):
@@ -285,13 +285,13 @@ def augment_views(
                 img_native = _resize(image, native_size)
                 ref_native = _resize(ref, native_size)
 
-                if tta_method == "color_tta":
+                if tta_method in ("color_tta", "adain_tta"):
                     if color_transfer_fn is None:
                         raise ValueError(
                             "color_transfer_fn required for color_tta"
                         )
                     out = color_transfer_fn(img_native, ref_native)
-                elif tta_method in ("retristyle", "adain_tta"):
+                elif tta_method in ("retristyle"):
                     if retristyle_infer is None:
                         raise ValueError(
                             "retristyle_infer required for retristyle"

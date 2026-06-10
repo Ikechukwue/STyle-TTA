@@ -81,7 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
                    choices=["retristyle", "color_tta", "adain_tta",
                             "geometric", "color_jitter", "rand_augment",
                             "trivial_augment", "aug_mix", "auto_augment"])
-    p.add_argument("--method_weights", type=str, default=".data/models",
+    p.add_argument("--method_weights", type=str, default="./data/models",
                    help="Path to method model weights")
     p.add_argument("--color_method", type=str, default=None,
                    help="Style transfer method name (for color_tta)")

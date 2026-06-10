@@ -112,15 +112,37 @@ def extract_embeddings(
     """
     import timm
     from timm.data import resolve_model_data_config, create_transform
-
+    from experiments.clip_classifier import load_clip_classifier, load_dinov2_classifier
+    import torchvision.transforms as T
     dev = torch.device(device if torch.cuda.is_available() else "cpu")
+    if model_name in ["ViT-B-16", "dinov2_vitb14"]:
+        if model_name == "ViT-B-16":
+            clip_model = load_clip_classifier(model_name=model_name, num_classes=0, device=dev)
 
-    model = timm.create_model(
-        model_name, pretrained=True, num_classes=0,
-    ).to(dev).eval()
+            tfm = T.Compose([
+                T.Resize(224, interpolation=T.InterpolationMode.BICUBIC),
+                T.CenterCrop(224),
+                T.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), 
+                            std=(0.26862954, 0.26130258, 0.27577711))
+            ])
+        elif model_name == "dinov2_vitb14":
 
-    data_cfg = resolve_model_data_config(model)
-    tfm = create_transform(**data_cfg, is_training=False)
+            clip_model = load_dinov2_classifier(num_classes=0, device=dev)
+            tfm = T.Compose([
+                T.Resize(224, interpolation=T.InterpolationMode.BICUBIC),
+                T.CenterCrop(224),
+                T.Normalize(mean=(0.485, 0.456, 0.406), 
+                            std=(0.229, 0.224, 0.225))
+            ])
+        model = clip_model.backbone.eval()
+        emb_tuple = True
+    else:
+        model = timm.create_model(
+            model_name, pretrained=True, num_classes=0,
+        ).to(dev).eval()
+        data_cfg = resolve_model_data_config(model)
+        tfm = create_transform(**data_cfg, is_training=False)
+        emb_tuple = False
 
     loader = DataLoader(
         dataset_obj, batch_size=batch_size, shuffle=False,
@@ -132,7 +154,8 @@ def extract_embeddings(
     for imgs, labels in tqdm(loader, desc=f"Embedding ({model_name})", leave=False):
         # imgs: (B, 3, H, W) in [0,1] — apply timm transforms per-image
         batch = torch.stack([tfm(img) for img in imgs]).to(dev)
-        emb = model(batch)  # (B, D)
+        res = model(batch)  # (B, D) if ViT its a tuple of (emb, label)
+        emb = res if not emb_tuple else res[0]
         all_emb.append(emb.cpu())
         all_labels.append(labels)
 
@@ -179,7 +202,7 @@ def extract_and_cache(
         dataset_name=dataset_name,
         data_path=data_path,
         split=split,
-        transform=v2.ToImage(),
+        transform=transform,
     )
 
     embs, labels = extract_embeddings(

@@ -112,14 +112,14 @@ def generate_all_plots(args):
     print("=" * 60)
     print("Result Visualisation")
     print("=" * 60)
-
+    #plot_style_transfer_comparison(results_dir, output_dir, args)
+    plot_accuracy_vs_ece(results_dir, output_dir, args)
     anchors = {
             "best_retrieval": "dino",  # The strategy held constant for Eval/nrefs plots
             "best_eval": "zero",       # The strategy held constant for Retrieval/nrefs plots
-            "best_n_refs": 16          # The count held constant for Retrieval/Eval plots
+            "best_n_refs": 16          # The count held constant for Retrieval/Eval plots^
         }
-    
-    plot_style_transfer_comparison(results_dir, output_dir, args)
+    """
     for method in ['geometric', 'ablation']:
         plot_ablation_bars(results_dir, output_dir, "retrieval", method, args, **anchors)
         plot_ablation_bars(results_dir, output_dir, "eval",method,  args, **anchors)
@@ -129,8 +129,8 @@ def generate_all_plots(args):
                             best_eval=anchors["best_eval"])
     #plot_hybrid_tta(results_dir, output_dir, args)
     plot_accuracy_vs_ece(results_dir, output_dir, args)
-    plot_accuracy_vs_ece(results_dir, output_dir, args)
-
+    
+    """
     #data_a, data_baseline = normalize_data(args)
     #plot_domain_shift_analysis(data_a, data_baseline, output_dir, args)
     #plot_domain_shift_class_scatter_per_group(data_a, data_baseline, output_dir, args)
@@ -149,7 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--results_dir", type=str, default="./results")
     p.add_argument("--output_dir", type=str, default="./figures")
     p.add_argument("--dataset", type=str, default="imagenet")
-    p.add_argument("--split", type=str, default="test_r")
+    p.add_argument("--split", type=str, default="test_r_c26")
     return p
 
 

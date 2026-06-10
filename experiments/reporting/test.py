@@ -107,9 +107,8 @@ def extract_class_metrics(pred_json: dict) -> pd.DataFrame:
             .reset_index()
         )
 
-def load_pipeline_dataset(baseline_path: str, tta_dir: str, classifier: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def load_pipeline_dataset(baseline_path: str, tta_dir: str, classifier: str, method:str = "geometric") -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Loads baseline and dynamically scans directory paths for experimental arrays."""
-        method = 'geometric'
         print("Loading baseline statistics...")
         base_df = extract_class_metrics(load_json(baseline_path))
         base_df = base_df.rename(columns={"acc": "base_acc", "conf": "base_conf", "ent": "base_ent"})

@@ -13,34 +13,37 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-CLASSIFIER="ViT-B-16"
-EVAL_STRATEGY="zero"
-SEED=$DEFAULT_SEED
+CNN_CLASSIFIERS=("densenet121")
+VIT_CLASSIFIERS=("vit_base_patch16_224" "swin_base_patch4_window7_224")
+FM_CLASSIFIERS=("dinov2_vitb14" "ViT-B-16")
+MODELS=("${CNN_CLASSIFIERS[@]}" "${VIT_CLASSIFIERS[@]}" "${FM_CLASSIFIERS[@]}")
+EVAL_STRATEGY="vanilla"
+SEED=(71397589 133560673 265017005)
+VIEWS=(1 32)
 DATASET="imagenet"
-SPLIT="test_r_c26"
+SPLIT="val@test_r"
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --classifier) CLASSIFIER="$2"; shift 2 ;;
-        --eval_strategy) EVAL_STRATEGY="$2"; shift 2 ;;
-        --seed) SEED="$2"; shift 2 ;;
-        --dataset) DATASET="$2"; shift 2 ;;
-        --split) SPLIT="$2"; shift 2 ;;
-        *) echo "Unknown: $1"; exit 1 ;;
-    esac
+for MDL in "${MODELS[@]}"; do
+    for VW in "${VIEWS[@]}"; do
+        for SD in "${SEED[@]}"; do
+            WEIGHTS_PATH="pretrained"
+            
+            if is_pretrained "$MDL"; then
+                WEIGHTS_PATH="$MODEL_DIR/imagenet-$MDL-random_flip-random_resized_crop-seed42.pth"
+            fi
+
+            # 1. FIXED: Now logging the actual loop variable ($MDL) 
+            echo "Geometric TTA: $MDL | $EVAL_STRATEGY | seed=$SD"
+
+            accelerate launch --config_file "${PROJECT_ROOT}/configs/single_gpu_0.yaml" \
+                -m experiments.tta.run_inference \
+                --dataset "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
+                --classifier "$MDL" --weights_path "$WEIGHTS_PATH" \
+                --tta_method geometric --eval_strategy "$EVAL_STRATEGY" \
+                --n_views "$VW" \
+                --seed "$SD" \
+                --output_path "$OUTPUT_PATH/geometric_tta"
+                # 2. FIXED: Passed "$SEED" instead of $DEFAULT_SEED, and added quotes.
+        done
+    done
 done
-
-WEIGHTS_PATH="pretrained"
-if ! is_pretrained "$CLASSIFIER"; then
-    WEIGHTS_PATH="${MODEL_DIR}/${DATASET}-${CLASSIFIER}-none-seed${SEED}.pth"
-fi
-
-echo "Geometric TTA: $CLASSIFIER | $EVAL_STRATEGY | seed=$SEED"
-
-accelerate launch --config_file "${PROJECT_ROOT}/configs/single_gpu_0.yaml" \
-    -m experiments.tta.run_inference \
-    --dataset "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
-    --classifier "$CLASSIFIER" --weights_path "$WEIGHTS_PATH" \
-    --tta_method geometric --eval_strategy "$EVAL_STRATEGY" \
-    --n_views $DEFAULT_N_VIEWS --seed "$SEED" \
-    --output_path "$OUTPUT_PATH/geometric_tta"

@@ -200,6 +200,8 @@ class ImageNet(VisionDataset):
             data = json.load(f)
 
         subset_classes = data.get(sub, [])
+        if not subset_classes:
+            raise ValueError("We are missing the classes in the overview json")
         src_name = split
         src_base = os.path.abspath(os.path.join(root_dir, f'imagenet1k/ILSVRC/Data/CLS-LOC/{src_name}'))
         

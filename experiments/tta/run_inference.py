@@ -185,7 +185,20 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     num_classes = NUM_CLASSES[args.dataset]
     task_type = TASK_TYPE[args.dataset]
     available_splits = DATASET_SPLITS.get(args.dataset, ["train", "val", "test"]) 
-    eval_split = args.split if args.split in available_splits else available_splits[-1]
+    requested_split = args.split
+    
+    if "@" in requested_split:
+        # e.g., "train@test_r" -> a_part="train", b_part="test_r"
+        a_part, b_part = requested_split.split("@")
+        
+        if a_part in ["train", "val"] and (b_part in available_splits):
+            eval_split = requested_split
+        else:
+            eval_split = available_splits[-1]
+            
+    else:
+        # Standard fallback logic for normal single splits
+        eval_split = requested_split if requested_split in available_splits else available_splits[-1]
 
     accelerator.print("=" * 72)
     accelerator.print("RetriStyle-TTA — Unified Inference")
@@ -247,10 +260,13 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     # ---- embedding extraction (dino retrieval only) -------------------------
     embedding_dir = getattr(args, "embedding_dir", None)
     embedding_model = getattr(args, "embedding_model", None) or "vit_base_patch16_dinov3.lvd1689m"
-    augmented_cache_dir = Path(args.augmented_cache) if getattr(args, "augmented_cache", None) else None
-    samples_dir = augmented_cache_dir / f"{args.retrieval_strategy}_{args.dataset}_{args.split}_s{str(args.seed)}"
-    sample_dir = samples_dir if samples_dir.exists() else None
     
+    augmented_cache_dir = Path(args.augmented_cache) if getattr(args, "augmented_cache", None) else None
+    if augmented_cache_dir:
+        samples_dir = augmented_cache_dir / f"{args.retrieval_strategy}_{args.dataset}_{args.split}_s{str(args.seed)}"
+        sample_dir = samples_dir if samples_dir.exists() else None
+    else:
+        sample_dir = None
     if (sample_dir is None
         and args.tta_method in ("adain_tta", "color_tta", "retristyle")
         and args.retrieval_strategy == "dino"

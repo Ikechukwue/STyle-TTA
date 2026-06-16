@@ -18,12 +18,11 @@ export PYTHONWARNINGS="ignore"
 MODELS=(
     "ViT-B-16" 
     "dinov2_vitb14" 
-    )
-    #"ViT-B-16@Zero"
-    #"resnet18" 
-    #"densenet121" 
-    #"swin_base_patch4_window7_224" 
-    #"vit_base_patch16_224" )
+    "ViT-B-16@Zero"
+    "resnet18" 
+    "densenet121" 
+    "swin_base_patch4_window7_224" 
+    "vit_base_patch16_224" )
 AUGMENTATION="none"
 SEED=$DEFAULT_SEED
 DATASET="imagenet"

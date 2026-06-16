@@ -45,7 +45,7 @@ from torchvision.transforms import v2
 from tqdm import tqdm
 
 from retristyle.retrieval.dino_retriever import DEFAULT_EMBEDDING_MODEL
-
+from config.helpers import get_base_image_folder, inject_stylized_images_inplace
 
 # ======================================================================
 # Helpers
@@ -112,7 +112,7 @@ def extract_embeddings(
     """
     import timm
     from timm.data import resolve_model_data_config, create_transform
-    from experiments.clip_classifier import load_clip_classifier, load_dinov2_classifier
+    from experiments.clip_classifier import load_clip_classifier, load_dino_classifier
     import torchvision.transforms as T
     dev = torch.device(device if torch.cuda.is_available() else "cpu")
     if model_name in ["ViT-B-16", "dinov2_vitb14"]:
@@ -125,17 +125,19 @@ def extract_embeddings(
                 T.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), 
                             std=(0.26862954, 0.26130258, 0.27577711))
             ])
+            emb_tuple = True
         elif model_name == "dinov2_vitb14":
 
-            clip_model = load_dinov2_classifier(num_classes=0, device=dev)
+            clip_model = load_dino_classifier(num_classes=0, device=dev)
             tfm = T.Compose([
                 T.Resize(224, interpolation=T.InterpolationMode.BICUBIC),
                 T.CenterCrop(224),
                 T.Normalize(mean=(0.485, 0.456, 0.406), 
                             std=(0.229, 0.224, 0.225))
             ])
+            emb_tuple = False
         model = clip_model.backbone.eval()
-        emb_tuple = True
+        
     else:
         model = timm.create_model(
             model_name, pretrained=True, num_classes=0,
@@ -179,6 +181,7 @@ def extract_and_cache(
     num_workers: int = 4,
     device: str = "cuda",
     force: bool = False,
+    use_stylized: bool = False, 
 ) -> Path:
     """Extract embeddings and save to disk.  Returns the cache path.
 
@@ -204,10 +207,12 @@ def extract_and_cache(
         split=split,
         transform=transform,
     )
+    if use_stylized:
+        inject_stylized_images_inplace(ds)
 
     embs, labels = extract_embeddings(
         ds, model_name=model_name,
-        batch_size=batch_size, num_workers=num_workers, device=device,
+        batch_size=batch_size, num_workers=num_workers, device=device
     )
 
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -280,6 +285,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--device", type=str, default="cuda")
     p.add_argument("--force", action="store_true",
                    help="Re-extract even if cache exists")
+    p.add_argument("--use_style", action="store_true", 
+                   help="Decides if it uses the original or style transfered images" )
     return p
 
 
@@ -299,6 +306,7 @@ def main():
             num_workers=args.num_workers,
             device=args.device,
             force=args.force,
+            use_stylized=args.use_style, 
         )
     print("\nDone.")
 

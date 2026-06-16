@@ -29,12 +29,13 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 import torch
 
-from experiments.reporting.test import load_pipeline_dataset
+from experiments.thesis.reporting.pixel_dashboard import load_pipeline_dataset,  process_summaries, extract_class_metrics, TTAVisualizer
+from config.helpers import load_json
 # ============================================================================
 # Embedding loading
 # ============================================================================
@@ -56,10 +57,11 @@ def load_embeddings(embedding_dir: Path, dataset: str, model_name: str, split: s
     return embs, labels
 
 
-def group_by_class(embeddings: np.ndarray, labels: np.ndarray) -> Dict[int, np.ndarray]:
+def group_by_class(embeddings: np.ndarray, labels: np.ndarray, limit: Optional[int] = None) -> Dict[int, np.ndarray]:
     """Returns {class_id: (N_cls, D)} dict."""
     groups = {}
-    for cls in np.unique(labels):
+    all_labels = np.unique(labels)[:limit]
+    for cls in all_labels:
         groups[int(cls)] = embeddings[labels == cls]
     return groups
 
@@ -119,7 +121,7 @@ def kl_gaussian_symmetric(X: np.ndarray, Y: np.ndarray, eps: float = 1e-6) -> fl
     var_x = X.var(0) + eps
     var_y = Y.var(0) + eps
     mu_x, mu_y = X.mean(0), Y.mean(0)
-
+    d = X.shape[1]
     def kl_diag(mu_p, var_p, mu_q, var_q):
         # KL(N(mu_p, diag(var_p)) || N(mu_q, diag(var_q)))
         return 0.5 * np.sum(
@@ -127,8 +129,8 @@ def kl_gaussian_symmetric(X: np.ndarray, Y: np.ndarray, eps: float = 1e-6) -> fl
             + var_p / var_q
             + (mu_p - mu_q) ** 2 / var_q
             - 1
-        )
-    d = X.shape[1]
+        ) 
+    
     return float(0.5 * (kl_diag(mu_x, var_x, mu_y, var_y) + kl_diag(mu_y, var_y, mu_x, var_x)) / d)
 
 
@@ -143,7 +145,7 @@ def compute_class_metrics(
         X = groups_A[cls]
         Y = groups_B[cls]
         # Balance sample counts
-        n = min(len(X), len(Y), 30)
+        n = min(len(X), len(Y))
         X, Y = X[:n], Y[:n]
         results[cls] = {
             "mmd":         mmd_centroid(X, Y),
@@ -202,8 +204,9 @@ def plot_umap(
     embs_B: np.ndarray, labels_B: np.ndarray, name_B: str,
     backbone: str,
     output_path: Path,
-    max_points: int = 3000,
+    max_points: int = 2500,
     seed: int = 42,
+    limit_cls: Optional[int] = None,
 ):
     try:
         import umap
@@ -214,15 +217,20 @@ def plot_umap(
         print("  [skip UMAP] install umap-learn and matplotlib")
         return
 
-    def subsample(embs, labels, n):
+    def subsample(embs, labels, n, limit_cls):
+        if limit_cls:
+            unique_classes = np.unique(labels)[:limit_cls]
+            mask = np.isin(labels, unique_classes)
+            embs = embs[mask]
+            labels = labels[mask]
         if len(embs) <= n:
             return embs, labels
         idx = np.random.default_rng(seed).choice(len(embs), n, replace=False)
         return embs[idx], labels[idx]
 
     per_split = max_points // 2
-    embs_A, labels_A = subsample(embs_A, labels_A, per_split)
-    embs_B, labels_B = subsample(embs_B, labels_B, per_split)
+    embs_A, labels_A = subsample(embs_A, labels_A, per_split, limit_cls)
+    embs_B, labels_B = subsample(embs_B, labels_B, per_split, limit_cls)
 
     all_embs = np.concatenate([embs_A, embs_B], axis=0)
     domain_labels = np.array([0] * len(embs_A) + [1] * len(embs_B))
@@ -283,6 +291,7 @@ def plot_umap(
     plt.savefig(class_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  [saved] {class_path}")
+
 # ============================================================================
 # Main analysis
 # ============================================================================
@@ -296,6 +305,7 @@ def analyse_backbone(
     split_val: str,       # e.g. "val@test_r"
     output_dir: Path,
     run_umap: bool = True,
+    limit: Optional[int] = None, 
 ):
     print(f"\n{'='*60}")
     print(f"Backbone: {backbone}")
@@ -311,12 +321,12 @@ def analyse_backbone(
     print(f"  {split_val:20s}:   {embs_val.shape}")
 
     # Group by class
-    groups_domain = group_by_class(embs_domain, labels_domain)
-    groups_train  = group_by_class(embs_train,  labels_train)
-    groups_val    = group_by_class(embs_val,    labels_val)
+    groups_domain = group_by_class(embs_domain, labels_domain, limit)
+    groups_train  = group_by_class(embs_train,  labels_train, limit)
+    groups_val    = group_by_class(embs_val,    labels_val, limit)
 
     # Per-class metrics
-    print("  Computing domain gap (test_r vs train)...")
+    print("  Computing domain gap (split vs train)...")
     domain_cls = compute_class_metrics(groups_domain, groups_train)
 
     print("  Computing baseline gap (val vs train)...")
@@ -355,14 +365,23 @@ def analyse_backbone(
 
     # UMAP
     if run_umap:
-        out_umap = output_dir / f"{backbone}_umap.png"
+        out_umap = output_dir / f"out_{backbone}_umap.png"
         plot_umap(
             embs_domain, labels_domain, split_domain,
             embs_train,  labels_train,  split_train,
             backbone=backbone,
             output_path=out_umap,
+            limit_cls=limit, 
         )
 
+        in_umap = output_dir / f"in_{backbone}_umap.png"
+        plot_umap(
+            embs_val, labels_val, split_val,
+            embs_train,  labels_train,  split_train,
+            backbone=backbone,
+            output_path=in_umap,
+            limit_cls=limit,
+        )
     # Quick summary print
     dg = results["domain_gap"]["global"]
     bg = results["baseline_gap"]["global"]
@@ -424,7 +443,7 @@ def main():
     parser.add_argument("--embedding_dir", type=str, default="./data/embeddings")
     parser.add_argument("--dataset",       type=str, default="imagenet")
     parser.add_argument("--output_dir",    type=str, default="./results/domain_gap/feature_space")
-    parser.add_argument("--split_domain",  type=str, default="test_r",
+    parser.add_argument("--split_domain",  type=str, default="test_r_c26",
                         help="The OOD split to evaluate")
     parser.add_argument("--split_train",   type=str, default="train@test_r",
                         help="In-domain training reference split")
@@ -434,25 +453,35 @@ def main():
         "resnet18"])
     parser.add_argument("--no_umap", action="store_true",
                         help="Skip UMAP plots")
+    parser.add_argument("--limit_cls",type=int, default=26, 
+                        help="Set a limit on how many classes should be included")
     args = parser.parse_args()
 
-    output_dir = Path(args.output_dir)
+    split_domain = args.split_domain #if args.limit_cls != 26 else "test_r_c26"
+
+    output_dir = Path(args.output_dir) / f"{split_domain}"
+    if args.limit_cls:
+        output_dir = output_dir / f"{str(args.limit_cls)}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     all_results = {}
-    for backbone in args.backbones:
+    base_results = {}
+    from config.constants import ALL_CLASSIFIERS
+    for backbone in ALL_CLASSIFIERS:
         try:
             result = analyse_backbone(
                 backbone=backbone,
                 embedding_dir=Path(args.embedding_dir),
                 dataset=args.dataset,
-                split_domain=args.split_domain,
+                split_domain=split_domain,
                 split_train=args.split_train,
                 split_val=args.split_val,
                 output_dir=output_dir,
                 run_umap=not args.no_umap,
+                limit=args.limit_cls
             )
             all_results[backbone] = result["domain_gap"]["global"]
+            base_results[backbone] = result["baseline_gap"]["global"]
         except FileNotFoundError as e:
             print(f"  [skip] {backbone}: {e}")
 
@@ -461,15 +490,34 @@ def main():
         summary_path = output_dir / "cross_backbone_summary.json"
         with open(summary_path, "w") as f:
             json.dump(all_results, f, indent=2)
-        print(f"\n[saved] Cross-backbone summary → {summary_path}")
-
-        print(f"\n{'Backbone':<35} {'MMD':>8} {'W2':>8} {'KL':>8}")
-        print("-" * 62)
-        for bb, g in all_results.items():
-            print(f"{bb:<35} {g.get('mmd_mean', float('nan')):>8.4f} "
-                  f"{g.get('wasserstein_mean', float('nan')):>8.4f} "
-                  f"{g.get('kl_symmetric_mean', float('nan')):>8.4f}")
-
+        print(f"{'Backbone':<30} | {'MMD':>8} {'W2':>8} {'KL':>8} | {'MMD':>8} {'W2':>8} {'KL':>8}")
+        print("-" * 95)
+        
+        for bb in all_results.keys():
+            dg = all_results[bb]
+            bg = base_results.get(bb, {})
+            
+            # Extract absolute values
+            abs_mmd = dg.get('mmd_mean', float('nan'))
+            abs_w2 = dg.get('wasserstein_mean', float('nan'))
+            abs_kl = dg.get('kl_symmetric_mean', float('nan'))
+            
+            # Compute net gaps to baseline
+            diff_mmd = abs_mmd - bg.get('mmd_mean', float('nan'))
+            diff_w2 = abs_w2 - bg.get('wasserstein_mean', float('nan'))
+            diff_kl = abs_kl - bg.get('kl_symmetric_mean', float('nan'))
+            
+            # Clamping long backbone strings to maintain crisp column alignments
+            bb_short = bb if len(bb) <= 30 else f"...{bb[-27:]}"
+            
+            print(f"{bb_short:<30} | "
+                  f"{abs_mmd:>8.4f} "
+                  f"{abs_w2:>8.4f} "
+                  f"{abs_kl:>8.4f} | "
+                  f"{diff_mmd:>8.4f} "
+                  f"{diff_w2:>8.4f} "
+                  f"{diff_kl:>8.4f}")
+        print("=" * 110)
 
 if __name__ == "__main__":
     main()

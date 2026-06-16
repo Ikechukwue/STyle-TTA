@@ -41,7 +41,7 @@ from experiments.utils.reproducibility import random_seed, worker_seed
 from experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
 from experiments.utils.training import calculate_passed_time, get_wandb_run_id, get_best_val_loss, get_epochs_no_improve, save_latest_checkpoint, rename_latest_to_final, save_model, get_resume_epoch
 from experiments.classifier_evaluation import load_classifier
-
+from config.constants import PRETRAINED_CLASSIFIERS
 def build_augmentation_transforms(
     augmentations: List[str],
     input_size: int,
@@ -262,7 +262,8 @@ def prepare_dataloaders(
     #     train_set = create_dataset(..., transform=None, ...)
     #     train_set = ColorTransferDataset(train_set, transform=train_transform)
 
-    if extract and (classifier== "dinov2_vitb14" or classifier== "ViT-B-16"):
+    if extract and classifier in PRETRAINED_CLASSIFIERS:
+        classifier = classifier.replace(".", "_") if "." in classifier else classifier
         cache = Path(f"./data/embeddings/{classifier}")
         if cache.exists():
             print(f"Loading cached features from {cache}")
@@ -653,88 +654,6 @@ def validate_one_epoch(
     
     return metrics
 
-def train_lbfgs(
-    train_cache: str,
-    val_cache: str,
-    num_classes: int,
-    device: torch.device,
-    num_iter: int = 50,
-    output_path: str = "./data/models",
-    run_name: str = "clip_lbfgs"
-):
-    # Load full feature cache into GPU
-    print("Loading features into GPU...")
-    train_data = torch.load(train_cache, weights_only=True)
-    val_data   = torch.load(val_cache,   weights_only=True)
-
-    X_train = F.normalize(train_data["features"], dim=-1).to(device)
-    y_train = train_data["labels"].squeeze().long().to(device)
-    #X_val   = F.normalize(val_data["features"],   dim=-1).to(device)
-    y_val   = val_data["labels"].squeeze().long().to(device)
-    feat_dim   = X_train.shape[1]
-    print(f"Train: {X_train.shape}, Val: {X_val.shape}")
-
-    # Linear head
-    head = nn.Linear(feat_dim, num_classes).to(device)
-
-    optimizer = torch.optim.LBFGS(
-        head.parameters(),
-        lr=1.0,
-        max_iter=100,
-        line_search_fn='strong_wolfe'
-    )
-
-    best_val_acc = 0.0
-    best_val_loss = torch.inf
-    output_path = Path(output_path)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    def closure():
-        optimizer.zero_grad()
-        logits = head(X_train)
-        loss = F.cross_entropy(logits, y_train)
-        loss.backward()
-        return loss
-
-    for i in range(num_iter):
-        # Train step
-        head.train()
-        train_loss = optimizer.step(closure)
-
-        # Validation
-        head.eval()
-        with torch.no_grad():
-            # Train metrics
-            train_logits = head(X_train)
-            train_preds  = train_logits.argmax(dim=1)
-            train_acc    = (train_preds == y_train).float().mean().item()
-
-            # Val metrics
-            val_logits = head(X_val)
-            val_loss   = F.cross_entropy(val_logits, y_val).item()
-            val_preds  = val_logits.argmax(dim=1)
-            val_acc    = (val_preds == y_val).float().mean().item()
-
-        print(
-            f"Iter [{i+1}/{num_iter}] "
-            f"Train Loss: {train_loss:.4f} Acc: {train_acc:.4f} | "
-            f"Val Loss: {val_loss:.4f} Acc: {val_acc:.4f}"
-        )
-
-        # Save best model
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_val_acc  = val_acc
-            torch.save(
-                {"head": head.state_dict(), "iter": i+1, "val_acc": val_acc},
-                output_path / f"{run_name}_best.pth"
-            )
-            print(f"  ✓ Saved best model (val_acc={val_acc:.4f})")
-
-    print(f"\nDone. Best val acc: {best_val_acc:.4f}")
-    return head
-
-
 
 def train(
     dataset: str,
@@ -805,7 +724,9 @@ def train(
     if 'color_transfer' in augmentations:
         prob_percent = int(color_transfer_prob * 100)
         aug_str = f"{aug_str}-{color_transfer_space}-direct-{color_transfer_method}-{prob_percent}percent"
-    run_name = f"{dataset}-{classifier}-{aug_str}-seed{seed}"
+    
+    classifier_name = classifier.replace(".", "_") if "." in classifier else classifier
+    run_name = f"{dataset}-{classifier_name}-{aug_str}-seed{seed}"
 
     latest_checkpoint_path = checkpoint_path / f"{run_name}_latest"
     final_model_path = output_path / f"{run_name}.pth"
@@ -929,7 +850,7 @@ def train(
     # Create model
     accelerator.print(f"Creating model: {classifier}")
     num_classes = NUM_CLASSES[dataset]
-    if classifier == 'ViT-B-16' or classifier == 'dinov2_vitb14':
+    if classifier in PRETRAINED_CLASSIFIERS:
         model = load_classifier(
             classifier=classifier,
             num_classes=num_classes,

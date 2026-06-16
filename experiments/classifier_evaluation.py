@@ -239,7 +239,7 @@ def compute_metrics(
         y_true: Ground truth labels
         y_pred: Predicted probabilities (softmax/sigmoid output)
         num_classes: Number of classes
-        task_type: Task type (\"multi-class\", \"multi-label\", etc.)
+        task_type: Task type ("multi-class", "multi-label", etc.)
 
     Returns:
         Dictionary with accuracy, balanced_accuracy, auc, and ece
@@ -249,25 +249,22 @@ def compute_metrics(
     
     if task_type == "multi-label":
         # Multi-label classification
-        # Following MedMNIST evaluator: per-label metrics averaged
         y_pred_labels = (y_pred > 0.5).astype(int)
         n_labels = y_true.shape[1]
 
-        # Per-label accuracy averaged (MedMNIST convention)
         acc_sum = 0.0
         for i in range(n_labels):
             acc_sum += accuracy_score(y_true[:, i], y_pred_labels[:, i])
         accuracy = acc_sum / n_labels
         balanced_acc = accuracy  # Not applicable for multi-label
 
-        # Per-label AUC averaged (MedMNIST convention)
         try:
             auc_sum = 0.0
             for i in range(n_labels):
                 auc_sum += roc_auc_score(y_true[:, i], y_pred[:, i])
             auc = auc_sum / n_labels
         except ValueError:
-            auc = 0.0  # Handle edge cases (e.g., single-class labels)
+            auc = 0.0 
             
     elif num_classes == 2 or task_type in ["binary-class"]:
         # Binary classification
@@ -288,35 +285,51 @@ def compute_metrics(
         balanced_acc = balanced_accuracy_score(y_true_squeezed, y_pred_labels)
         
         try:
-            # Check array scale constraints
             if len(y_true_squeezed) > 30000:
                 print(f"  [Note] Dataset large ({len(y_true_squeezed)} samples). Stratifying 30k items for AUC...")
-                
-                # train_test_split will keep class proportions perfectly intact
                 _, y_true_sub, _, y_pred_sub = train_test_split(
                     y_true_squeezed, 
                     y_pred, 
-                    test_size=30000,            # Force the exact evaluation size you want
-                    stratify=y_true_squeezed,   # This is the magic parameter
+                    test_size=30000,
+                    stratify=y_true_squeezed,   
                     random_state=42
-                    )
+                )
             else:
-
                 y_true_sub = y_true_squeezed
                 y_pred_sub = y_pred 
-            all_classes = np.arange(num_classes) 
-            auc = roc_auc_score(y_true_sub, y_pred_sub, multi_class="ovr", labels=all_classes)
+
+            # --- THE FIX STARTS HERE ---
+            
+            # 1. Identify which classes actually exist in this subset
+            active_classes = np.sort(np.unique(y_true_sub))
+            
+            # 2. Slice the 1,000-column predictions down to just the active columns
+            y_pred_sliced = y_pred_sub[:, active_classes]
+            
+            # 3. Safely re-normalize so rows sum to 1.0 (avoiding 0/0 division if completely masked)
+            row_sums = y_pred_sliced.sum(axis=1, keepdims=True)
+            row_sums = np.where(row_sums == 0, 1e-9, row_sums)
+            y_pred_sliced = y_pred_sliced / row_sums
+            
+            # 4. Compute closed-set AUC
+            auc = roc_auc_score(
+                y_true_sub, 
+                y_pred_sliced, 
+                multi_class="ovr", 
+                labels=active_classes
+            )
+            # --- THE FIX ENDS HERE ---
+
         except Exception as e:
             print(f"  [Warning] Global AUC calculation fallback triggered: {e}")
             auc = 0.0
+
     return {
         'accuracy': float(accuracy),
         'balanced_accuracy': float(balanced_acc),
         'auc': float(auc),
         'ece': float(ece)
     }
-
-
 # =============================================================================
 # Data Loading
 # =============================================================================
@@ -381,7 +394,7 @@ def prepare_dataloader(
 # CLIP / DINOv2 classifier names
 # =============================================================================
 _CLIP_CLASSIFIERS = {"ViT-B-16", "ViT-L-14", "ViT-B-32", "ViT-B-16@Zero"}
-_DINOV2_CLASSIFIERS = {"dinov2_vitb14", "dinov2_vitl14", "dinov2_vits14", "dinov2_vitg14"}
+_DINOV2_CLASSIFIERS = {"dinov2_vitb14", "dinov2_vitl14", "dinov2_vits14", "dinov2_vitg14", "vit_base_patch16_dinov3.lvd1689m"}
 
 
 # =============================================================================
@@ -465,8 +478,8 @@ def load_classifier(
 
     # ---- DINOv2 models (via torch.hub) --------------------------------------
     if classifier in _DINOV2_CLASSIFIERS:
-        from experiments.clip_classifier import load_dinov2_classifier
-        return load_dinov2_classifier(
+        from experiments.clip_classifier import load_dino_classifier
+        return load_dino_classifier(
             model_name=classifier,
             num_classes=num_classes,
             device=str(device),
@@ -762,7 +775,7 @@ def evaluate_classifier(
     # Get dataset info
     num_classes = NUM_CLASSES[dataset]
     task_type = TASK_TYPE[dataset]
-    available_splits = ["val", "test_abl", "train", "test_r", "train@test_r", "val@test_r", "val@test_abl", "train@test_abl"] #
+    available_splits = ["test_r_c26", "val", "test_abl", "train", "test_r", "train@test_r", "val@test_r", "val@test_abl", "train@test_abl"] 
     
     # Determine splits to evaluate
     if splits is None:
@@ -806,7 +819,7 @@ def evaluate_classifier(
         
         accelerator.print(f"\nEvaluating on {split} split...")
 
-        if "@" in split or split in ["test_r", "test_abl"]:
+        if "@" in split or split in ["test_r", "test_abl", "test_r_c26"]:
             accelerator.print(f"  Applying class subset masking for split: {split}")
             active_model = MaskedClassifier(model, split=split)
             split_num_classes = int(active_model.mask.sum().item())

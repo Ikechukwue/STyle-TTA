@@ -1,8 +1,8 @@
 #!/bin/bash
 
-#python -m experiments.clip_classifier
+python -m experiments.clip_classifier
 
-CLASSIFIER=("ViT-B-16" ) #"dinov2_vitb14")
+CLASSIFIER=("vit_base_patch16_dinov3.lvd1689m" ) #"dinov2_vitb14")
 
 for CL in "${CLASSIFIER[@]}"
 do

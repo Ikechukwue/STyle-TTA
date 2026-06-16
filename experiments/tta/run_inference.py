@@ -91,7 +91,7 @@ from experiments.classifier_evaluation import compute_metrics, load_classifier, 
 
 # TTA baselines
 from experiments.reference_methods.TTA import GeometricTTA, TENT
-
+from config.constants import PRETRAINED_CLASSIFIERS
 # RetriStyle
 from retristyle.infer_style_base import StyleIDMethod
 from retristyle.ensemble_utils import FOODSFilter
@@ -523,7 +523,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
                 else:
                     views = x  # fallback: just the original
 
-                eff_normalize = None if (is_feature_cache and args.classifier in ["ViT-B-16", "dinov2_vitb14"]) else normalize_fn # To not normalize the extracted features twice 
+                eff_normalize = None if (is_feature_cache and args.classifier in PRETRAINED_CLASSIFIERS) else normalize_fn # To not normalize the extracted features twice 
                 
                 if args.eval_strategy == "vanilla":
                     pred = eval_vanilla(views, model, eff_normalize)
@@ -555,7 +555,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
                 style_batch_size=getattr(args, "style_batch_size", None),
             )
             cache_root = augmented_cache_dir / f"{args.retrieval_strategy}_{args.dataset}_{args.split}_s{str(args.seed)}"
-            if args.classifier in ["ViT-B-16", "dinov2_vitb14"]:
+            if args.classifier in PRETRAINED_CLASSIFIERS:
                 views = cache_features(sample_idx=sample_idx,
                                        views=views,
                                        backbone=model.backbone,
@@ -569,7 +569,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
                     save_generated_views(views, cache_root, sample_idx)
                 is_feature_cache = False
                 
-            eff_normalize = None if (is_feature_cache and args.classifier in ["ViT-B-16", "dinov2_vitb14"]) else normalize_fn
+            eff_normalize = None if (is_feature_cache and args.classifier in PRETRAINED_CLASSIFIERS) else normalize_fn
             if args.eval_strategy == "vanilla":
                 pred = eval_vanilla(views, model, eff_normalize)
             elif args.eval_strategy == "zero":

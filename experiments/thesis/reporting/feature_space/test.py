@@ -10,8 +10,8 @@ import matplotlib.gridspec as gridspec
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
 from typing import Optional, Dict, Any, Tuple
-from experiments.reporting.helpers.support_funct import load_json, get_names
-from experiments.reporting.test import load_pipeline_dataset, process_summaries, extract_class_metrics, TTAVisualizer
+from experiments.thesis.reporting.helpers.support_funct import load_json, get_names
+from experiments.thesis.reporting.pixel_dashboard import load_pipeline_dataset, process_summaries, extract_class_metrics, TTAVisualizer
 
 # Theme Constants
 DARK_BG = "#12121f"
@@ -99,7 +99,14 @@ def analyse_correlation(
     domain_df = load_feature_domain_features(feature_domain_path, backbone)
     df = df.merge(domain_df, on="class_id", how="inner")
     print(f"  Classes after domain merge: {len(df)}")
-
+    sim_df = simulate_adaptive_gated_inference(
+        df_merged=df, 
+        gating_feature="mmd",
+        baseline_time_per_img=0.04,     # Adjust based on your system
+        retristyle_time_per_img=8.92    # 142.76s / 16 views or total images
+    )
+    sim_df.to_csv(os.path.join(output_dir, f"{backbone}_gating_simulation.csv"), index=False)
+    print(f"  Gating simulation saved. Max compute savings: {sim_df['compute_saved_pct'].max():.2f}%")
     # ── 5. Correlations ───────────────────────────────────────────────────
     targets = {
         "delta_acc": "Δ Accuracy (TTA utility)",
@@ -158,11 +165,200 @@ def analyse_correlation(
     # ── 8. Plots ──────────────────────────────────────────────────────────
     _plot_scatter_grid(df, df_helped, df_hurt, gap_metrics, backbone, best_info, output_dir)
     _plot_correlation_heatmap(df_strat, gap_metrics, backbone, best_info, output_dir)
-
+    _plot_damage_zone_analysis(df, backbone, output_dir)
+    # NEW: Call a function to plot the trade-off curve
+    _plot_gating_tradeoff(sim_df, backbone, output_dir)
     return df, df_corr, df_strat
 
+def compute_class_geometry_features(
+    val_features: np.ndarray, 
+    val_labels: np.ndarray
+) -> pd.DataFrame:
+    """
+    Computes class-level structural geometry from the latent embedding space.
+    
+    Args:
+        val_features: Array of shape (N, feature_dim) containing clean validation embeddings.
+        val_labels: Array of shape (N,) containing class indices.
+        
+    Returns:
+        DataFrame containing per-class semantic compactness and boundary proximity.
+    """
+    unique_classes = np.unique(val_labels)
+    centroids = {}
+    compactness = {}
+    
+    # 1. Calculate Centroids and Intra-Class Compactness
+    for cls in unique_classes:
+        cls_mask = (val_labels == cls)
+        cls_feats = val_features[cls_mask]
+        
+        # Mean embedding represents the class semantic anchor
+        centroid = np.mean(cls_feats, axis=0)
+        centroids[cls] = centroid
+        
+        # Compactness: Average cosine distance of instances to their own centroid
+        # High value = Sprawling, loose semantic representation
+        norm_feats = cls_feats / np.linalg.norm(cls_feats, axis=1, keepdims=True)
+        norm_centroid = centroid / np.linalg.norm(centroid)
+        cosine_dist = 1.0 - np.dot(norm_feats, norm_centroid)
+        compactness[cls] = np.mean(cosine_dist)
+        
+    # 2. Calculate Boundary Proximity (Distance to Nearest Rival Class)
+    boundary_proximity = {}
+    cls_list = list(centroids.keys())
+    
+    for i, cls_a in enumerate(cls_list):
+        min_dist = float('inf')
+        norm_a = centroids[cls_a] / np.linalg.norm(centroids[cls_a])
+        
+        for cls_b in cls_list:
+            if cls_a == cls_b:
+                continue
+            norm_b = centroids[cls_b] / np.linalg.norm(centroids[cls_b])
+            # Cosine distance between cluster centers
+            dist = 1.0 - np.dot(norm_a, norm_b)
+            if dist < min_dist:
+                min_dist = dist
+                
+        # Low value = Class is squeezed right against a competing semantic boundary
+        boundary_proximity[cls_a] = min_dist
 
+    # Compile into structurally scannable dataframe
+    rows = [{
+        "class_id": int(cls),
+        "intra_class_variance": compactness[cls],
+        "boundary_proximity": boundary_proximity[cls]
+    } for cls in unique_classes]
+    
+    return pd.DataFrame(rows)
+def simulate_adaptive_gated_inference(
+    df_merged: pd.DataFrame, 
+    gating_feature: str, 
+    baseline_time_per_img: float = 0.04,  # ResNet18 forward pass (approx)
+    retristyle_time_per_img: float = 9.0  # 142s total divided by typical subset size
+) -> pd.DataFrame:
+    """
+    Simulates routing inferences dynamically based on a feature space metric threshold.
+    
+    Args:
+        df_merged: DataFrame containing class_id, base_acc, tta_acc, and your gating_feature
+        gating_feature: Column name to gate on (e.g., 'mmd', 'intra_class_variance')
+    """
+    # Sort classes by their vulnerability/gap metric
+    df_sorted = df_merged.sort_values(by=gating_feature, ascending=False).copy()
+    total_classes = len(df_sorted)
+    
+    simulation_results = []
+    
+    # Sweep across thresholds: from applying TTA to ALL classes down to NO classes
+    for cut_idx in range(total_classes + 1):
+        # Classes above the cut-off index get expensive RetriStyle TTA
+        tta_classes = df_sorted.iloc[:cut_idx]["class_id"].values
+        
+        # Calculate dynamic accuracy across the subset
+        df_sorted["dynamic_acc"] = np.where(
+            df_sorted["class_id"].isin(tta_classes), 
+            df_sorted["tta_acc"], 
+            df_sorted["base_acc"]
+        )
+        composite_accuracy = df_sorted["dynamic_acc"].mean()
+        
+        # Compute total cost allocation
+        num_tta_triggered = cut_idx
+        num_passed_through = total_classes - cut_idx
+        
+        estimated_time = (num_tta_triggered * retristyle_time_per_img) + \
+                         (num_passed_through * baseline_time_per_img)
+        
+        pct_compute_saved = (1.0 - (estimated_time / (total_classes * retristyle_time_per_img))) * 100
+        
+        simulation_results.append({
+            "classes_using_tta": num_tta_triggered,
+            "pct_classes_augmented": (num_tta_triggered / total_classes) * 100,
+            "simulated_accuracy": composite_accuracy,
+            "estimated_runtime_sec": estimated_time,
+            "compute_saved_pct": pct_compute_saved
+        })
+        
+    return pd.DataFrame(simulation_results)
 # ── Plotting ──────────────────────────────────────────────────────────────────
+def _plot_gating_tradeoff(sim_df: pd.DataFrame, backbone: str, output_dir: str):
+    """
+    Plots the dual-axis trade-off curve between cumulative composite accuracy
+    and percentage of compute time saved by gating OOD data.
+    """
+    fig, ax1 = plt.subplots(figsize=(8, 4.5))
+    ax2 = ax1.twinx()  # Create shared x-axis layout for dual indicators
+
+    # X-axis represents the policy choice: from strict/expensive to fast/lazy
+    x_metric = sim_df["pct_classes_augmented"]
+
+    # Line 1: Composite Dataset Accuracy (Left Axis)
+    line1, = ax1.plot(
+        x_metric, 
+        sim_df["simulated_accuracy"] * 100,  # Scale to % for readable axis
+        color=COL_POS, 
+        linewidth=2.5, 
+        label="Simulated Accuracy"
+    )
+    
+    # Line 2: Percentage Compute Saved (Right Axis)
+    line2, = ax2.plot(
+        x_metric, 
+        sim_df["compute_saved_pct"], 
+        color=COL_NEG, 
+        linewidth=2.0, 
+        linestyle="--", 
+        label="Compute Saved"
+    )
+
+    # Label Formatting
+    ax1.set_xlabel("% of Top-Vulnerable Classes Augmented (Gating Threshold)", fontsize=9, color="white")
+    ax1.set_ylabel("Composite Accuracy (%)", fontsize=9, color=COL_POS)
+    ax2.set_ylabel("Compute Time Saved (%)", fontsize=9, color=COL_NEG)
+
+    # Style Tick Marks for Dark Mode Integration
+    ax1.tick_params(axis='both', colors='white', labelsize=8)
+    ax2.tick_params(axis='y', colors='white', labelsize=8)
+
+    # Add a horizontal indicator for baseline performance (0% classes augmented)
+    baseline_acc = sim_df.loc[sim_df["classes_using_tta"] == 0, "simulated_accuracy"].values[0] * 100
+    ax1.axhline(baseline_acc, color=COL_MEAN, linestyle=":", alpha=0.6, label="No-TTA Baseline")
+
+    # Combine Legends from both axes seamlessly
+    lines = [line1, line2]
+    labels = [l.get_label() for l in lines]
+    ax1.legend(lines, labels, loc="lower center",
+               framealpha=0.1, facecolor=PANEL_BG, edgecolor=SPINE_COL, fontsize=8)
+
+    # Set boundaries cleanly
+    ax1.set_xlim(0, 100)
+    ax2.set_ylim(0, 100)
+    
+    ax1.grid(True, color="#333344", alpha=0.3, linestyle=":")
+
+    plt.title(
+        f"Adaptive Gated Inference Optimization Matrix — {backbone}\n"
+        f"Accuracy Preservation vs. Computational Offloading",
+        fontsize=11, fontweight="bold", color="white", pad=12
+    )
+
+    # Apply your pipeline's native visual theme styles
+    TTAVisualizer.apply_dark_theme(fig)
+    fig.patch.set_facecolor(DARK_BG)
+    ax1.set_facecolor(PANEL_BG)
+    
+    # Force alignment on twin framework spines
+    for ax in [ax1, ax2]:
+        for spine in ax.spines.values():
+            spine.set_edgecolor(SPINE_COL)
+
+    fig.tight_layout()
+    out = os.path.join(output_dir, f"{backbone}_adaptive_gating_tradeoff.png")
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  [saved] {out}")
 
 def _plot_scatter_grid(df, df_helped, df_hurt, gap_metrics, backbone, best_info, output_dir):
     """3 groups × 2 targets × 3 metrics = 6-panel grid per group."""
@@ -273,6 +469,85 @@ def _plot_correlation_heatmap(df_strat, gap_metrics, backbone, best_info, output
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  [saved] {out}")
+def _plot_damage_zone_analysis(df: pd.DataFrame, backbone: str, output_dir: str):
+    """
+    Bins classes by their baseline accuracy drop and calculates the average 
+    """
+    # 1. Define the categorical boundaries for our damage zones
+    def assign_zone(row):
+        if row['drop'] < 0.30:
+            return 'Low Damage\n(<30% drop)'
+        elif row['drop'] < 0.60:
+            return 'Mid Damage\n(30-60% drop)'
+        else:
+            return 'Severe Collapse\n(>60% drop)'
+        
+    df = df.copy()
+    df['zone'] = df.apply(assign_zone, axis=1)
+    
+    # 2. Compute mean TTA utility per damage profile
+    zone_order = ['Low Damage\n(<25% drop)', 'Mid Damage\n(25-60% drop)', 'Severe Collapse\n(>60% drop)']
+    
+    # Group by and extract counts and means
+    stats = df.groupby('zone')['delta_acc'].agg(['mean', 'count']).reindex(zone_order)
+    
+    # Multiply mean by 100 to convert to readable percentage accuracy gain
+    stats['mean_pct'] = stats['mean'] * 100
+    
+    # 3. Plotting using your theme tokens
+    fig, ax = plt.subplots(figsize=(6.5, 4.5))
+    
+    # Map colors: Subdued slate, Vibrant Highlight Blue, Warning Coral Red
+    colors = ['#444466', COL_POS, COL_NEG]
+    
+    bars = ax.bar(stats.index, stats['mean_pct'], color=colors, edgecolor=SPINE_COL, width=0.55)
+    
+    # Add data labels on top of the bars showing the exact gain and sample size
+    for bar, (_, row) in zip(bars, stats.iterrows()):
+        height = bar.get_height()
+        # Handle positioning for positive/negative bars gracefully
+        va_dir = 'bottom' if height >= 0 else 'top'
+        xy_offset = (0, 4) if height >= 0 else (0, -12)
+        
+        if not pd.isna(height):
+            ax.annotate(
+                f"{height:+.2f}%\n(n={int(row['count'])})",
+                xy=(bar.get_x() + bar.get_width() / 2, height),
+                xytext=xy_offset,
+                textcoords="offset points",
+                ha='center', va=va_dir,
+                fontsize=8, fontweight='bold', color='white'
+            )
+
+    # Styling and formatting
+    ax.set_ylabel("Average TTA Recovery Gain (Δ Accuracy %)", fontsize=9, color='white')
+    ax.set_xlabel("Class Domain Degradation Profile", fontsize=9, color='white')
+    ax.axhline(0, color="white", linewidth=0.8, linestyle="--", alpha=0.5)
+    
+    ax.tick_params(axis='both', colors='white', labelsize=8)
+    
+    # Pad the top of the y-axis dynamically to prevent text clipping
+    y_max = max(stats['mean_pct'].max() * 1.3, 2.0)
+    y_min = min(stats['mean_pct'].min() * 1.3, -2.0)
+    ax.set_ylim(y_min, y_max)
+    
+    plt.title(
+        f"RetriStyle Damage Grouping — {backbone}\n",
+        fontsize=11, fontweight="bold", color="white", pad=12
+    )
+
+    # Match your native dashboard infrastructure aesthetics
+    TTAVisualizer.apply_dark_theme(fig)
+    fig.patch.set_facecolor(DARK_BG)
+    ax.set_facecolor(PANEL_BG)
+    for spine in ax.spines.values():
+        spine.set_edgecolor(SPINE_COL)
+
+    fig.tight_layout()
+    out = os.path.join(output_dir, f"{backbone}_damage_zone_profile.png")
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  [saved] {out}")
 
 if __name__ == "__main__":
     analyse_correlation(
@@ -282,8 +557,10 @@ if __name__ == "__main__":
         #baseline_path="results/baseline/test_r/tta_inference/predictions/imagenet/test_r/resnet18_geometric_vanilla_nviews1_seed265017005.json",
         #tta_dir="results/baseline/test_r/tta_inference/predictions/imagenet/test_r",        
         #val_pred_path="results/baseline/tta_inference/predictions/imagenet/val@test_r/resnet18_geometric_vanilla_nviews1_seed71397589.json",
-        feature_domain_path="results/domain_gap/feature_space/resnet18_domain_gap.json",
+        feature_domain_path="results/domain_gap/feature_space/test_r_c26/26/resnet18_domain_gap.json",
         backbone="resnet18",
         classifier="resnet18",
         output_dir="./figures/correlation/resnet18",
     )
+
+    

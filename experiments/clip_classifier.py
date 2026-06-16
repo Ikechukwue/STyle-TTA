@@ -29,6 +29,7 @@ Usage::
 from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
+import timm
 from tqdm import tqdm
 import torch
 import torch.nn as nn
@@ -186,7 +187,7 @@ class CLIPLinearProbeClassifier(nn.Module):
 # ====================================================================
 # DINOv2 Linear Probe Classifier
 # ====================================================================
-class DINOv2Classifier(nn.Module):
+class DINOClassifier(nn.Module):
     """DINOv2 visual encoder + linear classification head.
 
     The backbone is frozen; only the linear head is trainable.
@@ -200,14 +201,21 @@ class DINOv2Classifier(nn.Module):
     ):
         super().__init__()
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
-
-        # Load DINOv2 from Facebook's hub
-        self.backbone = torch.hub.load(
-            "facebookresearch/dinov2", model_name,
-        ).to(self.device)
-        self.backbone.eval()
-        self.backbone.requires_grad_(False)
-
+        if model_name == "dinov2_vitb14":
+            # Load DINOv2 from Facebook's hub
+            self.backbone = torch.hub.load(
+                "facebookresearch/dinov2", model_name,
+            ).to(self.device)
+            self.backbone.eval()
+            self.backbone.requires_grad_(False)
+        else:
+            # Load DINOv3 using timm instead of torch.hub
+            # num_classes=0 ensures it outputs raw features instead of logits
+            self.backbone = timm.create_model(
+                model_name,
+                pretrained=True,
+                num_classes=0 
+            ).to(self.device)
         # Determine feature dimension
         with torch.no_grad():
             dummy = torch.randn(1, 3, 224, 224, device=self.device)
@@ -229,6 +237,7 @@ class DINOv2Classifier(nn.Module):
             features = images
         
         return self.head(features)
+
 # ====================================================================
 # Factory functions
 # ====================================================================
@@ -277,15 +286,16 @@ def load_clip_classifier(
     return model
 
 
-def load_dinov2_classifier(
+def load_dino_classifier(
     model_name: str = "dinov2_vitb14",
     num_classes: int = 1000,
     device: str = "cuda",
     weights_path: Optional[str] = None,
 ) -> nn.Module:
     """Load a DINOv2-based classifier with linear head."""
-    model = DINOv2Classifier(
-        model_name=model_name,
+    formatted_name = model_name.replace("_lvd", ".lvd")
+    model = DINOClassifier(
+        model_name=formatted_name,
         num_classes=num_classes,
         device=device,
     )
@@ -300,10 +310,7 @@ def load_dinov2_classifier(
         if head_state:
             model.head.load_state_dict(head_state)
         else:
-            # Legacy format: state dict is already just the head
             model.head.load_state_dict(state, strict=False)        
-
-
     model.eval()
     return model
 
@@ -354,12 +361,12 @@ if __name__=="__main__":
     
     print("Start")
     
-    for model_name in ["ViT-B-16", "dinov2_vitb14"]:
+    for model_name in ["vit_base_patch16_dinov3.lvd1689m"]: #["ViT-B-16", "dinov2_vitb14"]:
         if model_name == "ViT-B-16":
             model = load_clip_classifier(model_name=model_name, num_classes=1000, device="cuda")
             backbone = model.backbone
-        elif model_name == "dinov2_vitb14":
-            model = load_dinov2_classifier(num_classes=1000, device="cuda")
+        else:
+            model = load_dino_classifier(model_name, num_classes=1000, device="cuda")
             backbone = model.backbone
         print("Loaded Model")
         train_loader, val_loader, _ = prepare_dataloaders(dataset="imagenet", 
@@ -374,6 +381,8 @@ if __name__=="__main__":
                                         )
         print("Prepared Dataloader successfully")
         # Train Features
+        if "." in model_name:
+            model_name = model_name.replace(".", "_")
 
         _ = extract_and_cache_features(
             backbone=backbone,

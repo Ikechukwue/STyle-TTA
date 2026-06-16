@@ -121,7 +121,7 @@ mkdir -p $WORK/.apptainer/cache
 # GPU configuration
 GPU_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 GPU_COUNT=$(echo $GPU_DEVICES | tr ',' '\n' | wc -l)
-ACCELERATE_CONFIG=$(printf "/app/configs/gpu_%02d.yaml" $GPU_COUNT)
+ACCELERATE_CONFIG=$(printf "/app/configs/gpu/gpu_%02d.yaml" $GPU_COUNT)
 echo "GPUs: $GPU_COUNT | Config: $ACCELERATE_CONFIG"
 EOF
 }

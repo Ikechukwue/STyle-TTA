@@ -32,7 +32,7 @@ import matplotlib.pyplot as plt
 HAS_MPL = True
 
 from .helpers.support_funct import *
-from .helpers.ablation import plot_ablation_bars, plot_nrefs_sweep
+from .helpers.ablation import plot_ablation_bars, plot_nrefs_sweep, plot_topk_confidence
 from .helpers.style_transfer import plot_hybrid_tta, plot_style_transfer_comparison
 from .helpers.domain_difference import (plot_domain_shift_analysis, plot_domain_shift_class_scatter_per_group,
                                         plot_domain_shift_class_rankings_by_group,
@@ -113,24 +113,28 @@ def generate_all_plots(args):
     print("Result Visualisation")
     print("=" * 60)
     #plot_style_transfer_comparison(results_dir, output_dir, args)
-    plot_accuracy_vs_ece(results_dir, output_dir, args)
+    #plot_accuracy_vs_ece(results_dir, output_dir, args)
     anchors = {
             "best_retrieval": "dino",  # The strategy held constant for Eval/nrefs plots
             "best_eval": "zero",       # The strategy held constant for Retrieval/nrefs plots
-            "best_n_refs": 16          # The count held constant for Retrieval/Eval plots^
         }
-    """
-    for method in ['geometric', 'ablation']:
+    
+    for method in ['ablation/adain', 'ablation/retristyle', 'geometric_tta']: #, 
+        plot_topk_confidence(results_dir, output_dir, args, method, k=args.top_k)
+        if args.top_k != 1:
+            plot_topk_confidence(results_dir, output_dir, args, method, k=1)
+        anchors["best_n_refs"] = 16 if method == 'ablation/retristyle' else 32
         plot_ablation_bars(results_dir, output_dir, "retrieval", method, args, **anchors)
         plot_ablation_bars(results_dir, output_dir, "eval",method,  args, **anchors)
         plot_ablation_bars(results_dir, output_dir, "nrefs",method,  args, **anchors)
         plot_nrefs_sweep(results_dir, output_dir, args, method,
                             best_retrieval=anchors["best_retrieval"], 
                             best_eval=anchors["best_eval"])
+        
     #plot_hybrid_tta(results_dir, output_dir, args)
-    plot_accuracy_vs_ece(results_dir, output_dir, args)
+    #plot_accuracy_vs_ece(results_dir, output_dir, args)
     
-    """
+    
     #data_a, data_baseline = normalize_data(args)
     #plot_domain_shift_analysis(data_a, data_baseline, output_dir, args)
     #plot_domain_shift_class_scatter_per_group(data_a, data_baseline, output_dir, args)
@@ -149,7 +153,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--results_dir", type=str, default="./results")
     p.add_argument("--output_dir", type=str, default="./figures")
     p.add_argument("--dataset", type=str, default="imagenet")
-    p.add_argument("--split", type=str, default="test_r_c26")
+    p.add_argument("--split", type=str, default="test_r")
+    p.add_argument("--top_k", type=int, default=5)
     return p
 
 

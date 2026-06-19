@@ -438,7 +438,7 @@ def analyse_correlation(
 
 
 
-def main():
+def analyse():
     parser = argparse.ArgumentParser(description="Feature-space domain gap analysis")
     parser.add_argument("--embedding_dir", type=str, default="./data/embeddings")
     parser.add_argument("--dataset",       type=str, default="imagenet")
@@ -520,7 +520,7 @@ def main():
         print("=" * 110)
 
 if __name__ == "__main__":
-    main()
+    analyse()
 
 """
 python -m experiments.thesis.domain_shift_feature \\

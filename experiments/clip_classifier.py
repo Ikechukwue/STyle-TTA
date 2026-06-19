@@ -216,6 +216,8 @@ class DINOClassifier(nn.Module):
                 pretrained=True,
                 num_classes=0 
             ).to(self.device)
+            self.backbone.eval()
+            self.backbone.requires_grad_(False)           
         # Determine feature dimension
         with torch.no_grad():
             dummy = torch.randn(1, 3, 224, 224, device=self.device)
@@ -310,7 +312,7 @@ def load_dino_classifier(
         if head_state:
             model.head.load_state_dict(head_state)
         else:
-            model.head.load_state_dict(state, strict=False)        
+            model.head.load_state_dict(state, strict=True)        
     model.eval()
     return model
 

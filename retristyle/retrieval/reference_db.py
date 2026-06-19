@@ -28,7 +28,7 @@ from typing import Dict, List, Optional
 from tqdm import tqdm
 import torch
 from torch.utils.data import Dataset
-
+from config.helpers import get_base_image_folder
 
 class ReferenceDatabase:
     """Lazy reference-image store backed by a PyTorch ``Dataset``.
@@ -147,39 +147,46 @@ class ReferenceDatabase:
     # ------------------------------------------------------------------
 
     def _extract_labels(self) -> torch.Tensor:
-        """Iterate the dataset once to collect labels (no images stored)."""
-        def debug_dataset(ds, level=0):
-            print(f"[Level {level}] Type: {type(ds)}")
-            print(f"    - Attributes: {[a for a in dir(ds) if not a.startswith('__')]}")
-            if hasattr(ds, 'dataset'):
-                print(f"    - Found '.dataset' wrapper, digging deeper...")
-                debug_dataset(ds.dataset, level + 1)
-            elif hasattr(ds, 'datasets'):
-                print(f"    - Found '.datasets' (ConcatDataset), checking first element...")
-                debug_dataset(ds.datasets[0], level + 1)
-        curr = self.dataset
-        while curr is not None:
-                # Check for common label attributes
-                for attr in ["targets", "labels", "samples"]:
+        """Iterate the dataset layers to quickly collect labels without reading pixel data."""
+        from torchvision.datasets import ImageFolder
+        
+        try:
+            # 1. Fast Path: Use your helper to drill down to the ImageFolder
+            base_folder = get_base_image_folder(self.dataset)
+            
+            # ImageFolder stores paths/labels in `samples` as [(path, class_idx), ...]
+            # Extracting just the integers is lightning fast
+            raw_labels = torch.tensor([s[1] for s in base_folder.samples], dtype=torch.long)
+            
+            # If your dataset was wrapped in a standard PyTorch Subset, we must track 
+            # how the indices changed. Let's account for that:
+            curr = self.dataset
+            indices_map = None
+            
+            # Map indices backwards if there are Subsets involved before reaching ImageFolder
+            while curr is not None and curr != base_folder:
+                if hasattr(curr, "indices"):
+                    # If it's a torch.utils.data.Subset
+                    subset_indices = curr.indices
+                    if indices_map is False: 
+                        raw_labels = raw_labels[subset_indices]
+                curr = getattr(curr, "dataset", None)
+                
+            return raw_labels[self._indices]
+
+        except (TypeError, AttributeError) as e:
+            # 2. Resilient Fallback: If it isn't an ImageFolder, check standard attributes
+            curr = self.dataset
+            while curr is not None:
+                for attr in ["targets", "labels"]:
                     if hasattr(curr, attr):
                         data = getattr(curr, attr)
-                        
-                        # ImageFolder stores 'samples' as [(path, class), ...]
-                        if attr == "samples":
-                            raw_labels = [s[1] for s in data]
-                        else:
-                            raw_labels = data
-                        
-                        # Convert to tensor and apply the local indexing/subsampling
-                        if not isinstance(raw_labels, torch.Tensor):
-                            raw_labels = torch.tensor(raw_labels, dtype=torch.long)
-                        
-                        return raw_labels[self._indices]
-                
-                # Move to the next nested layer if it exists
+                        if not isinstance(data, torch.Tensor):
+                            data = torch.tensor(data, dtype=torch.long)
+                        return data[self._indices]
                 curr = getattr(curr, "dataset", None)
 
-            # Extreme Fallback: only if the above search fails
+        # 3. Extreme Fallback (Only runs if dataset doesn't expose labels at all)
         print("Direct metadata access failed. Falling back to slow iteration...")
         lbls: List[int] = []
         for local_idx in tqdm(range(self._n)):

@@ -67,17 +67,38 @@ class BalancedRandomRetriever(BaseRetriever):
         per_class = k // n_classes
         remainder = k % n_classes
 
+        shuffled_class_indices = torch.randperm(n_classes, generator=self._generator).tolist()
+        extra_slots = set(shuffled_class_indices[:remainder])
+
         selected: List[int] = []
         for ci, cls in enumerate(self._classes):
             pool = self._class_indices[cls]
-            need = per_class + (1 if ci < remainder else 0)
-            perm = torch.randperm(len(pool), generator=self._generator)[:need]
-            selected.extend([pool[j] for j in perm.tolist()])
+            need = per_class + (1 if ci in extra_slots else 0)
 
-        # If rounding issues leave us short, fill from any class
-        while len(selected) < k:
-            idx = torch.randint(0, self.n, (1,), generator=self._generator).item()
-            if idx not in selected:
-                selected.append(idx)
+            need = min(need, len(pool))
+            
+            if need > 0:
+                perm = torch.randperm(len(pool), generator=self._generator)[:need]
+                selected.extend([pool[j] for j in perm.tolist()])
+
+        if len(selected) < k:
+            selected_set = set(selected)
+            remaining_pool = []
+            
+            while len(selected) < k:
+                added_any = False
+                for cls in self._classes:
+                    pool = self._class_indices[cls]
+                    available = [idx for idx in pool if idx not in selected_set]
+                    if available:
+                        rand_idx = torch.randint(0, len(available), (1,), generator=self._generator).item()
+                        chosen = available[rand_idx]
+                        selected.append(chosen)
+                        selected_set.add(chosen)
+                        added_any = True
+                        if len(selected) == k:
+                            break
+                if not added_any:
+                    break
 
         return selected[:k], None

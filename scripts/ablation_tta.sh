@@ -21,11 +21,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-CLASSIFIER="ViT-B-16"
+CLASSIFIER="vit_base_patch16_dinov3_lvd1689m"
 EVAL_STRATEGY="zero"
 RETRIEVAL_STRATEGY="dino"
-N_REFS=16
+ALL_N_REFS=(2 4 8 16)
 SEED=$DEFAULT_SEED
+
 DATASET="imagenet"
 SPLIT="test_r"
 
@@ -43,21 +44,22 @@ while [[ $# -gt 0 ]]; do
 done
 
 WEIGHTS_PATH="pretrained"
-if ! is_pretrained "$CLASSIFIER"; then
-    WEIGHTS_PATH="${MODEL_DIR}/${DATASET}-${CLASSIFIER}-none-seed${SEED}.pth"
+if is_pretrained "$CLASSIFIER"; then
+    WEIGHTS_PATH="${MODEL_DIR}/${DATASET}-${CLASSIFIER}-random_flip-random_resized_crop-seed42.pth"
 fi
-
+for N_REFS in "${ALL_N_REFS[@]}"; do
 echo "Ablation: $CLASSIFIER | retr=$RETRIEVAL_STRATEGY | eval=$EVAL_STRATEGY | n_refs=$N_REFS"
-
-accelerate launch --config_file "${PROJECT_ROOT}/configs/auto_gpu.yaml" \
-    -m experiments.tta.run_inference \
+echo $WEIGHTS_PATH
+python -m experiments.tta.run_inference \
     --dataset "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
     --classifier "$CLASSIFIER" --weights_path "$WEIGHTS_PATH" \
     --tta_method retristyle --eval_strategy "$EVAL_STRATEGY" \
     --retrieval_strategy "$RETRIEVAL_STRATEGY" \
-    --n_refs "$N_REFS" --n_views $DEFAULT_N_VIEWS \
+    --n_refs "$N_REFS" --n_views $N_REFS \
     --style_batch_size $STYLE_BATCH_SIZE \
     --embedding_model "$EMBEDDING_MODEL" \
     --embedding_dir "$EMBEDDING_DIR" \
     --seed "$SEED" \
-    --output_path "$OUTPUT_PATH/ablation"
+    --augmented_cache "$AUG_DIR" \
+    --output_path "$OUTPUT_PATH/ablation/retristyle"
+done

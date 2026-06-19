@@ -31,6 +31,7 @@ VLM_CLASSIFIERS = [
 
 FM_CLASSIFIERS = [
     "dinov2_vitb14",
+    "vit_base_patch16_dinov3_lvd1689m"
 ]
 
 ALL_CLASSIFIERS = (

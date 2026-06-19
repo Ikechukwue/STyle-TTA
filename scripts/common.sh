@@ -13,7 +13,7 @@ OUTPUT_PATH="${OUTPUT_PATH:-${PROJECT_ROOT}/results}"
 WEIGHTS_DIR="${WEIGHTS_DIR:-/data/local/retristyle/models/style_transfer}"
 EMBEDDING_DIR="${EMBEDDING_DIR:-${PROJECT_ROOT}/data/embeddings}"
 MODEL_DIR="${MODEL_DIR:-${PROJECT_ROOT}/data/models}"
-
+AUG_DIR="${AUG_DIR:-${PROJECT_ROOT}/data/augmented_cache}"
 # ── HPC cluster paths (NHR@FAU) ──
 HPC_CONTAINER='$WORK/retristyle/retristyle-production.sif'
 HPC_DATA_PATH='$WORK/retristyle/data'
@@ -34,7 +34,7 @@ VIT_CLASSIFIERS=("vit_base_patch16_224" "swin_base_patch4_window7_224")
 VLM_CLASSIFIERS=("ViT-B-16" "ViT-B-16@Zero")
 FM_CLASSIFIERS=("dinov2_vitb14")
 ALL_CLASSIFIERS=("${CNN_CLASSIFIERS[@]}" "${VIT_CLASSIFIERS[@]}" "${VLM_CLASSIFIERS[@]}" "${FM_CLASSIFIERS[@]}")
-PRETRAINED_CLASSIFIERS=("ViT-B-16" "dinov2_vitb14")
+PRETRAINED_CLASSIFIERS=("ViT-B-16" "dinov2_vitb14" vit_base_patch16_dinov3_lvd1689m)
 
 # ── ImageNet datasets (primary) ──
 IMAGENET_DATASET="imagenet"

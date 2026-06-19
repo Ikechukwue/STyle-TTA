@@ -394,7 +394,7 @@ def prepare_dataloader(
 # CLIP / DINOv2 classifier names
 # =============================================================================
 _CLIP_CLASSIFIERS = {"ViT-B-16", "ViT-L-14", "ViT-B-32", "ViT-B-16@Zero"}
-_DINOV2_CLASSIFIERS = {"dinov2_vitb14", "dinov2_vitl14", "dinov2_vits14", "dinov2_vitg14", "vit_base_patch16_dinov3.lvd1689m"}
+_DINOV2_CLASSIFIERS = {"dinov2_vitb14", "dinov2_vitl14", "dinov2_vits14", "dinov2_vitg14", "vit_base_patch16_dinov3_lvd1689m"}
 
 
 # =============================================================================

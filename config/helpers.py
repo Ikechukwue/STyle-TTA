@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 from typing import Dict, List, Optional, Tuple
 import numpy as np
+import re
 #import nltk
 #from nltk.corpus import wordnet as wn
 from scipy.cluster.hierarchy import linkage, leaves_list
@@ -35,6 +36,21 @@ def find_json(directory: Path, pattern: str = "*.json") -> List[Path]:
     if not directory.exists():
         return []
     return sorted(directory.glob(pattern))
+
+def get_y_true(dataset:str, split:str):
+    """
+    Get the true labels per sample as list [int, int]
+    Need to have prepared some sort of of baseline prediciton file 
+    """
+    if dataset == "imagenet":
+        if split == "test_r":
+            labels_data = load_json("/home/stud/nemmler/retristyle/results/baseline/tta_inference/predictions/imagenet/test_r/densenet121_geometric_tpt_nviews1_seed71397589.json")
+
+            y_true = [i["y_true"] for i in labels_data["predictions"]]
+    else:
+        y_true = []
+
+    return y_true
 
 def get_baseline_results(file_name: str, predictions: bool = True, split: str = 'test_r', 
                          baseline_dir: str = "./results/baseline/tta_inference"):
@@ -124,7 +140,53 @@ def get_names(split:str = "test_r",
     split_names = [name_dict[id] for id in split_ids]
     return split_names 
 
+def parse_filename_metadata(filepath: str) -> dict:
+    """
+    Extracts 
+    classifier, 
+    eval strategy, 
+    n_refs, 
+    and seed from a filename.
+    Example: densenet121_geometric_vanilla_nviews1_seed265017005.json
+    """
+    # Get just the filename without the path or .json extension
+    basename = Path(filepath).stem 
+    metadata = {}
 
+    # 1. Extract Seed using regex (looks for 'seed' followed by digits)
+    seed_match = re.search(r'seed(\d+)', basename)
+    if seed_match:
+        metadata['seed'] = int(seed_match.group(1))
+
+    # 2. Extract n_refs from 'nviews' using regex
+    nviews_match = re.search(r'nviews(\d+)', basename)
+    nrefs_match = re.search(r'nrefs(\d+)', basename)
+    n_match = nviews_match if nviews_match else nrefs_match
+    if n_match:
+        metadata['n_refs'] = int(n_match.group(1))
+
+    # 3. Extract Classifier
+    # Sort classifiers by length descending so we match "ViT-B-16@Zero" before "ViT-B-16"
+    for clf in sorted(ALL_CLASSIFIERS, key=len, reverse=True):
+        if clf in basename:
+            metadata['classifier'] = clf
+            break
+
+    # 4. Extract Evaluation Strategy
+    for strat in EVAL_STRATEGIES:
+        if strat in basename:
+            metadata['eval_strategy'] = strat
+            break
+            
+    # 5. Extract TTA Method (matching your TTA_STRATEGIES)
+    if 'geometric' in basename:
+        metadata['tta_method'] = 'geometric_tta'
+    elif 'retristyle' in basename:
+        metadata['tta_method'] = 'retristyle'
+    elif 'adain' in basename:
+        metadata['tta_method'] = 'adain_tta'
+
+    return metadata
 
 def get_wordnet_taxonomic_order(name_json_path: str = "./data/imagenet/imagenet1k/imagenet_class_index.json") -> list[int]:
     """
@@ -343,12 +405,10 @@ def get_base_image_folder(dataset: Dataset) -> ImageFolder:
     return current_ds
 
 def inject_stylized_images_inplace(wrapped_dataset, new_base_dir_path="/home/stud/nemmler/retristyle/data/augmented_cache/extracted", view_name="view_001.png"):
-    # 1. Drill down to the real ImageFolder
     base_ds = get_base_image_folder(wrapped_dataset)
     
     new_samples = []
     
-    # 2. Iterate using enumerate to get the sequential index 'i'
     for i, (old_path, class_idx) in enumerate(base_ds.samples):
         # Format the index to a 5-digit zero-padded folder string (e.g., 0 -> "00000", 12 -> "00012")
         folder_name = f"{i:05d}" 

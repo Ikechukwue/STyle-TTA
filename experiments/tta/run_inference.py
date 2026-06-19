@@ -265,6 +265,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     if augmented_cache_dir:
         samples_dir = augmented_cache_dir / f"{args.retrieval_strategy}_{args.dataset}_{args.split}_s{str(args.seed)}"
         sample_dir = samples_dir if samples_dir.exists() else None
+        print(f"Using samples from {samples_dir}")
     else:
         sample_dir = None
     if (sample_dir is None

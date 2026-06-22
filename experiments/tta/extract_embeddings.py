@@ -46,7 +46,9 @@ from tqdm import tqdm
 
 from retristyle.retrieval.dino_retriever import DEFAULT_EMBEDDING_MODEL
 from config.helpers import get_base_image_folder, inject_stylized_images_inplace
-
+from config.constants import PRETRAINED_CLASSIFIERS
+from experiments.data import create_dataset
+from experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
 # ======================================================================
 # Helpers
 # ======================================================================
@@ -115,7 +117,7 @@ def extract_embeddings(
     from experiments.clip_classifier import load_clip_classifier, load_dino_classifier
     import torchvision.transforms as T
     dev = torch.device(device if torch.cuda.is_available() else "cpu")
-    if model_name in ["ViT-B-16", "dinov2_vitb14"]:
+    if model_name in PRETRAINED_CLASSIFIERS:
         if model_name == "ViT-B-16":
             clip_model = load_clip_classifier(model_name=model_name, num_classes=0, device=dev)
 
@@ -126,7 +128,7 @@ def extract_embeddings(
                             std=(0.26862954, 0.26130258, 0.27577711))
             ])
             emb_tuple = True
-        elif model_name == "dinov2_vitb14":
+        elif "dino" in model_name:
 
             clip_model = load_dino_classifier(num_classes=0, device=dev)
             tfm = T.Compose([
@@ -181,45 +183,106 @@ def extract_and_cache(
     num_workers: int = 4,
     device: str = "cuda",
     force: bool = False,
-    use_stylized: bool = False, 
+    use_stylized: List[int] = False, 
 ) -> Path:
     """Extract embeddings and save to disk.  Returns the cache path.
 
     If the cache already exists and *force* is False, this is a no-op.
     """
-    out = embeddings_path(output_dir, dataset_name, model_name, split)
 
-    if out.exists() and not force:
-        print(f"  [skip] {out} already exists")
-        return out
-
-    from experiments.data import create_dataset
-    from experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
-
+    
     transform = v2.Compose([
         v2.ToImage(),
         v2.ToDtype(torch.float32, scale=True),
         ResizeWhileRetainAspectRatio(size=input_size),
-    ])
-    ds = create_dataset(
-        dataset_name=dataset_name,
-        data_path=data_path,
-        split=split,
-        transform=transform,
-    )
+    ]) 
+
     if use_stylized:
-        inject_stylized_images_inplace(ds)
+        all_exist = all(
+            embeddings_path(output_dir, dataset_name, model_name, f"{split}_k{k}").exists() 
+            for k in use_stylized
+        )
+        if all_exist and not force:
+            print(f"  [skip] All K-intervals for {model_name} already exist.")
+            return
+        
 
-    embs, labels = extract_embeddings(
-        ds, model_name=model_name,
-        batch_size=batch_size, num_workers=num_workers, device=device
-    )
+        all_views_embeddings = []
+        shared_labels = None
+        n_views = use_stylized[-1]
+        for view_idx in range(n_views):
+                view_name = f"view_{view_idx:03d}.png"                
+                ds = create_dataset(
+                    dataset_name=dataset_name,
+                    data_path=data_path,
+                    split=split,
+                    transform=transform,
+                )
+                if view_idx != 0:
+                    inject_stylized_images_inplace(ds, view_name=view_name)
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({"embeddings": embs, "labels":labels,"model_name": model_name, "split": split,
-                 "dataset": dataset_name, "n": embs.shape[0], "dim": embs.shape[1]}, out)
-    print(f"  [saved] {out}  ({embs.shape[0]} × {embs.shape[1]})")
-    return out
+                embs, labels = extract_embeddings(
+                    ds, model_name=model_name,
+                    batch_size=batch_size, num_workers=num_workers, device=device
+                )
+                
+                # embs shape: (N, D)
+                all_views_embeddings.append(embs)
+                if shared_labels is None:
+                    shared_labels = labels
+
+
+        stacked_embs = torch.stack(all_views_embeddings, dim=0).cpu() 
+
+        # Step 3: Compute K-slice intervals, Re-normalize, and Save
+        for k in use_stylized:
+            out_split_name = f"{split}_k{k}"
+            out_path = embeddings_path(output_dir, dataset_name, model_name, out_split_name)
+            
+            # Average the first 'k' slices along the view dimension (dim=0)
+            # mean_emb shape: (N, D)
+            mean_emb = stacked_embs[:k].mean(dim=0)
+            
+            normalized_emb = F.normalize(mean_emb.float(), dim=1)
+            
+            # Save payload identically structured for your main domain_shift_feature.py script
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            torch.save({
+                "embeddings": normalized_emb, 
+                "labels": shared_labels,
+                "model_name": model_name, 
+                "split": out_split_name,
+                "dataset": dataset_name, 
+                "n": normalized_emb.shape[0], 
+                "dim": normalized_emb.shape[1],
+                "views_averaged": k
+            }, out_path)
+            
+            print(f"  [saved] {out_path} ({normalized_emb.shape[0]} × {normalized_emb.shape[1]})") 
+    else:
+        out = embeddings_path(output_dir, dataset_name, model_name, split)
+
+        if out.exists() and not force:
+            print(f"  [skip] {out} already exists")
+            return out
+
+        ds = create_dataset(
+            dataset_name=dataset_name,
+            data_path=data_path,
+            split=split,
+            transform=transform,
+        )
+
+        embs, labels = extract_embeddings(
+            ds, model_name=model_name,
+            batch_size=batch_size, num_workers=num_workers, device=device
+        )
+
+        out.parent.mkdir(parents=True, exist_ok=True)
+        torch.save({"embeddings": embs, "labels":labels,"model_name": model_name, "split": split,
+                    "dataset": dataset_name, "n": embs.shape[0], "dim": embs.shape[1]}, out)
+        print(f"  [saved] {out}  ({embs.shape[0]} × {embs.shape[1]})")
+        return out
 
 def cache_features(
     sample_idx: int, 
@@ -285,8 +348,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--device", type=str, default="cuda")
     p.add_argument("--force", action="store_true",
                    help="Re-extract even if cache exists")
-    p.add_argument("--use_style", action="store_true", 
-                   help="Decides if it uses the original or style transfered images" )
+    p.add_argument(
+        "--use_stylized", 
+        type=int, 
+        nargs="+", 
+        default=None, 
+        help="List of K-intervals for multi-view style averaging (e.g., 1 2 4 8 16)"
+    )
     return p
 
 
@@ -306,7 +374,7 @@ def main():
             num_workers=args.num_workers,
             device=args.device,
             force=args.force,
-            use_stylized=args.use_style, 
+            use_stylized=args.use_stylized, 
         )
     print("\nDone.")
 

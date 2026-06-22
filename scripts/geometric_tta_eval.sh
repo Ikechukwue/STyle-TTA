@@ -17,11 +17,11 @@ CNN_CLASSIFIERS=("densenet121" "resnet18")
 VIT_CLASSIFIERS=("vit_base_patch16_224" "swin_base_patch4_window7_224")
 FM_CLASSIFIERS=("dinov2_vitb14" "ViT-B-16" "vit_base_patch16_dinov3_lvd1689m")
 MODELS=("${CNN_CLASSIFIERS[@]}" "${VIT_CLASSIFIERS[@]}" "${FM_CLASSIFIERS[@]}")
-EVAL_STRATEGY=("vanilla" "zero" "tpt")
+EVAL_STRATEGY=("vanilla")
 SEED=(71397589)
-VIEWS=(1 2 4 8 16 32 64)
+VIEWS=(1)
 DATASET="imagenet"
-SPLIT="test_r"
+SPLIT="val"
 
 for MDL in "${MODELS[@]}"; do
     for VW in "${VIEWS[@]}"; do

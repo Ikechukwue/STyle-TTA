@@ -272,6 +272,7 @@ def compute_metrics(
         y_pred_labels = (y_pred[:, -1] > 0.5).astype(int)
         accuracy = accuracy_score(y_true_squeezed, y_pred_labels)
         balanced_acc = balanced_accuracy_score(y_true_squeezed, y_pred_labels)
+        top_5_accuracy = accuracy
         try:
             auc = roc_auc_score(y_true_squeezed, y_pred[:, -1])
         except ValueError:
@@ -282,8 +283,18 @@ def compute_metrics(
         y_true_squeezed = y_true.squeeze()
         y_pred_labels = np.argmax(y_pred, axis=1)
         accuracy = accuracy_score(y_true_squeezed, y_pred_labels)
+
+        balanced_acc = balanced_accuracy_score(y_true_squeezed, y_pred_labels)
+        y_pred_labels = np.argmax(y_pred, axis=1)
+        accuracy = accuracy_score(y_true_squeezed, y_pred_labels)
         balanced_acc = balanced_accuracy_score(y_true_squeezed, y_pred_labels)
         
+        k = min(5, num_classes)
+        top_k_indices = np.argpartition(y_pred, -k, axis=1)[:, -k:]
+        
+        match_mask = top_k_indices == y_true_squeezed[:, None]
+        top_5_accuracy = np.any(match_mask, axis=1).mean()
+
         try:
             if len(y_true_squeezed) > 30000:
                 print(f"  [Note] Dataset large ({len(y_true_squeezed)} samples). Stratifying 30k items for AUC...")
@@ -296,29 +307,21 @@ def compute_metrics(
                 )
             else:
                 y_true_sub = y_true_squeezed
-                y_pred_sub = y_pred 
-
-            # --- THE FIX STARTS HERE ---
-            
-            # 1. Identify which classes actually exist in this subset
+                y_pred_sub = y_pred            
             active_classes = np.sort(np.unique(y_true_sub))
             
-            # 2. Slice the 1,000-column predictions down to just the active columns
             y_pred_sliced = y_pred_sub[:, active_classes]
             
-            # 3. Safely re-normalize so rows sum to 1.0 (avoiding 0/0 division if completely masked)
             row_sums = y_pred_sliced.sum(axis=1, keepdims=True)
             row_sums = np.where(row_sums == 0, 1e-9, row_sums)
             y_pred_sliced = y_pred_sliced / row_sums
             
-            # 4. Compute closed-set AUC
             auc = roc_auc_score(
                 y_true_sub, 
                 y_pred_sliced, 
                 multi_class="ovr", 
                 labels=active_classes
             )
-            # --- THE FIX ENDS HERE ---
 
         except Exception as e:
             print(f"  [Warning] Global AUC calculation fallback triggered: {e}")
@@ -326,10 +329,12 @@ def compute_metrics(
 
     return {
         'accuracy': float(accuracy),
+        'top5_accuracy': float(top_5_accuracy),
         'balanced_accuracy': float(balanced_acc),
         'auc': float(auc),
         'ece': float(ece)
     }
+
 # =============================================================================
 # Data Loading
 # =============================================================================
@@ -359,7 +364,6 @@ def prepare_dataloader(
         DataLoader for the specified split
     """
     # Standard evaluation transform
-    # CLIP models (for now only those with ViT) need their own std,mean values
     stats_name = dataset if not "ViT" in classifier else "ViT"
 
     transform = v2.Compose([
@@ -775,7 +779,7 @@ def evaluate_classifier(
     # Get dataset info
     num_classes = NUM_CLASSES[dataset]
     task_type = TASK_TYPE[dataset]
-    available_splits = ["test_r_c26", "val", "test_abl", "train", "test_r", "train@test_r", "val@test_r", "val@test_abl", "train@test_abl"] 
+    available_splits = ["val", "val@test_r", "test_r"] 
     
     # Determine splits to evaluate
     if splits is None:

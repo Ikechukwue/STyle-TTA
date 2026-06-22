@@ -394,50 +394,6 @@ def analyse_backbone(
 
     return results
 
-def analyse_correlation(
-    baseline_path: str,
-    tta_dir: str,
-    val_pred_path: str,
-    feature_domain_path: str,
-    backbone: str,
-    classifier: str,
-    output_dir: str,
-
-):
-    """
-    Correlates feature-space domain gap with TTA utility and domain-induced accuracy drop.
- 
-    Signals computed per class:
-      - drop[cls]      = acc_val[cls] - acc_test_r_base[cls]   (domain shift hurt)
-      - delta_acc[cls] = acc_tta[cls] - acc_test_r_base[cls]   (TTA recovery)
- 
-    Correlations run:
-      - MMD/W2/KL  vs  drop       → does gap predict sensitivity to domain shift?
-      - MMD/W2/KL  vs  delta_acc  → does gap predict TTA utility?
-    """
-
-    # Calculate the acc, entropy and confidence deltas baseline vs tta 
-    print("Loading TTA predictions...")
-    df_tta, _ = load_pipeline_dataset(baseline_path, tta_dir, classifier)
-    config_summary, _, best_info = process_summaries(df_tta)
-    df_best = df_tta[
-        (df_tta["nviews"] == best_info["nviews"]) &
-        (df_tta["eval_strategy"] == best_info["strategy"])
-    ].copy()
-
-
-    # Give out best settings 
-
-    print("Loading val@test_r predictions...")
-    val_metrics = extract_class_metrics(load_json(val_pred_path))
-    val_metrics = val_metrics.rename(columns={
-        "acc": "val_acc",
-        "conf": "val_conf",
-        "ent": "val_ent",
-    })
-
-
-
 def analyse():
     parser = argparse.ArgumentParser(description="Feature-space domain gap analysis")
     parser.add_argument("--embedding_dir", type=str, default="./data/embeddings")

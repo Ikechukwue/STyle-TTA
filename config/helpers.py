@@ -82,8 +82,15 @@ def get_baseline_results(file_name: str, predictions: bool = True, split: str = 
 def get_top_k(results: dict, k: int = 5):
     y_pred_matrix = np.array([sample["y_pred"] for sample in results["predictions"]])
     num_samples = y_pred_matrix.shape[0]
+    num_classes = y_pred_matrix.shape[1]
     
-    k = min(k, y_pred_matrix.shape[1]) # Guard against k > num_classes
+    k = min(k, num_classes)
+    
+    if k == 1:
+        final_indices = np.argmax(y_pred_matrix, axis=-1)[:, None]
+        final_confidences = np.take_along_axis(y_pred_matrix, final_indices, axis=-1)
+        return final_indices, final_confidences
+
     top_k_unsorted_indices = np.argpartition(y_pred_matrix, -k, axis=-1)[:, -k:]
     
     row_indices = np.arange(num_samples)[:, None]
@@ -95,10 +102,9 @@ def get_top_k(results: dict, k: int = 5):
     
     return final_indices, final_confidences
 
-def top_k_acc(results: dict, final_indices: np.ndarray, k: int = 5) -> float:
+def top_k_acc(results: dict, final_indices: np.ndarray) -> float:
     y_true = np.array([sample["y_true"] for sample in results["predictions"]])
-    top_k_predictions = final_indices[:, :k]
-    correct_mask = np.any(top_k_predictions == y_true[:, None], axis=-1)
+    correct_mask = np.any(final_indices == y_true[:, None], axis=-1)
     return float(np.mean(correct_mask) * 100)
 
 def calc_top_k(pred_path: Path, k: int = 5) -> float:
@@ -107,11 +113,10 @@ def calc_top_k(pred_path: Path, k: int = 5) -> float:
     try:
         data = load_json(pred_path)
         final_indices, _ = get_top_k(data, k)
-        return top_k_acc(data, final_indices, k)
+        return top_k_acc(data, final_indices)
     except Exception as e:
         print(f"  [error] Could not calculate top-{k} for {pred_path.name}: {e}")
-        return None
-    
+        return None   
 def setup_style():
     """Configure matplotlib for publication-quality plots."""
     if HAS_SNS:
@@ -404,28 +409,24 @@ def get_base_image_folder(dataset: Dataset) -> ImageFolder:
         raise TypeError(f"Expected base dataset to be ImageFolder, but found {type(current_ds)}")
     return current_ds
 
-def inject_stylized_images_inplace(wrapped_dataset, new_base_dir_path="/home/stud/nemmler/retristyle/data/augmented_cache/extracted", view_name="view_001.png"):
+def inject_stylized_images_inplace(wrapped_dataset, new_base_dir_path="/home/stud/nemmler/retristyle/data/augmented_cache/dino_imagenet_test_r_s71397589", view_name="view_001.png"):
+    
+# Retrieve the raw underlying ImageFolder dataset
     base_ds = get_base_image_folder(wrapped_dataset)
     
     new_samples = []
-    
     for i, (old_path, class_idx) in enumerate(base_ds.samples):
-        # Format the index to a 5-digit zero-padded folder string (e.g., 0 -> "00000", 12 -> "00012")
         folder_name = f"{i:05d}" 
-        
-        # Construct the exact path injectively: base_dir / 0000X / view_001.png
         new_path = os.path.join(new_base_dir_path, folder_name, view_name)
         
-        # Quick safety check for the very first and last item to ensure paths exist
         if i == 0 or i == len(base_ds.samples) - 1:
             if not os.path.exists(new_path):
-                raise FileNotFoundError(f"Generated path does not exist! Check your base directory or padding: {new_path}")
+                raise FileNotFoundError(f"Missing view path: {new_path}")
                 
         new_samples.append((new_path, class_idx))
         
-    # 3. Reassign references inside the base ImageFolder
     base_ds.samples = new_samples
-    base_ds.imgs = new_samples 
+    base_ds.imgs = new_samples
     
 if __name__=="__main__":
     from experiments.data import create_dataset

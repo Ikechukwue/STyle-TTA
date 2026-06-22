@@ -285,7 +285,7 @@ def augment_views(
                 img_native = _resize(image, native_size)
                 ref_native = _resize(ref, native_size)
 
-                if tta_method in ("color_tta", "adain_tta"):
+                if tta_method in ("color_tta", "adain_tta", "wct2_tta"):
                     if color_transfer_fn is None:
                         raise ValueError(
                             "color_transfer_fn required for color_tta"
@@ -375,7 +375,7 @@ def augment_views_distributed(
 
         # -- True batched path for diffusion-based methods -----------------
         if (
-            tta_method in ("retristyle", "adain_tta")
+            tta_method in ("retristyle", "adain_tta", "wct2_tta")
             and batched
             and B > 1
         ):
@@ -407,7 +407,7 @@ def augment_views_distributed(
                     if color_transfer_fn is None:
                         raise ValueError("color_transfer_fn required for color_tta")
                     out = color_transfer_fn(img_native, ref_native)
-                elif tta_method in ("retristyle", "adain_tta"):
+                elif tta_method in ("retristyle", "adain_tta", "wct2_tta"):
                     if retristyle_infer is None:
                         raise ValueError(
                             "retristyle_infer required for retristyle/adain_tta"

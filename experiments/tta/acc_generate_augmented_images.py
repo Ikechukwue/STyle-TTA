@@ -78,7 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # TTA method
     p.add_argument("--tta_method", type=str, default="retristyle",
-                   choices=["retristyle", "color_tta", "adain_tta",
+                   choices=["retristyle", "color_tta", "adain_tta", "wct2_tta",
                             "geometric", "color_jitter", "rand_augment",
                             "trivial_augment", "aug_mix", "auto_augment"])
     p.add_argument("--method_weights", type=str, default="./data/models",
@@ -112,7 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _cache_dir_name(args: argparse.Namespace) -> str:
     """Build a unique cache directory name from experiment config."""
     parts = [args.dataset, args.split, args.tta_method]
-    if args.tta_method in ("retristyle", "color_tta", "adain_tta"):
+    if args.tta_method in ("retristyle", "color_tta", "adain_tta", "wct2_tta"):
         parts.extend([args.retrieval_strategy, f"nr{args.n_refs}"])
     if args.tta_method == "color_tta" and args.color_method:
         parts.append(args.color_method)
@@ -293,7 +293,7 @@ def main():
             retristyle_infer = StyleIDMethod()
             accelerator.print("  StyleID ready")
 
-        elif args.tta_method in ("color_tta", "adain_tta"):
+        elif args.tta_method in ("color_tta", "adain_tta", "wct2_tta"):
             from experiments.reference_methods.style_transfer_factory import (
                 create_color_transfer_method,
             )

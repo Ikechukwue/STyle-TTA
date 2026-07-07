@@ -1,30 +1,23 @@
 #!/bin/bash
 # ============================================================================
-# Run Hybrid TTA (local)
-# ============================================================================
-# Evaluates mixed geometric + style-transfer TTA at a given geo/style ratio.
-#
-# Usage:
-#   bash scripts/hybrid_tta.sh --classifier ViT-B-16 --geo_frac 0.5
-#   bash scripts/hybrid_tta.sh --classifier resnet18 --geo_frac 0.75 --seed 71397589
+# Run Hybrid TTA Loop (local)
 # ============================================================================
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-CLASSIFIER="ViT-B-16"
-GEO_FRAC=0.5
-EVAL_STRATEGY="${BEST_EVAL:-zero}"
+# Define the list of classifiers to iterate over
+
+EVAL_STRATEGY="${BEST_EVAL:-vanilla}"
 RETRIEVAL_STRATEGY="${BEST_RETRIEVAL:-dino}"
-N_REFS="${BEST_N_REFS:-16}"
+N_REFS="${BEST_N_REFS:-1}"
+N_VIEWS=(3 7 15 31 63)
 SEED=$DEFAULT_SEED
 DATASET="imagenet"
 SPLIT="test_r"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --classifier) CLASSIFIER="$2"; shift 2 ;;
-        --geo_frac) GEO_FRAC="$2"; shift 2 ;;
         --eval_strategy) EVAL_STRATEGY="$2"; shift 2 ;;
         --retrieval_strategy) RETRIEVAL_STRATEGY="$2"; shift 2 ;;
         --n_refs) N_REFS="$2"; shift 2 ;;
@@ -35,20 +28,33 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-WEIGHTS_PATH="pretrained"
-if ! is_pretrained "$CLASSIFIER"; then
-    WEIGHTS_PATH="${MODEL_DIR}/${DATASET}-${CLASSIFIER}-none-seed${SEED}.pth"
-fi
+# Outer loop: Classifiers
+for CLASSIFIER in "${ALL_CLASSIFIERS[@]}"; do
 
-echo "Hybrid TTA: $CLASSIFIER | geo=${GEO_FRAC} | eval=${EVAL_STRATEGY} | seed=${SEED}"
+    WEIGHTS_PATH="pretrained"
+    if is_pretrained "$CLASSIFIER"; then
+        WEIGHTS_PATH="${MODEL_DIR}/${DATASET}/${DATASET}-${CLASSIFIER}-random_flip-random_resized_crop-seed42.pth"
+    fi
 
-python -m experiments.tta.hybrid \
-    --dataset "$DATASET" --split "$SPLIT" --data_path "$DATA_PATH" \
-    --classifier "$CLASSIFIER" --weights_path "$WEIGHTS_PATH" \
-    --geo_frac "$GEO_FRAC" \
-    --n_views $DEFAULT_N_VIEWS --n_refs "$N_REFS" \
-    --eval_strategy "$EVAL_STRATEGY" \
-    --retrieval_strategy "$RETRIEVAL_STRATEGY" \
-    --embedding_dir "$EMBEDDING_DIR" --embedding_model "$EMBEDDING_MODEL" \
-    --seed "$SEED" \
-    --output_path "$OUTPUT_PATH/hybrid_tta"
+    # Inner loop: Views from 2 up to 63
+    for N_VIEWS in "${N_VIEWS[@]}"; do
+        # Calculate geo_frac: (N_VIEWS - 1) / N_VIEWS
+        GEO_FRAC=$(awk "BEGIN {print ($N_VIEWS - 1) / $N_VIEWS}")
+
+        echo "--------------------------------------------------------"
+        echo "Hybrid TTA: $CLASSIFIER | views=$N_VIEWS | geo=${GEO_FRAC} | eval=${EVAL_STRATEGY}"
+        echo "--------------------------------------------------------"
+
+        python -m experiments.tta.hybrid \
+            --dataset "$DATASET" --split "$SPLIT" --data_path "$DATA_PATH" \
+            --classifier "$CLASSIFIER" --weights_path "$WEIGHTS_PATH" \
+            --geo_frac "$GEO_FRAC" \
+            --n_views "$N_VIEWS" --n_refs "$N_REFS" \
+            --augmented_cache "./data/augmented_cache" \
+            --eval_strategy "$EVAL_STRATEGY" \
+            --retrieval_strategy "$RETRIEVAL_STRATEGY" \
+            --embedding_dir "$EMBEDDING_DIR" --embedding_model "$EMBEDDING_MODEL" \
+            --seed "$SEED" \
+            --output_path "$OUTPUT_PATH/hybrid_tta"
+    done
+done

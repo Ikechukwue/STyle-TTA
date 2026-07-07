@@ -35,16 +35,19 @@ from .constants import AUGMENTATION_TTA_METHODS
 # Resolution helper
 # ======================================================================
 def _resize(img: torch.Tensor, size: int) -> torch.Tensor:
-    """Bilinear resize ``(…, H, W)`` tensor to ``(…, size, size)``."""
     if img.shape[-2] == size and img.shape[-1] == size:
         return img
+    
+    # Switch to bicubic for better edge and structure preservation
+    mode = "bicubic" if size > img.shape[-1] else "bilinear"
+    
     if img.dim() == 3:
         return F.interpolate(
             img.unsqueeze(0), size=(size, size),
-            mode="bilinear", align_corners=False,
+            mode=mode, align_corners=False,
         ).squeeze(0)
     return F.interpolate(
-        img, size=(size, size), mode="bilinear", align_corners=False,
+        img, size=(size, size), mode=mode, align_corners=False,
     )
 
 
@@ -285,7 +288,7 @@ def augment_views(
                 img_native = _resize(image, native_size)
                 ref_native = _resize(ref, native_size)
 
-                if tta_method in ("color_tta", "adain_tta", "wct2_tta"):
+                if tta_method in ("color_tta"):
                     if color_transfer_fn is None:
                         raise ValueError(
                             "color_transfer_fn required for color_tta"

@@ -47,7 +47,7 @@ from experiments.data import (
 )
 from experiments.utils.reproducibility import random_seed, worker_seed
 from experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
-from experiments.classifier_evaluation import compute_metrics, load_classifier
+from experiments.classifier_evaluation import compute_metrics, load_classifier, MaskedClassifier
 from experiments.tta.augmentation import augment_views
 from experiments.tta.evaluation import eval_vanilla, eval_zero, eval_tpt
 from experiments.tta.checkpoint import (
@@ -79,87 +79,83 @@ def _build_normalize_fn(dataset: str):
 
 
 def generate_hybrid_views(
+    sample_idx: int,
     image: torch.Tensor,
     n_views: int,
     geo_frac: float,
     *,
     retriever=None,
-    n_refs: int = 16,
+    augmented_cache: Path | None = None,
+    n_refs: int = 1,
     retristyle_infer=None,
     color_transfer_fn=None,
     native_size: int = 512,
     classifier_size: int = 224,
     input_size: int = 224,
     dataset: str | None = None,
+    split: str | None = None,
     style_batch_size: int | None = None,
+    device: torch.device = torch.device("cuda"),
 ) -> torch.Tensor:
-    """Generate hybrid geometric + style transfer augmented views.
-
-    Args:
-        image: (1, 3, H, W) in [0, 1]
-        n_views: Total number of views to generate.
-        geo_frac: Fraction of views that should be geometric augmentations.
-                  ``1 - geo_frac`` determines style transfer fraction.
-
-    Returns:
-        (n_views + 1, 3, H, W) tensor — the original image is always
-        included as the first view.
-    """
+    
     n_geo = max(0, int(round(n_views * geo_frac)))
     n_style = n_views - n_geo
+    
+    # Start with original image as view 0
+    views_list = [image.squeeze(0)] 
 
-    views = [image.squeeze(0)]  # original always first
-
-    # Geometric views
+    # 1. Geometric views
     if n_geo > 0:
         geo_views = augment_views(
-            image,
-            tta_method="geometric",
-            n_views=n_geo,
-            input_size=input_size,
-            dataset=dataset,
+            image, tta_method="geometric", n_views=n_geo, 
+            input_size=input_size, dataset=dataset
         )
-        # augment_views includes original as view 0; skip it
-        if geo_views.shape[0] > n_geo:
-            geo_views = geo_views[1:]  # drop original
-        views.append(geo_views)
+        # augment_views includes original, so take index 1 onwards
+        if geo_views.shape[0] > 1:
+            views_list.append(geo_views[1:])
 
-    # Style transfer views
-    if n_style > 0 and (retriever is not None):
-        from experiments.tta.constants import RETRIEVAL_TTA_METHODS
+    # 2. Style transfer views
+    if n_style > 0:
+        if augmented_cache:
+            sample_dir = Path(augmented_cache) / f"dino_{dataset}_{split}_s{str(DEFAULT_SEED)}" / f"{sample_idx:05d}"
+            if sample_dir.exists():
+                # Get all files, sorted to ensure consistent view order
+                all_files = sorted(sample_dir.glob("view_*"))
+                # Skip index 0 (original) if it exists as the first cached view
+                style_candidates = all_files[1:] if len(all_files) > 1 else []
+                
+                cached_tensors = []
+                for vf in style_candidates:
+                    if len(cached_tensors) >= n_style:
+                        break
+                    if vf.suffix == ".pt":
+                        cached_tensors.append(torch.load(vf, map_location=device, weights_only=True))
+                    else:
+                        from torchvision.io import read_image
+                        from torchvision.transforms.functional import convert_image_dtype
+                        img = read_image(str(vf))
+                        cached_tensors.append(convert_image_dtype(img, torch.float32))
+                
+                if cached_tensors:
+                    cached_tensors = [t.to(device) for t in cached_tensors]
+                    views_list.append(torch.stack(cached_tensors))
+        
+        elif retriever is not None:
+            # Fallback to online augmentation
+            tta_method = "retristyle" if retristyle_infer is not None else "color_tta"
+            style_views = augment_views(
+                image, tta_method=tta_method, n_views=n_style + 1,
+                retriever=retriever, n_refs=n_style, 
+                color_transfer_fn=color_transfer_fn,
+                retristyle_infer=retristyle_infer, native_size=native_size,
+                classifier_size=classifier_size, input_size=input_size,
+                dataset=dataset, style_batch_size=style_batch_size
+            )
+            if style_views.shape[0] > 1:
+                views_list.append(style_views[1:].to(device))
 
-        tta_method = "retristyle" if retristyle_infer is not None else "color_tta"
-        style_views = augment_views(
-            image,
-            tta_method=tta_method,
-            n_views=n_style + 1,  # augment_views adds original
-            retriever=retriever,
-            n_refs=n_style,
-            color_transfer_fn=color_transfer_fn,
-            retristyle_infer=retristyle_infer,
-            native_size=native_size,
-            classifier_size=classifier_size,
-            input_size=input_size,
-            dataset=dataset,
-            style_batch_size=style_batch_size,
-        )
-        # Drop original (index 0) since we already have it
-        if style_views.shape[0] > n_style:
-            style_views = style_views[1:]
-        views.append(style_views)
-
-    if len(views) == 1:
-        return views[0].unsqueeze(0)
-
-    # Concatenate: original + geo + style
-    all_parts = []
-    for v in views:
-        if v.dim() == 3:
-            all_parts.append(v.unsqueeze(0))
-        else:
-            all_parts.append(v)
-    return torch.cat(all_parts, dim=0)
-
+    # Concatenate all parts
+    return torch.cat([v.unsqueeze(0) if v.dim() == 3 else v for v in views_list], dim=0)
 
 def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
     """Execute hybrid TTA inference."""
@@ -169,7 +165,7 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
     task_type = TASK_TYPE[args.dataset]
     available_splits = DATASET_SPLITS.get(args.dataset, ["train", "val", "test"])
     eval_split = args.split if args.split in available_splits else available_splits[-1]
-
+    augmented_cache = Path(args.augmented_cache) if args.augmented_cache else None
     print("=" * 72)
     print("Hybrid TTA Inference")
     print("=" * 72)
@@ -190,6 +186,8 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
         num_classes=num_classes,
         device=device,
     )
+    model = MaskedClassifier(model, args.split)
+    model.to(device)
     model.eval()
     normalize_fn = _build_normalize_fn(args.dataset)
 
@@ -218,37 +216,41 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
     style_frac = 1.0 - args.geo_frac
     if style_frac > 0:
         # Embedding extraction if needed
-        embedding_dir = getattr(args, "embedding_dir", None)
-        embedding_model = getattr(args, "embedding_model", "vit_base_patch16_dinov3.lvd1689m")
+        if augmented_cache:
+            ref_db = None
+            retriever = None
+        else: 
+            embedding_dir = getattr(args, "embedding_dir", None)
+            embedding_model = getattr(args, "embedding_model", "vit_base_patch16_dinov3.lvd1689m")
 
-        if args.retrieval_strategy == "dino" and embedding_dir:
-            if not embeddings_exist(embedding_dir, args.dataset, embedding_model, "train"):
-                print("Extracting training-set embeddings...")
-                extract_and_cache(
-                    dataset_name=args.dataset,
-                    data_path=args.data_path,
-                    split="train",
-                    output_dir=embedding_dir,
-                    model_name=embedding_model,
-                    input_size=args.input_size,
-                    device=str(device),
-                )
+            if args.retrieval_strategy == "dino" and embedding_dir:
+                if not embeddings_exist(embedding_dir, args.dataset, embedding_model, f"train@{args.split}.pt"):
+                    print("Extracting training-set embeddings...")
+                    extract_and_cache(
+                        dataset_name=args.dataset,
+                        data_path=args.data_path,
+                        split="train",
+                        output_dir=embedding_dir,
+                        model_name=embedding_model,
+                        input_size=args.input_size,
+                        device=str(device),
+                    )
 
-        ref_db = build_reference_db(
-            dataset=args.dataset,
-            data_path=args.data_path,
-            input_size=args.input_size,
-            seed=args.seed,
-        )
-        retriever = build_retriever(
-            strategy=args.retrieval_strategy,
-            db=ref_db,
-            embedding_model=embedding_model,
-            embedding_dir=embedding_dir,
-            dataset=args.dataset,
-            device=str(device),
-        )
-        print(f"  Retriever ready — {len(ref_db)} references")
+            ref_db = build_reference_db(
+                dataset=args.dataset,
+                data_path=args.data_path,
+                input_size=args.input_size,
+                seed=args.seed,
+            )
+            retriever = build_retriever(
+                strategy=args.retrieval_strategy,
+                db=ref_db,
+                embedding_model=embedding_model,
+                embedding_dir=embedding_dir,
+                dataset=args.dataset,
+                device=str(device),
+            )
+            print(f"  Retriever ready — {len(ref_db)} references")
 
         # Load style transfer method
         if args.style_method == "retristyle":
@@ -263,8 +265,8 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
             print(f"  Color transfer ({args.style_method}) ready")
 
     # Checkpoint setup
-    exp_key = f"hybrid_geo{args.geo_frac:.2f}_{args.eval_strategy}_nr{args.n_refs}_seed{args.seed}"
-    pred_path = Path(args.output_path) / f"{args.dataset}_{args.classifier}_{exp_key}_predictions.json"
+    exp_key = f"hybrid_geo{args.geo_frac:.2f}_{args.eval_strategy}_nr{args.n_views + 1}_seed{args.seed}"
+    pred_path = Path(args.output_path) / "predictions" /f"{args.dataset}_{args.classifier}_{exp_key}_predictions.json"
     pred_path.parent.mkdir(parents=True, exist_ok=True)
     pred_data = load_predictions(pred_path)
 
@@ -291,6 +293,7 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
     n_style_refs = max(1, int(round(args.n_views * (1.0 - args.geo_frac))))
 
     pbar = tqdm(total=total_samples, initial=start_idx, desc="Hybrid TTA")
+    runs = len(test_loader)
     for sample_idx, (x, y) in enumerate(test_loader):
         if sample_idx < start_idx:
             continue
@@ -298,8 +301,12 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
         x = x.to(device)
 
         views = generate_hybrid_views(
-            x, n_views=args.n_views, geo_frac=args.geo_frac,
+            sample_idx=sample_idx,
+            image=x, 
+            n_views=args.n_views, 
+            geo_frac=args.geo_frac,
             retriever=retriever,
+            augmented_cache=augmented_cache, # Passed cache path
             n_refs=n_style_refs,
             retristyle_infer=retristyle_infer,
             color_transfer_fn=color_transfer_fn,
@@ -307,7 +314,9 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
             classifier_size=args.input_size,
             input_size=args.input_size,
             dataset=args.dataset,
+            split=args.split, # Passed split
             style_batch_size=getattr(args, "style_batch_size", None),
+            device=device
         )
 
         # Evaluate
@@ -326,7 +335,7 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
             "y_pred": pred.squeeze(0).detach().cpu().numpy().tolist(),
         })
 
-        if (sample_idx + 1) % 1 == 0:
+        if (sample_idx + 1) % 500 == 0 or (sample_idx + 1 ) == runs:
             save_predictions(pred_path, pred_data)
 
         pbar.update(1)
@@ -352,7 +361,7 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
     print(f"{'─' * 40}")
 
     # Save results
-    res_path = Path(args.output_path) / f"{args.dataset}_{args.classifier}_{exp_key}_results.json"
+    res_path = Path(args.output_path) / "results" /f"{args.dataset}_{args.classifier}_{exp_key}_results.json"
     result = {
         "dataset": args.dataset,
         "classifier": args.classifier,
@@ -382,12 +391,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--data_path", type=str, required=True)
     p.add_argument("--classifier", type=str, required=True)
     p.add_argument("--weights_path", type=str, required=True)
-
+    p.add_argument("--augmented_cache", type=str, default=None,
+                   help="Path to the directory containing cached stylized views.")
+    
     p.add_argument("--geo_frac", type=float, required=True,
                    help="Fraction of views from geometric augmentations (0.0–1.0)")
     p.add_argument("--n_views", type=int, default=64)
     p.add_argument("--n_refs", type=int, default=16)
-
+    
     p.add_argument("--eval_strategy", type=str, default="zero",
                    choices=["vanilla", "zero", "tpt"])
     p.add_argument("--zero_gamma", type=float, default=ZERO_GAMMA)

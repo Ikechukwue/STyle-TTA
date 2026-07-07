@@ -5,7 +5,7 @@ Shared constants and enumerations for TTA inference.
 from __future__ import annotations
 
 # Reproducibility
-DEFAULT_SEED = 265017005
+DEFAULT_SEED = 71397589
 ALL_SEEDS = [71397589, 133560673, 265017005]
 
 # ZERO evaluation strategy defaults (Farina et al., NeurIPS 2024)

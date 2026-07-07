@@ -184,8 +184,8 @@ def main():
         if args.retrieval_strategy == "dino" and args.embedding_dir:
             from experiments.tta.extract_embeddings import extract_and_cache
             extract_and_cache(
-                dataset=args.dataset, data_path=args.data_path,
-                embedding_dir=args.embedding_dir,
+                dataset_name=args.dataset, split=args.split, data_path=args.data_path,
+                output_dir=args.embedding_dir,
                 model_name=args.embedding_model, device=device,
             )
 

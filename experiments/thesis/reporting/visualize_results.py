@@ -30,15 +30,14 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt
 
 HAS_MPL = True
-from config.constants import ALL_CLASSIFIERS
+from config.constants import ALL_CLASSIFIERS, TTA_STRATEGIES, ALL_SEEDS, VIT_CLASSIFIERS, VLM_CLASSIFIERS, CNN_CLASSIFIERS, FM_CLASSIFIERS
 from config.helpers import calc_top_k
 from .helpers.support_funct import *
-from .helpers.ablation import plot_ablation_bars, plot_nrefs_sweep, plot_topk_confidence
+from .helpers.ablation import plot_ablation_bars, plot_nrefs_sweep, plot_all_topk_metrics,plot_ablation_nrefs_multi, plot_ablation_lines, plot_ablation_nrefs, plot_all_ablation_nrefs, plot_all_ablation_retr
 from .helpers.style_transfer import plot_hybrid_tta, plot_style_transfer_comparison
 from .helpers.domain_difference import (plot_domain_shift_analysis, plot_domain_shift_class_scatter_per_group,
                                         plot_domain_shift_class_rankings_by_group,
                                         ) 
-
 
 
 
@@ -154,112 +153,85 @@ def plot_classifier_bases(
     generate_plot("top1", "Top-1", f"{dataset}_classifier_comparison_top1.png")
     generate_plot("top5", "Top-5", f"{dataset}_classifier_comparison_top5.png")
 
-def plot_accuracy_vs_ece(results_dir: Path, output_dir: Path, args):
-    """Publication-quality scatter plot of accuracy vs ECE across all experiments."""
-    all_points = []
-    # (Your existing search and load logic remains identical)
-    for pattern in ["thesis/geometric_tta", "thesis/ablation", "thesis/hybrid_tta",
-                    "geometric_tta", "ablation/retristyle","ablation/adain_tta", "hybrid_tta"]:
-        d = results_dir / pattern / f"tta_inference/results/{args.dataset}/{args.split}"
-        for f in find_json(d, "*.json"):
-            data = load_json(f)
-            m = data.get("metrics", {})
-            if "accuracy" in m and "ece" in m:
-                # Multiply by 100 if your data is in [0, 1] range
-                acc_val = m["accuracy"] * 100 if m["accuracy"] <= 1.0 else m["accuracy"]
-                ece_val = m["ece"] * 100 if m["ece"] <= 1.0 else m["ece"]
-                
-                all_points.append({
-                    "acc": acc_val,
-                    "ece": ece_val,
-                    "method": data.get("tta_method", "?"),
-                    "strategy": data.get("eval_strategy", "zero"),  # Crucial to capture vanilla vs zero!
-                    "clf": data.get("classifier", "?"),
-                })
-
-    if not all_points:
-        print("  [skip] No results for accuracy vs ECE plot")
-        return
-
-    # --- STYLE & CONFIGURATION SETTINGS ---
-    plt.style.use('seaborn-v0_8-whitegrid' if 'seaborn-v0_8-whitegrid' in plt.style.available else 'default')
-    fig, ax = plt.subplots(figsize=(9, 7), dpi=300)
-    
-    # 1. Map Classifiers to unique, distinct markers
-    clf_markers = {
-        "resnet18": "o",       # Circle
-        "densenet121": "s",    # Square
-        "vit_base_patch16_224": "^", # Triangle Up
-        "swin_base_patch4_window7_224": "D", # Diamond
-        "dinov2_vitb14": "p",  # Pentagon
-        "?": "X"
-    }
-    
-    # 2. Build explicit color palette for methods + strategy combinations
-    # This highlights why vanilla/tpt are better than zero!
-    unique_methods = sorted(set(p["method"] for p in all_points))
-    cmap = plt.cm.get_cmap("tab10")
-    color_map = {method: cmap(i % 10) for i, method in enumerate(unique_methods)}
-
-    # Track what we've added to the legend to avoid massive duplicate lists
-    legend_tracker = {}
-
-    # --- PLOTTING DATA POINTS ---
-    for p in all_points:
-        # Style logic: Give 'vanilla' and 'tpt' a clean filled look, and 'zero' a slightly translucent look
-        alpha_val = 0.9 if p["strategy"] in ["vanilla", "tpt"] else 0.4
-        edge_color = "black" if p["strategy"] in ["vanilla", "tpt"] else "none"
-        line_width = 0.8 if p["strategy"] in ["vanilla", "tpt"] else 0
-        
-        marker = clf_markers.get(p["clf"], "X")
-        color = color_map.get(p["method"], "#7f7f7f")
-        
-        # Label handling for grouped legend
-        lbl = f"{p['method']} ({p['strategy']})"
-        label_key = (lbl, p["clf"])
-        
-        scatter_handle = ax.scatter(
-            p["acc"], p["ece"],
-            color=color,
-            marker=marker,
-            s=80,  # Larger size for publication visibility
-            alpha=alpha_val,
-            edgecolors=edge_color,
-            linewidths=line_width
-        )
-        
-    # --- VISUAL ENHANCEMENTS FOR THE THESIS ---
-    # Draw the "Ideal Zone" boundary box in the bottom right corner
-    max_acc = max([p["acc"] for p in all_points]) if all_points else 100
-    min_ece = min([p["ece"] for p in all_points]) if all_points else 0
-    
-    ax.axhspan(0, 10, xmin=0.6, xmax=1.0, color='green', alpha=0.05, label='Optimal Performance Zone')
-    
-    # Clean labels & Grid adjustments
-    ax.set_xlabel("Top-1 Accuracy (%)", fontsize=11, fontweight='bold', labelpad=10)
-    ax.set_ylabel("Expected Calibration Error / ECE (%)", fontsize=11, fontweight='bold', labelpad=10)
-    ax.set_title("Empirical Trade-off: Accuracy vs. Calibration Calibration", fontsize=13, fontweight='bold', pad=15)
-    
-    # Custom Legend Reconstruction (Split into Methods vs. Backbones)
+def plot_accuracy_vs_ece_integrated(results_dir: Path, output_dir: Path, strategy_keys: list, args):
     from matplotlib.lines import Line2D
-    
-    # Method elements (Colors)
-    color_legends = [Line2D([0], [0], marker='o', color='w', markerfacecolor=color_map[m], markersize=10, label=m) for m in unique_methods]
-    # Backbone elements (Shapes)
-    unique_clfs = sorted(set(p["clf"] for p in all_points))
-    shape_legends = [Line2D([0], [0], marker=clf_markers.get(c, "X"), color='w', markerfacecolor='gray', markersize=10, label=c) for c in unique_clfs]
-    
-    first_legend = ax.legend(handles=color_legends, title="TTA Algorithm", loc="upper right", frameon=True, fontsize=9)
-    ax.add_artist(first_legend)
-    ax.legend(handles=shape_legends, title="Classifier Backbone", loc="lower left", frameon=True, fontsize=9)
+    import numpy as np
+    import matplotlib.pyplot as plt
 
-    ax.grid(True, linestyle="--", alpha=0.5)
-    fig.tight_layout()
+    # Group FM and VLM together
+    clf_groups = {
+        "CNN": CNN_CLASSIFIERS,
+        "ViT": VIT_CLASSIFIERS,
+        "VLM/FM": VLM_CLASSIFIERS + FM_CLASSIFIERS
+    }
+    group_markers = {"CNN": "o", "ViT": "s", "VLM/FM": "D"}
     
-    out = output_dir / "accuracy_vs_ece_upgraded.pdf"
-    fig.savefig(out, bbox_inches='tight')
+    aggregated = {s: {g: {} for g in clf_groups} for s in strategy_keys}
+    
+    for s_key in strategy_keys:
+        cfg = TTA_STRATEGIES[s_key]
+        for g_name, cl_list in clf_groups.items():
+            for cl in cl_list:
+                for rfs in cfg["axis"]:
+                    for seed in ALL_SEEDS:
+                        f_name = cfg["template"].format(cl=cl, rfs=rfs, seed=seed)
+                        f = results_dir / s_key / f"tta_inference/results/{args.dataset}/{args.split}" / f_name
+                        if not f.exists(): continue
+                        
+                        data = load_json(f)
+                        m = data.get("metrics", {})
+                        if "accuracy" in m and "ece" in m:
+                            if rfs not in aggregated[s_key][g_name]:
+                                aggregated[s_key][g_name][rfs] = {"acc": [], "ece": []}
+                            aggregated[s_key][g_name][rfs]["acc"].append(m["accuracy"] * 100)
+                            aggregated[s_key][g_name][rfs]["ece"].append(m["ece"] * 100)
+
+    plt.style.use('seaborn-v0_8-whitegrid')
+    fig, ax = plt.subplots(figsize=(12, 7), dpi=300)
+    
+    for s_key in strategy_keys:
+        cfg = TTA_STRATEGIES[s_key]
+        for g_name, rfs_data in aggregated[s_key].items():
+            for rfs, vals in rfs_data.items():
+                if not vals["acc"]: continue
+                
+                avg_acc = np.mean(vals["acc"])
+                avg_ece = np.mean(vals["ece"])
+                
+                shade_idx = list(cfg["axis"]).index(rfs) / max(1, len(cfg["axis"]) - 1)
+                color = plt.cm.get_cmap(cfg["color_shade"])(0.3 + 0.6 * shade_idx)
+                
+                ax.scatter(avg_acc, avg_ece, color=color, marker=group_markers.get(g_name, "x"), 
+                           s=100, zorder=3)
+
+    legend_elements = []
+    # Strategy section
+    for s in strategy_keys:
+        legend_elements.append(Line2D([0], [0], marker='o', color='w', 
+                                      markerfacecolor=plt.cm.get_cmap(TTA_STRATEGIES[s]["color_shade"])(0.6), 
+                                      markersize=8, label=f"Method: {TTA_STRATEGIES[s]['label']}"))
+    
+    legend_elements.append(Line2D([0], [0], color='w')) 
+    
+    # Backbone section
+    for g, marker in group_markers.items():
+        legend_elements.append(Line2D([0], [0], marker=marker, color='w', 
+                                      markerfacecolor='gray', markersize=8, label=f"Backbone: {g}"))
+
+    # Add Note to Legend Box
+    legend_elements.append(Line2D([0], [0], color='w', label="Note: Darker color \nintensity = higher N-Refs"))
+
+    ax.legend(handles=legend_elements, loc="best", frameon=True, fontsize=9, title="Plot Legend")
+
+    ax.set_xlabel("Average Top-1 Accuracy (%)", fontsize=11, fontweight='bold')
+    ax.set_ylabel("Average ECE (%)", fontsize=11, fontweight='bold')
+    ax.set_title(f"Accuracy vs. ECE: ImageNet-R", fontsize=13, fontweight='bold')
+    ax.grid(True, linestyle="--", alpha=0.5)
+    
+    fig.tight_layout()
+    fig.savefig(output_dir / "avg_accuracy_vs_ece.png", bbox_inches='tight', dpi=300)
     plt.close(fig)
-    print(f"  [saved upgraded plot] {out}")
+
 #  =========================================================================
 # Main
 # =========================================================================
@@ -287,43 +259,37 @@ def generate_all_plots(args):
     print("=" * 60)
     print("Result Visualisation")
     print("=" * 60)
-    #plot_style_transfer_comparison(results_dir, output_dir, args)
-    #plot_accuracy_vs_ece(results_dir, output_dir, args)
-    metric_path = "/home/stud/nemmler/retristyle/results/classifier_eval/classifier_evaluation/metrics_base.json" 
-    plot_classifier_bases("./results")
+    
     anchors = {
-            "best_retrieval": "dino",  # The strategy held constant for Eval/nrefs plots
-            "best_eval": "zero",       # The strategy held constant for Retrieval/nrefs plots
-        }
-    
-    for method in []: #['ablation/adain', 'ablation/retristyle', 'geometric_tta']: #, 
-        plot_topk_confidence(results_dir, output_dir, args, method, k=args.top_k)
-        if args.top_k != 1:
-            plot_topk_confidence(results_dir, output_dir, args, method, k=1)
-        anchors["best_n_refs"] = 16 if method == 'ablation/retristyle' else 32
-        plot_ablation_bars(results_dir, output_dir, "retrieval", method, args, **anchors)
-        plot_ablation_bars(results_dir, output_dir, "eval",method,  args, **anchors)
-        plot_ablation_bars(results_dir, output_dir, "nrefs",method,  args, **anchors)
-        plot_nrefs_sweep(results_dir, output_dir, args, method,
-                            best_retrieval=anchors["best_retrieval"], 
-                            best_eval=anchors["best_eval"])
+        "best_retrieval": "dino",
+        "best_eval": "zero",
+    }
+    #plot_all_topk_metrics(results_dir, args.dataset, args.split)
+    #plot_all_ablation_retr(results_dir, output_dir,'ablation/adain_tta',  args)
+    done = []
+    for method in ['ablation/adain_tta', 'geometric_tta', 'ablation/retristyle']:
+        done.append(method)
+        #plot_ablation_nrefs_multi(results_dir, output_dir, done, args)
+        anchors["best_n_refs"] = 16 #if method == 'ablation/retristyle' else 32
+        #plot_all_ablation_nrefs(results_dir, output_dir, method, args, True)
+        #plot_ablation_lines(results_dir, output_dir, "retrieval", method, args, **anchors)
+        #plot_ablation_lines(results_dir, output_dir, "eval", method, args, **anchors)
+        #plot_ablation_lines(results_dir, output_dir, "nrefs", method, args, **anchors)
+        #plot_nrefs_sweep(results_dir, output_dir, args, method,
+        #                 best_retrieval=anchors["best_retrieval"], 
+        #                 best_eval=anchors["best_eval"])
         
-    #plot_hybrid_tta(results_dir, output_dir, args)
-    #plot_accuracy_vs_ece(results_dir, output_dir, args)
-    
-    
-    #data_a, data_baseline = normalize_data(args)
-    #plot_domain_shift_analysis(data_a, data_baseline, output_dir, args)
-    #plot_domain_shift_class_scatter_per_group(data_a, data_baseline, output_dir, args)
-    #data_a, data_baseline = normalize_data(args)
-    #plot_domain_shift_analysis(data_a, data_baseline, output_dir, args)
-    #plot_domain_shift_class_scatter_per_group(data_a, data_baseline, output_dir, args)
-    #plot_domain_shift_class_rankings_by_group(data, output_dir, args)
+    # --- New Best of Best Comparison Run ---
+    print("\nGenerating Best-of-Best Method Comparison Profiles...")
+    plot_accuracy_vs_ece_integrated(results_dir, output_dir, done, args)
+    best_settings = {
+        "ablation/adain_tta": {"retr": "dino", "eval": "zero", "n_refs": 32},
+        "ablation/retristyle": {"retr": "dino", "eval": "zero", "n_refs": 16},
+        "geometric_tta": {"eval": "zero", "n_refs":64} 
+    }
+    #plot_method_comparison(results_dir, output_dir, args, best_settings)
 
-    print("\nRunning Stratified Domain Correlation Analysis...")
-    #plot_metric_correlation_heatmap(results_dir, output_dir, args)
     print(f"\nAll figures written to {output_dir}/")
-
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Generate thesis figures")

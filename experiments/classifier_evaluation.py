@@ -405,49 +405,52 @@ _DINOV2_CLASSIFIERS = {"dinov2_vitb14", "dinov2_vitl14", "dinov2_vits14", "dinov
 # Model Loading
 # =============================================================================
 class MaskedClassifier(nn.Module):
-    """Wrapper Class to have the models predictions be masked for a subset of classes"""
+    """Wrapper Class to handle masking for both ImageNet wnids and Satellite class indices."""
     def __init__(self, base_model, split):
         super().__init__()
         self.base_model = base_model
         self.split = split
-        mask_list = self._set_class_mask()
+        
+        # Determine if we are using a satellite mapping or ImageNet subset
+        if "ucmerced" in self.split:
+            # For satellite, we assume a direct index mask
+            mask_list = [True] * 10
+        else:
+            # For ImageNet, use existing wnid logic
+            mask_list = self._set_class_mask()
+            
         self.register_buffer("mask", torch.tensor(mask_list, dtype=torch.bool))
 
-        if hasattr(base_model, 'backbone'):
-            self.backbone = base_model.backbone
-        else:
-            # Fallback for standard models where the model IS the backbone
-            self.backbone = base_model
+        self.backbone = base_model.backbone if hasattr(base_model, 'backbone') else base_model
 
     def forward(self, x):
-        return self.base_model(x)[:, self.mask]
-    
+        logits = self.base_model(x)
+        if "ucmerced" in self.split:
 
-    @property
-    def head(self):
-        return self.base_model.head
-    
+            # Shape: [10 source classes -> 5 target classes]
+            matrix = torch.zeros((10, 5), dtype=torch.float32).to(logits.device)
+            
+            # Map based on alphabetical order of EuroSAT folders:
+            # 0: AnnualCrop, 1: Forest, 2: HerbaceousVegetation, 3: Highway, 4: Industrial,
+            # 5: Pasture, 6: PermanentCrop, 7: Residential, 8: River, 9: SeaLake
+            matrix[[0, 5, 6], 0] = 1.0  # AnnualCrop, Pasture, PermanentCrop -> agricultural
+            matrix[1, 1] = 1.0          # Forest -> forest
+            matrix[4, 2] = 1.0          # Industrial -> industrial
+            matrix[7, 3] = 1.0          # Residential -> residential
+            matrix[8, 4] = 1.0          # River -> river
+            
+            return torch.matmul(logits, matrix)
+        return logits[:, self.mask]
+
     def _set_class_mask(self) -> list[bool]:
-        """
-        Create subset mask for the wnids that have to be ignored for correct softmax calculation.
-
-        A json of all subset (as well as the all ImageNet classes) wnids is required
-        """
-
+        """Original ImageNet wnid masking logic."""
         with open("./data/imagenet/imagenet_subsets.json", "r") as f:
             data = json.load(f)
-            if "@" in self.split:
-                split = self.split.split("@")[1]
-            else:
-                split = self.split 
-            subset_wnids = data.get(split, [])
-            all_wnids = data.get("full", [])
-
-        mask = [wnid in subset_wnids for wnid in all_wnids]
-
-        return mask
-
-
+        
+        split = self.split.split("@")[1] if "@" in self.split else self.split
+        subset_wnids = data.get(split, [])
+        all_wnids = data.get("full", [])
+        return [wnid in subset_wnids for wnid in all_wnids]
 
 
 def load_classifier(
@@ -471,9 +474,9 @@ def load_classifier(
     # ---- CLIP models (via open_clip) ----------------------------------------
     if classifier in _CLIP_CLASSIFIERS:
         from experiments.clip_classifier import load_clip_classifier
-        mode = "linear_probe" if weights_path and (Path(weights_path).exists() or weights_path=="linear_probe") else "zero_shot"
+        mode = "linear_probe" if (weights_path == "linear_probe" or ( weights_path and Path(weights_path).exists())) else "zero_shot"
         return load_clip_classifier(
-            model_name=classifier,
+            model_name=classifier.split("@")[0] if "@" in classifier else classifier,
             num_classes=num_classes,
             device=str(device),
             weights_path=weights_path if mode == "linear_probe" else None,
@@ -492,7 +495,7 @@ def load_classifier(
 
     # ---- Standard timm models -----------------------------------------------
     # Create model architecture
-    if weights_path == "pretrained":
+    if weights_path in ["pretrained", "pretrained_backbone_only", "pretrained_full"]:
         model = timm.create_model(classifier, pretrained=True, num_classes=num_classes)
         return model
     
@@ -623,63 +626,36 @@ def evaluate_model(
     accelerator: Accelerator,
     num_classes: int,
     task_type: str,
+    dataset: str,
     split: str,
 ) -> Dict[str, float]:
-    """
-    Evaluate a model on a dataset split cleanly in memory.
-    """
+    
     model.eval()
+    
     total_batches = len(dataloader)
+    pbar = tqdm(total=total_batches, desc=f"Evaluating {split}", ncols=80, disable=not accelerator.is_local_main_process)
     
-    # Progress bar setup
-    pbar = tqdm(
-        total=total_batches,
-        desc=f"Evaluating {split}",
-        ncols=80,
-        disable=not accelerator.is_local_main_process
-    )
-    
-    # Pure in-memory metrics tracking lists
-    y_true_list = []
-    y_pred_list = []
+    y_true_list, y_pred_list = [], []
     prediction_fn = nn.Sigmoid() if task_type == "multi-label" else nn.Softmax(dim=1)
     
     with torch.no_grad():
-        for batch_idx, (x, y) in enumerate(dataloader):
-            # Forward pass
+        for x, y in dataloader:
             outputs = model(x)
-            
-            # Gather predictions across all distributed processes
             gathered_outputs = accelerator.gather_for_metrics(outputs)
             gathered_y = accelerator.gather_for_metrics(y)
             
-            # Post-process predictions
-            preds = prediction_fn(gathered_outputs)
+            probs = prediction_fn(gathered_outputs)
             
-            # Handle potential NaNs safely
-            if torch.isnan(preds).any():
-                preds = torch.nan_to_num(preds, nan=1.0/num_classes)
-
-            # Keep purely as CPU tensors (extremely memory efficient compared to Python lists/JSON strings)
             y_true_list.append(gathered_y.cpu())
-            y_pred_list.append(preds.cpu())
-            
+            y_pred_list.append(probs.cpu())
             pbar.update(1)
     
     pbar.close()
     
-    # Concatenate the collected batches and convert directly to NumPy arrays
     y_true = torch.cat(y_true_list).numpy()
     y_pred = torch.cat(y_pred_list).numpy()
-    
-    # Slice arrays to match the exact dataset size, trimming distributed sampler padding
-    original_dataset_size = len(dataloader.dataset)
-    y_true = y_true[:original_dataset_size]
-    y_pred = y_pred[:original_dataset_size]
-    
-    # Calculate and return final metrics
-    metrics = compute_metrics(y_true, y_pred, num_classes, task_type)
-    return metrics
+
+    return compute_metrics(y_true, y_pred, num_classes, task_type)
 # =============================================================================
 # JSON Handling
 # =============================================================================
@@ -727,7 +703,11 @@ def update_metrics(
         metrics_data["metrics"][dataset][classifier][method] = {}
     
     seed_str = str(seed)
-    metrics_data["metrics"][dataset][classifier][method][seed_str] = split_metrics
+    if seed_str not in metrics_data["metrics"][dataset][classifier][method]:
+        metrics_data["metrics"][dataset][classifier][method][seed_str] = split_metrics
+    else:
+        metrics_data["metrics"][dataset][classifier][method][seed_str].update(split_metrics)
+
     
     return metrics_data
 
@@ -747,12 +727,14 @@ def evaluate_classifier(
     batch_size: int = 128,
     num_workers: int = 4,
     splits: Optional[List[str]] = None,
+    
 ) -> None:
     """
     Evaluate a trained classifier on all specified splits.
     
     Args:
         dataset: Dataset name
+        available splits: List of splits tu run
         data_path: Path to dataset
         classifier: Classifier architecture name
         method: Training method/augmentation
@@ -779,13 +761,13 @@ def evaluate_classifier(
     # Get dataset info
     num_classes = NUM_CLASSES[dataset]
     task_type = TASK_TYPE[dataset]
-    available_splits = ["val", "val@test_r", "test_r"] 
+    
     
     # Determine splits to evaluate
-    if splits is None:
-        splits = available_splits
-    else:
-        splits = [s for s in splits if s in available_splits]
+    #if splits is None:
+    #    splits = available_splits
+    #else:
+    #    splits = [s for s in splits if s in available_splits]
     
     accelerator.print(f"Task type: {task_type}")
     accelerator.print(f"Num classes: {num_classes}")
@@ -823,7 +805,7 @@ def evaluate_classifier(
         
         accelerator.print(f"\nEvaluating on {split} split...")
 
-        if "@" in split or split in ["test_r", "test_abl", "test_r_c26"]:
+        if (dataset == "imagenet" and ("@" in split or split in ["test_r", "test_abl", "test_r_c26"])) or (dataset == "eurosat" and split == "ucmerced"):
             accelerator.print(f"  Applying class subset masking for split: {split}")
             active_model = MaskedClassifier(model, split=split)
             split_num_classes = int(active_model.mask.sum().item())
@@ -853,6 +835,7 @@ def evaluate_classifier(
             accelerator=accelerator,
             num_classes=split_num_classes,
             task_type=task_type,
+            dataset=dataset,
             split=split,
         )
         

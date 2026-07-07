@@ -42,6 +42,7 @@ from experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
 from experiments.utils.training import calculate_passed_time, get_wandb_run_id, get_best_val_loss, get_epochs_no_improve, save_latest_checkpoint, rename_latest_to_final, save_model, get_resume_epoch
 from experiments.classifier_evaluation import load_classifier
 from config.constants import PRETRAINED_CLASSIFIERS
+
 def build_augmentation_transforms(
     augmentations: List[str],
     input_size: int,
@@ -130,30 +131,6 @@ def build_augmentation_transforms(
     
     return transforms
 
-def check_memory_safety(cache_path, safety_margin=0.1):
-    """
-    Checks if the cached features will fit in RAM before loading.
-    """
-    # 1. Get file size of the cache (rough estimate of memory needed)
-    file_size_bytes = os.path.getsize(cache_path)
-    # Give it 20% overhead because converting torch -> numpy can briefly double usage
-    estimated_need_bytes = file_size_bytes * 1.2 
-    
-    # 2. Get available system memory
-    available_bytes = psutil.virtual_memory().available
-    
-    # 3. Compare
-    print(f"--- Memory Safety Check ---")
-    print(f"Estimated RAM needed: {estimated_need_bytes / (1024**3):.2f} GB")
-    print(f"System RAM available: {available_bytes / (1024**3):.2f} GB")
-    
-    if estimated_need_bytes > available_bytes:
-        raise MemoryError(
-            f"DANGER: Not enough RAM to load {cache_path}. "
-            f"Need ~{estimated_need_bytes / 1e9:.2f}GB but only have {available_bytes / 1e9:.2f}GB free."
-        )
-    else:
-        print("Safety check passed. Proceeding with load...")
 
 def prepare_dataloaders(
     dataset: str,
@@ -264,7 +241,7 @@ def prepare_dataloaders(
 
     if extract and classifier in PRETRAINED_CLASSIFIERS:
         classifier = classifier.replace(".", "_") if "." in classifier else classifier
-        cache = Path(f"./data/embeddings/{classifier}")
+        cache = Path(f"./data/embeddings/{classifier}/{dataset}")
         if cache.exists():
             print(f"Loading cached features from {cache}")
             train_data = torch.load(cache / 'train.pt', weights_only=True)
@@ -347,16 +324,26 @@ def create_optimizer_and_scheduler(
         warmup_epochs=5,
         min_lr=1e-6,
     )"""
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    
+    if not trainable_params:
+        raise ValueError(
+            f"No trainable parameters found in the model. "
+            f"Check if layers were accidentally frozen completely."
+        )
+
     optimizer = torch.optim.SGD(
-        model.head.parameters(),
+        trainable_params,
         lr=lr,
         momentum=0.9,
         weight_decay=0
     )
+    
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
-        T_max=50
+        T_max=num_epochs  # Matches your dynamic training bounds
     )
+    
     return optimizer, lr_scheduler
 
 
@@ -680,6 +667,7 @@ def train(
     resume_from_checkpoint: bool = False,
     save_checkpoint_every: int = 10,
     gradient_accumulation_steps: int = 1,
+    train_mode: str = "linear_probe",
     **kwargs
 ) -> None:
     """
@@ -850,23 +838,33 @@ def train(
     # Create model
     accelerator.print(f"Creating model: {classifier}")
     num_classes = NUM_CLASSES[dataset]
+
+    # 1. Base Model loading (Ensuring pre-trained parameters are ALWAYS pulled)
     if classifier in PRETRAINED_CLASSIFIERS:
         model = load_classifier(
             classifier=classifier,
             num_classes=num_classes,
-            weights_path="linear_probe",
+            weights_path="linear_probe", # Base backbone weights initialization
             device='cuda'
         )
+    else:
+        import timm
+        model = timm.create_model(classifier, pretrained=True, num_classes=num_classes)
+
+    # 2. Strategy Assignment (Unfreezing Parameters dynamically)
+    if train_mode == "linear_probe":
         model.requires_grad_(False)
+        # Handle structural variance across timm architectural hooks
         if hasattr(model, 'head'):
             model.head.requires_grad_(True)
-        
-
-
-    else:
-        model = timm.create_model(classifier, pretrained=False, num_classes=num_classes)
+        elif hasattr(model, 'fc'):
+            model.fc.requires_grad_(True)
+        elif hasattr(model, 'classifier'):
+            model.classifier.requires_grad_(True)
+            
+    elif train_mode == "finetune":
         model.requires_grad_(True)
-    
+
     # Create optimizer and scheduler
     accelerator.print("Creating optimizer and scheduler")
     optimizer, lr_scheduler = create_optimizer_and_scheduler(
@@ -1074,7 +1072,7 @@ def main():
     parser.add_argument('--data_path', type=str, required=True, help='Path to dataset')
     parser.add_argument('--output_path', type=str, default='./models', help='Path to save final trained models')
     parser.add_argument('--checkpoint_path', type=str, default='./checkpoints', help='Path to save checkpoints for resuming training')
-    
+    parser.add_argument('--train_mode', type=str, default='linear_probe', help='Trainigs Mode full finetune or just linear probe')
     # Model configuration
     parser.add_argument('--classifier', type=str, default='resnet50', help='Classifier model name (from timm)')
     parser.add_argument('--input_size', type=int, default=224, help='Input image size')
@@ -1145,7 +1143,9 @@ def main():
         resume_from_checkpoint=args.resume_from_checkpoint,
         save_checkpoint_every=args.save_checkpoint_every,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
+
     )
+
 
 if __name__ == "__main__":
     main()

@@ -62,6 +62,9 @@ NORMALIZATION_MEAN = {
 
     # ImageNet-1k (standard values)
     "imagenet": (0.485, 0.456, 0.406),
+    # Eurosat and UCMerced use pretrained Imagenet Models in setup
+    "eurosat": (0.485, 0.456, 0.406),
+    "ucmerced": (0.485, 0.456, 0.406),
 
     # PACS (using ImageNet stats as proxy for natural images)
     "pacs": (0.485, 0.456, 0.406),
@@ -144,6 +147,9 @@ NORMALIZATION_STD = {
 
     # ImageNet-1k (standard values)
     "imagenet": (0.229, 0.224, 0.225),
+    # Eurosat and UCMerced use pretrained Imagenet Models in setup
+    "eurosat": (0.229, 0.224, 0.225),
+    "ucmerced": (0.229, 0.224, 0.225),
 
     # PACS (using ImageNet stats as proxy for natural images)
     "pacs": (0.229, 0.224, 0.225),
@@ -216,6 +222,8 @@ NUM_CLASSES = {
     "cifar10": 10,
     "cifar100": 100,
     "imagenet": 1000,
+    "eurosat":10,
+    "ucmerced":10, 
     "pacs": 7,
     "vlcs": 5,
     "domainnet": 345,
@@ -262,6 +270,8 @@ TASK_TYPE = {
     "cifar10": "multi-class",
     "cifar100": "multi-class",
     "imagenet": "multi-class",
+    "eurosat": "multi-class",
+    "ucmerced": "multi-class",
     "pacs": "multi-class",
     "vlcs": "multi-class",
     "domainnet": "multi-class",
@@ -323,6 +333,7 @@ DATASET_SPLITS = {
     # ImageNet-1k + variants
     "imagenet": ["train", "val", "test", "test_a", "test_r", "test_c",
                  "test_p", "test_sketch", "test_v2", "test_abl", "train@test_r", "test_r_c26"],
+
 
     # PACS (default train_domain=photo)
     "pacs": ["train", "val", "test",

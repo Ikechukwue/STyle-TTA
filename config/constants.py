@@ -1,3 +1,5 @@
+
+import matplotlib.pyplot as plt
 # ============================================================================
 # Seeds
 # ============================================================================
@@ -26,12 +28,12 @@ VIT_CLASSIFIERS = [
 
 VLM_CLASSIFIERS = [
     "ViT-B-16",
-    "ViT-B-16@Zero",
+    #"ViT-B-16@Zero",
 ]
 
 FM_CLASSIFIERS = [
     "dinov2_vitb14",
-    "vit_base_patch16_dinov3_lvd1689m"
+    #"vit_base_patch16_dinov3_lvd1689m"
 ]
 
 ALL_CLASSIFIERS = (
@@ -75,11 +77,11 @@ STYLE_BATCH_SIZE = 8
 # Hybrid TTA
 # ============================================================================
 
-TTA_STRATEGIES = [
-    "retristyle",
-    "geometric_tta",
-    "adain_tta"
-]
+TTA_STRATEGIES = {
+        "ablation/adain_tta": {"template": "{cl}_adain_tta_zero_dino_nrefs{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16, 32, 64], "color": "tab:red","color_shade": "Reds", "label": "AdaIN"},
+        "ablation/retristyle": {"template": "{cl}_retristyle_zero_dino_nrefs{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16], "color": "tab:green","color_shade": "Greens", "label": "StyleID"},
+        "geometric_tta": {"template": "{cl}_geometric_zero_nviews{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16, 32, 64], "color": "tab:blue", "color_shade": "Blues","label": "Geometric(Crop/Flip)"}
+    }
 GEO_FRACS = [
     1.0,
     0.75,

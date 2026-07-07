@@ -227,13 +227,13 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     )
 
 
-    if args.classifier == 'ViT-B-16':
+    if 'ViT-B-16' in args.classifier:
         mean, std = model.preprocess.transforms[-1].mean, model.preprocess.transforms[-1].std
     else:
         mean = NORMALIZATION_MEAN['imagenet']
         std = NORMALIZATION_STD['imagenet']
 
-    if args.split and args.dataset == "imagenet":
+    if not args.split in ["train", "val"] and args.dataset == "imagenet":
         model = MaskedClassifier(model, args.split)
 
     model = accelerator.prepare(model)
@@ -629,10 +629,12 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
 
         # ---- persist prediction (main process only) ----
         if accelerator.is_main_process:
+            pred_np = pred.squeeze(0).detach().cpu().numpy()
+            # Standard full array persistence for other splits
             pred_data["predictions"].append({
                 "sample_idx": sample_idx,
-                "y_true": y.squeeze(0).cpu().numpy().tolist(),   # scalar or (L,) for multi-label
-                "y_pred": pred.squeeze(0).detach().cpu().numpy().tolist(),  # (C,)
+                "y_true": y.squeeze(0).cpu().numpy().tolist(),
+                "y_pred": pred_np.tolist(),
             })
             if (sample_idx + 1) % 500 == 0 or (sample_idx + 1) == total_samples:
                 save_predictions(pred_path, pred_data)

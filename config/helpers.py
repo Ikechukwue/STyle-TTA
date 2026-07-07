@@ -55,17 +55,14 @@ def get_y_true(dataset:str, split:str):
 def get_baseline_results(file_name: str, predictions: bool = True, split: str = 'test_r', 
                          baseline_dir: str = "./results/baseline/tta_inference"):
     classifier = None 
-    seed = None
+    seed = 71397589
     eval_strat = None 
 
     for c in ALL_CLASSIFIERS:
         if c in file_name:
             classifier = c
             break
-    for s in ALL_SEEDS:
-        if str(s) in file_name:
-            seed = s  # FIX 1: Assignment corrected from seed = seed
-            break
+
     for es in EVAL_STRATEGIES:
         if es in file_name:
             eval_strat = es
@@ -101,6 +98,28 @@ def get_top_k(results: dict, k: int = 5):
     final_confidences = np.take_along_axis(top_k_unsorted_values, sort_args, axis=-1)
     
     return final_indices, final_confidences
+
+def get_classifier_name(cls: str) -> tuple[str, str]:
+    # Maps raw string -> (Display Name, Group Category)
+    mapping = {
+        # CNNs
+        "resnet18": ("ResNet-18", "CNN"),
+        "densenet121": ("DenseNet-121", "CNN"),
+        
+        # ViTs
+        "vit_base_patch16_224": ("ViT-B/16 (224)", "Vision Transformer"),
+        "swin_base_patch4_window7_224": ("Swin-B (224)", "Vision Transformer"),
+        
+        # VLMs
+        "ViT-B-16": ("CLIP ViT-B/16", "Vision-Language Model"),
+        "ViT-B-16@Zero": ("CLIP ViT-B/16 (Zero-Shot)", "Vision-Language Model"),
+        
+        # Foundation Models
+        "dinov2_vitb14": ("DINOv2 ViT-B/14", "Foundation Model"),
+        "vit_base_patch16_dinov3_lvd1689m": ("DINOv3 ViT-B/16", "Foundation Model"),
+    }
+    
+    return mapping.get(cls, (cls, "Unknown"))
 
 def top_k_acc(results: dict, final_indices: np.ndarray) -> float:
     y_true = np.array([sample["y_true"] for sample in results["predictions"]])

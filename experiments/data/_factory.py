@@ -13,6 +13,7 @@ from typing import Callable, Optional
 
 # Import own scripts
 from experiments.data.camelyon import Camelyon17WILDS
+from experiments.data.ucmerced import UCMerced
 from experiments.data.epistr import EpitheliumStroma
 from experiments.data.peripheral_blood import PeripheralBlood
 from experiments.data.bone_marrow_smears_and_peripheral_blood import BoneMarrowSmearsAndPeripheralBlood
@@ -22,6 +23,7 @@ from experiments.data.retina import Retina
 #from experiments.data.medmnist_dataset import MedMNIST, MEDMNIST_2D_DATASETS
 from experiments.data.imagefolder import ImageFolder
 from experiments.data.cifar import CIFAR
+from experiments.data.eurosat import EuroSAT
 from experiments.data.imagenet_variants import ImageNet
 from experiments.data.pacs import PACS
 from experiments.data.vlcs import VLCS
@@ -53,7 +55,23 @@ class CustomDataset(VisionDataset):
         subset_seed = kwargs.pop('subset_seed', None)
 
         # Load the dataset
-        if dataset_name.lower() == "camelyon17wilds":
+        if dataset_name.lower() == "eurosat":
+            # Create the root directory to the data if it does not exist
+            self.dataset = EuroSAT(
+                root_dir=data_path, split=split,
+                transform=transform, target_transform=target_transform,
+                use_subset=use_subset, subset_size=subset_size, 
+                subset_seed=subset_seed, **kwargs
+            )
+        elif dataset_name.lower() == "ucmerced":
+            # Create the root directory to the data if it does not exist
+            self.dataset = UCMerced(
+                root_dir=data_path,
+                transform=transform, target_transform=target_transform,split=split,
+                use_subset=use_subset, subset_size=subset_size, 
+                subset_seed=subset_seed, **kwargs
+            )
+        elif dataset_name.lower() == "camelyon17wilds":
             # Create the root directory to the data if it does not exist
             root_dir = create_dataset_directory(data_path, dataset_name)
 

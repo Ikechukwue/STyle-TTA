@@ -36,6 +36,8 @@ import torch
 
 from experiments.thesis.reporting.pixel_dashboard import load_pipeline_dataset,  process_summaries, extract_class_metrics, TTAVisualizer
 from config.helpers import load_json
+
+
 # ============================================================================
 # Embedding loading
 # ============================================================================
@@ -155,19 +157,43 @@ def compute_class_metrics(
         }
     return results
 
-
 def aggregate(per_class: Dict[int, Dict[str, float]]) -> Dict[str, float]:
-    """Compute mean/std/min/max across all classes for each metric."""
+    """
+    Compute weighted summary statistics (mean/std/min/max) across all classes 
+    for each metric, automatically falling back to an unweighted uniform 
+    aggregation if 'n_samples' is missing.
+    """
     if not per_class:
         return {}
+    
+    # Identify valid metric keys, ignoring sample metadata
     keys = [k for k in next(iter(per_class.values())).keys() if k != "n_samples"]
     summary = {}
+    
+    # Extract weights if available, default to uniform 1s if missing
+    sample_counts = [v.get("n_samples", 1) for v in per_class.values()]
+    weights = np.array(sample_counts, dtype=float)
+    total_weight = np.sum(weights)
+    
     for key in keys:
-        vals = [v[key] for v in per_class.values()]
-        summary[f"{key}_mean"] = float(np.mean(vals))
-        summary[f"{key}_std"]  = float(np.std(vals))
+        vals = np.array([v[key] for v in per_class.values()], dtype=float)
+        
+        if total_weight > 0:
+            # Weighted Mean
+            w_mean = np.sum(vals * weights) / total_weight
+            
+            # Weighted Variance and Standard Deviation
+            w_var = np.sum(weights * (vals - w_mean) ** 2) / total_weight
+            w_std = np.sqrt(w_var)
+        else:
+            w_mean = np.mean(vals)
+            w_std = np.std(vals)
+            
+        summary[f"{key}_mean"] = float(w_mean)
+        summary[f"{key}_std"]  = float(w_std)
         summary[f"{key}_min"]  = float(np.min(vals))
         summary[f"{key}_max"]  = float(np.max(vals))
+        
     summary["n_classes"] = len(per_class)
     return summary
 
@@ -409,7 +435,7 @@ def analyse():
         "resnet18"])
     parser.add_argument("--no_umap", action="store_true",
                         help="Skip UMAP plots")
-    parser.add_argument("--limit_cls",type=int, default=26, 
+    parser.add_argument("--limit_cls",type=int, default=None, 
                         help="Set a limit on how many classes should be included")
     args = parser.parse_args()
 

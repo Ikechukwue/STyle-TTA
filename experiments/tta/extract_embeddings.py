@@ -74,6 +74,7 @@ def embeddings_exist(
     split: str,
 ) -> bool:
     """Check whether embeddings have already been computed."""
+    model = model_name.replace(".", "_")
     return embeddings_path(output_dir, dataset, model_name, split).exists()
 
 

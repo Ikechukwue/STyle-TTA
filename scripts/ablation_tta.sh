@@ -22,7 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 CLASSIFIER="vit_base_patch16_dinov3_lvd1689m"
-EVAL_STRATEGY="zero"
+EVAL_STRATEGY="vanilla"
 RETRIEVAL_STRATEGY="dino"
 ALL_N_REFS=(2 4 8 16)
 SEED=$DEFAULT_SEED
@@ -50,13 +50,13 @@ if is_pretrained "$CL"; then
 fi
 
 for N_REFS in "${ALL_N_REFS[@]}"; do
-for EV in "${EVAL_STRATEGIES[@]}"; do
+#for EV in "${EVAL_STRATEGIES[@]}"; do
 echo "Ablation: $CL | retr=$RETRIEVAL_STRATEGY | eval=$EV | n_refs=$N_REFS"
 echo $WEIGHTS_PATH
 python -m experiments.tta.run_inference \
     --dataset "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
     --classifier "$CL" --weights_path "$WEIGHTS_PATH" \
-    --tta_method retristyle --eval_strategy "$EV" \
+    --tta_method retristyle --eval_strategy "$EVAL_STRATEGY" \
     --retrieval_strategy "$RETRIEVAL_STRATEGY" \
     --n_refs "$N_REFS" --n_views $N_REFS \
     --style_batch_size $STYLE_BATCH_SIZE \
@@ -65,6 +65,6 @@ python -m experiments.tta.run_inference \
     --seed "$SEED" \
     --augmented_cache "$AUG_DIR" \
     --output_path "$OUTPUT_PATH/ablation/retristyle"
-done
+#done
 done
 done

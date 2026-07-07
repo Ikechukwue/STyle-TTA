@@ -14,10 +14,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-DATASET="imagenet"
-SPLIT="test_r"
+DATASET="eurosat"
+SPLIT="ucmerced"
 RETRIEVAL_STRATEGY="${BEST_RETRIEVAL:-dino}"
-N_REFS=16
+N_REFS=1
 N_VIEWS=$DEFAULT_N_VIEWS
 SEED=$DEFAULT_SEED
 
@@ -37,9 +37,9 @@ echo "Generating augmented cache: $DATASET/$SPLIT | retr=$RETRIEVAL_STRATEGY | n
 
 python -m experiments.tta.generate_augmented_images \
     --dataset "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
-    --tta_method  \
+    --tta_method "retristyle"\
     --retrieval_strategy "$RETRIEVAL_STRATEGY" \
     --n_refs "$N_REFS" --n_views "$N_VIEWS" \
     --embedding_dir "$EMBEDDING_DIR" --embedding_model "$EMBEDDING_MODEL" \
-    --cache_root "$OUTPUT_PATH/augmented_cache" \
+    --cache_root "./data/augmented_cache" \
     --seed "$SEED"

@@ -230,15 +230,16 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     if 'ViT-B-16' in args.classifier:
         mean, std = model.preprocess.transforms[-1].mean, model.preprocess.transforms[-1].std
     else:
-        mean = NORMALIZATION_MEAN['imagenet']
-        std = NORMALIZATION_STD['imagenet']
+        mean = NORMALIZATION_MEAN[args.dataset]
+        std = NORMALIZATION_STD[args.dataset]
 
-    if not args.split in ["train", "val"] and args.dataset == "imagenet":
+    if not args.split in ["train", "val"] and (args.dataset == "imagenet" or args.dataset == "eurosat"):
         model = MaskedClassifier(model, args.split)
 
     model = accelerator.prepare(model)
     model.eval()
     normalize_fn = _build_normalize_fn(args.dataset, std, mean)
+
 
     # ---- test dataloader (unnormalised [0, 1]) ------------------------------
     test_transform = v2.Compose([
@@ -257,6 +258,12 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
         num_workers=args.num_workers, worker_init_fn=worker_seed, generator=g,
     )
 
+    if args.dataset == "eurosat":
+        if args.split == "ucmerced":
+            num_classes = 5
+    elif args.dataset == "imagenet":
+        if "test_r" in args.split:
+            num_classes == 200
     # ---- embedding extraction (dino retrieval only) -------------------------
     embedding_dir = getattr(args, "embedding_dir", None)
     embedding_model = getattr(args, "embedding_model", None) or "vit_base_patch16_dinov3.lvd1689m"
@@ -415,7 +422,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
         
         if y_pred.ndim == 3:  # (N, 1, C) from old format
             y_pred = y_pred.squeeze(1)
-        num_classes = len(np.unique(test_set.dataset.dataset.targets))
+        # to delete: num_classes = len(np.unique(test_set.dataset.dataset.targets))
         metrics = compute_metrics(y_true, y_pred, num_classes, task_type)
 
         res_path = results_path(args, eval_split, key=exp_key)
@@ -653,7 +660,16 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
         accelerator.print(f"Predictions saved to {pred_path}")
 
     # ---- compute metrics ----------------------------------------------------
-    num_classes = len(np.unique(test_set.dataset.dataset.targets))
+    current_dataset = test_set
+    while hasattr(current_dataset, "dataset"): #Drill through the nested structure for the datasets targets list
+        current_dataset = current_dataset.dataset
+
+    # To delete
+    #if hasattr(current_dataset, "targets"):
+    #    num_classes = len(np.unique(current_dataset.targets))
+    #else:
+    #    num_classes = len(set(label for _, label in test_set))
+
     if accelerator.is_main_process:
         y_true = np.array([p["y_true"] for p in pred_data["predictions"]]).squeeze()
         y_pred = np.array([p["y_pred"] for p in pred_data["predictions"]])

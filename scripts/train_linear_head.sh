@@ -2,9 +2,9 @@
 
 
 # Define the dataset to evaluate
-DATASET="eurosat"
+DATASET="camelyon17wilds"
 DATA_PATH="./data"
-
+OUTPUT_PATH="./data/models/$DATASET"
 # 1. Models designated for LINEAR PROBING
 # Typically uses a higher learning rate and fewer epochs
 LP_CLASSIFIERS=(
@@ -23,10 +23,9 @@ FT_CLASSIFIERS=(
     "densenet121"
     "vit_base_patch16_224"
 )
-LEFT=("ViT-B-16")
-NOTHING=()
+
 echo "=== Starting Linear Probing Experiments ==="
-for CL in "${LEFT[@]}"
+for CL in "${LP_CLASSIFIERS[@]}"
 do
     echo "Running LP for model: $CL"
     python -m experiments.train \
@@ -39,12 +38,12 @@ do
         --batch_size 256 \
         --seed 42 \
         --augmentations random_flip random_resized_crop \
-        --output_path ./data/models \
+        --output_path "$OUTPUT_PATH" \
         --use_cuda
 done
 
 echo "=== Starting Full Finetuning Experiments ==="
-for CL in "${NOTHING[@]}"
+for CL in "${FT_CLASSIFIERS[@]}"
 do
     echo "Running FT for model: $CL"
     python -m experiments.train \
@@ -57,6 +56,6 @@ do
         --batch_size 128 \
         --seed 42 \
         --augmentations random_flip random_resized_crop \
-        --output_path ./data/models \
+        --output_path "$OUTPUT_PATH" \
         --use_cuda
 done

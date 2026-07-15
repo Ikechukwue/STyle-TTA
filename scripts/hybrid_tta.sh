@@ -13,8 +13,8 @@ RETRIEVAL_STRATEGY="${BEST_RETRIEVAL:-dino}"
 N_REFS="${BEST_N_REFS:-1}"
 N_VIEWS=(3 7 15 31 63)
 SEED=$DEFAULT_SEED
-DATASET="imagenet"
-SPLIT="test_r"
+DATASET="eurosat"
+SPLIT="ucmerced"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -31,10 +31,10 @@ done
 # Outer loop: Classifiers
 for CLASSIFIER in "${ALL_CLASSIFIERS[@]}"; do
 
-    WEIGHTS_PATH="pretrained"
-    if is_pretrained "$CLASSIFIER"; then
-        WEIGHTS_PATH="${MODEL_DIR}/${DATASET}/${DATASET}-${CLASSIFIER}-random_flip-random_resized_crop-seed42.pth"
-    fi
+    #WEIGHTS_PATH="pretrained"
+    #if is_pretrained "$CLASSIFIER"; then
+    WEIGHTS_PATH="${MODEL_DIR}/${DATASET}-${CLASSIFIER}-random_flip-random_resized_crop-seed42.pth"
+    #fi
 
     # Inner loop: Views from 2 up to 63
     for N_VIEWS in "${N_VIEWS[@]}"; do
@@ -55,6 +55,6 @@ for CLASSIFIER in "${ALL_CLASSIFIERS[@]}"; do
             --retrieval_strategy "$RETRIEVAL_STRATEGY" \
             --embedding_dir "$EMBEDDING_DIR" --embedding_model "$EMBEDDING_MODEL" \
             --seed "$SEED" \
-            --output_path "$OUTPUT_PATH/hybrid_tta"
+            --output_path "$OUTPUT_PATH/hybrid_tta/tta_inference"
     done
 done

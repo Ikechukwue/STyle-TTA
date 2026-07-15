@@ -373,14 +373,14 @@ def compute_metrics(
         # Balanced accuracy not applicable for multi-label
         balanced_acc = accuracy
         # AUC for multi-label (sample-averaged)
-        auc = roc_auc_score(y_true, y_pred, average='samples')
+        #auc = roc_auc_score(y_true, y_pred, average='samples')
     elif num_classes == 2:
         # Binary classification
         y_true_squeezed = y_true.squeeze()
         y_pred_labels = (y_pred[:, -1] > 0.5).astype(int)
         accuracy = accuracy_score(y_true_squeezed, y_pred_labels)
         balanced_acc = balanced_accuracy_score(y_true_squeezed, y_pred_labels)
-        auc = roc_auc_score(y_true_squeezed, y_pred[:, -1])
+        #auc = roc_auc_score(y_true_squeezed, y_pred[:, -1])
     else:
         # Multi-class classification
         y_true_squeezed = y_true.astype(int).flatten()

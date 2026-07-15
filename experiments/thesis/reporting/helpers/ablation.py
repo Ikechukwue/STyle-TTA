@@ -6,7 +6,7 @@ import matplotlib.ticker as ticker
 from tqdm import tqdm
 import re
 from config.helpers import load_json, get_top_k, top_k_acc, calc_top_k, get_baseline_results, get_classifier_name
-from config.constants import TTA_STRATEGIES, ALL_CLASSIFIERS, ALL_SEEDS
+from config.constants import TTA_STRATEGIES, ALL_CLASSIFIERS, ALL_SEEDS, DEFAULT_SEED
 import pandas as pd
 
 
@@ -478,7 +478,7 @@ def plot_ablation_nrefs(results_dir: Path, output_dir: Path, method: str, args):
         plt.close(fig_tbl)
 
 def plot_all_ablation_nrefs(results_dir: Path, output_dir: Path, method: str, args, all_comparison: bool = False):
-    methods_to_run = ["ablation/adain_tta", "ablation/retristyle", "geometric_tta"] if all_comparison else [method]
+    methods_to_run = ["ablation/adain_tta", "ablation/retristyle", "geometric_tta", "hybrid_tta"] if all_comparison else [method]
     save_folder = "all_methods_comparison" if all_comparison else method
     out_dir = output_dir / save_folder / args.split / "ablation_nrefs"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -547,13 +547,25 @@ def plot_ablation_nrefs_multi(results_dir, output_dir, strategy_keys, args):
                 results_store[s_key][cl] = {}
                 for rfs in cfg["axis"]:
                     accs = []
-                    for seed in ALL_SEEDS:
-                        f_name = cfg["template"].format(cl=cl, rfs=rfs, seed=seed)
+                    for seed in [DEFAULT_SEED]:#ALL_SEEDS:
+                        if s_key == "hybrid_tta":
+                            real_rfs, geo_fac = rfs
+                            f_name = cfg["template"].format(cl=cl, geo=geo_fac,rfs=real_rfs, seed=seed)
+                        else:
+                
+                            f_name = cfg["template"].format(cl=cl, rfs=rfs, seed=seed)
                         f = results_dir / s_key / f"tta_inference/results/{args.dataset}/{args.split}" / f_name
+                        print(f)
                         if not f.exists(): continue
                         
                         data = load_json(f)
-                        acc = data.get("metrics", {}).get("accuracy", 0) * 100 if k == 1 else calc_top_k(results_dir / s_key / f"tta_inference/predictions/{args.dataset}/{args.split}" / f_name, k)
+                        if k == 1:
+                            acc = data.get("metrics", {}).get("accuracy", 0) * 100  
+                        else: 
+                            if s_key == "hybrid_tta":
+                                acc = data.get("metrics", {}).get("top5_accuracy", 0) * 100 
+                            else:
+                                calc_top_k(results_dir / s_key / f"tta_inference/predictions/{args.dataset}/{args.split}" / f_name, k)
                         accs.append(acc)
                     if accs:
                         results_store[s_key][cl][str(rfs)] = np.mean(accs)

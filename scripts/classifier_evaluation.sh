@@ -18,41 +18,32 @@ MODELS=(
     "vit_base_patch16_224"
 )
 
-# Array of tuples: "dataset:split"
-DATASET_SPLITS=(
-    "eurosat:train"
-    "eurosat:val"
-    "eurosat:val@ucmerced"
-    "ucmerced:ucmerced"
-)
-
+# Define splits to evaluate all at once
+SPLITS=("train" "val" "test")
+DATASET="camelyon17wilds"
 AUGMENTATION="none"
 SEED=$DEFAULT_SEED
 
-for DS_SPLIT in "${DATASET_SPLITS[@]}"; do
-    DATASET="${DS_SPLIT%%:*}"
-    SPLIT="${DS_SPLIT#*:}"
+for MDL in "${MODELS[@]}"; do
+    echo "----------------------------------------------------------"
+    echo "RUNNING EVALUATION: Model=$MDL on Dataset=$DATASET"
+    echo "Splits: ${SPLITS[*]}"
+    echo "----------------------------------------------------------"
 
-    for MDL in "${MODELS[@]}"; do
-        echo "----------------------------------------------------------"
-        echo "RUNNING EVALUATION: Model=$MDL on Dataset=$DATASET Split=$SPLIT"
-        echo "----------------------------------------------------------"
+    WEIGHTS_PATH="$MODEL_DIR/$DATASET/$DATASET-$MDL-random_flip-random_resized_crop-seed42.pth"
 
-        # Adjust path logic as needed for your specific naming convention
-        WEIGHTS_PATH="$MODEL_DIR/eurosat-$MDL-random_flip-random_resized_crop-seed42.pth"
+    echo "Weights target resolving to: $WEIGHTS_PATH"
 
-        echo "Weights target resolving to: $WEIGHTS_PATH"
+    # Pass the entire SPLITS array directly to the argument
+    python -m experiments.classifier_evaluation \
+        --dataset "$DATASET" \
+        --data_path "./data" \
+        --classifier "$MDL" \
+        --weights_path "$WEIGHTS_PATH" \
+        --method "$AUGMENTATION" \
+        --seed "$SEED" \
+        --splits "${SPLITS[@]}" \
+        --output_path "results/classifier_eval"
 
-        python -m experiments.classifier_evaluation \
-            --dataset "$DATASET" \
-            --data_path "./data" \
-            --classifier "$MDL" \
-            --weights_path "$WEIGHTS_PATH" \
-            --method "$AUGMENTATION" \
-            --seed "$SEED" \
-            --splits "$SPLIT" \
-            --output_path "results/classifier_eval"
-
-        echo "Finished evaluating $MDL"
-    done
+    echo "Finished evaluating $MDL"
 done

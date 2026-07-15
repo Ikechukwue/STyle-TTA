@@ -74,7 +74,6 @@ class CustomDataset(VisionDataset):
         elif dataset_name.lower() == "camelyon17wilds":
             # Create the root directory to the data if it does not exist
             root_dir = create_dataset_directory(data_path, dataset_name)
-
             # Load the data with the default dataset splits
             self.dataset = Camelyon17WILDS(root_dir=root_dir, split=split,
                                            transform=transform,

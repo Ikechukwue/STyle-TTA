@@ -80,7 +80,8 @@ STYLE_BATCH_SIZE = 8
 TTA_STRATEGIES = {
         "ablation/adain_tta": {"template": "{cl}_adain_tta_zero_dino_nrefs{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16, 32, 64], "color": "tab:red","color_shade": "Reds", "label": "AdaIN"},
         "ablation/retristyle": {"template": "{cl}_retristyle_zero_dino_nrefs{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16], "color": "tab:green","color_shade": "Greens", "label": "StyleID"},
-        "geometric_tta": {"template": "{cl}_geometric_zero_nviews{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16, 32, 64], "color": "tab:blue", "color_shade": "Blues","label": "Geometric(Crop/Flip)"}
+        "geometric_tta": {"template": "{cl}_geometric_zero_nviews{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16, 32, 64], "color": "tab:blue", "color_shade": "Blues","label": "Geometric(Crop/Flip)"},
+        "hybrid_tta": {"template": "imagenet_{cl}_hybrid_geo{geo}_vanilla_nr{rfs}_seed{seed}_results.json", "axis": [(4,0.67), (8, 0.86), (16,0.93), (32,0.97), (64,0.98)], "color": "tab:purple", "color_shade": "Purples","label": "Hybrid(Style/Geo)"},
     }
 GEO_FRACS = [
     1.0,

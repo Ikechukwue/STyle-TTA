@@ -122,14 +122,14 @@ def generate_hybrid_views(
                 # Get all files, sorted to ensure consistent view order
                 all_files = sorted(sample_dir.glob("view_*"))
                 # Skip index 0 (original) if it exists as the first cached view
-                style_candidates = all_files[1:] if len(all_files) > 1 else []
-                
+                style_candidates = all_files[1:] if len(all_files) >= 1 else []
                 cached_tensors = []
                 for vf in style_candidates:
-                    if len(cached_tensors) >= n_style:
+                    if len(cached_tensors) > n_style:
                         break
                     if vf.suffix == ".pt":
                         cached_tensors.append(torch.load(vf, map_location=device, weights_only=True))
+                    
                     else:
                         from torchvision.io import read_image
                         from torchvision.transforms.functional import convert_image_dtype
@@ -266,7 +266,7 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
 
     # Checkpoint setup
     exp_key = f"hybrid_geo{args.geo_frac:.2f}_{args.eval_strategy}_nr{args.n_views + 1}_seed{args.seed}"
-    pred_path = Path(args.output_path) / "predictions" /f"{args.dataset}_{args.classifier}_{exp_key}_predictions.json"
+    pred_path = Path(args.output_path) / "predictions" / args.dataset / f"{args.dataset}_{args.classifier}_{exp_key}_predictions.json"
     pred_path.parent.mkdir(parents=True, exist_ok=True)
     pred_data = load_predictions(pred_path)
 
@@ -306,7 +306,7 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
             n_views=args.n_views, 
             geo_frac=args.geo_frac,
             retriever=retriever,
-            augmented_cache=augmented_cache, # Passed cache path
+            augmented_cache=augmented_cache, 
             n_refs=n_style_refs,
             retristyle_infer=retristyle_infer,
             color_transfer_fn=color_transfer_fn,
@@ -314,7 +314,7 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
             classifier_size=args.input_size,
             input_size=args.input_size,
             dataset=args.dataset,
-            split=args.split, # Passed split
+            split=args.split, 
             style_batch_size=getattr(args, "style_batch_size", None),
             device=device
         )
@@ -361,7 +361,8 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
     print(f"{'─' * 40}")
 
     # Save results
-    res_path = Path(args.output_path) / "results" /f"{args.dataset}_{args.classifier}_{exp_key}_results.json"
+    res_path = Path(args.output_path) / "results" / args.dataset / f"{args.dataset}_{args.classifier}_{exp_key}_results.json"
+    res_path.parent.mkdir(parents=True, exist_ok=True)
     result = {
         "dataset": args.dataset,
         "classifier": args.classifier,
@@ -375,6 +376,7 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
         "elapsed_seconds": round(elapsed, 2),
         "metrics": metrics,
     }
+
     with open(res_path, "w") as f:
         json.dump(result, f, indent=2)
     print(f"Results saved to {res_path}")

@@ -19,8 +19,8 @@ NORMALIZATION_MEAN = {
     #######################
 
     # Camelyon17WILDS (default dataset splits)
-    "camelyon17wilds": (0.7440, 0.5895, 0.7214),
-
+    #"camelyon17wilds": (0.7440, 0.5895, 0.7214),
+    "camelyon17wilds":(0.485, 0.456, 0.406),
     # Epithelium-Stroma (dataset splits across datasets)
     "epistr": (0.7360, 0.5158, 0.8072),  # Train: NKI / Val: VGH / Test: IHC
 
@@ -104,8 +104,8 @@ NORMALIZATION_STD = {
     #######################
 
     # Camelyon17WILDS (default dataset splits)
-    "camelyon17wilds": (0.1787, 0.2131, 0.1721),
-
+    #"camelyon17wilds": (0.1787, 0.2131, 0.1721),
+    "camelyon17wilds":(0.229, 0.224, 0.225), 
     # Epithelium-Stroma (dataset splits across datasets)
     "epistr": (0.1948, 0.2434, 0.1438),  # Train: NKI / Val: VGH / Test: IHC
 
@@ -334,6 +334,8 @@ DATASET_SPLITS = {
     "imagenet": ["train", "val", "test", "test_a", "test_r", "test_c",
                  "test_p", "test_sketch", "test_v2", "test_abl", "train@test_r", "test_r_c26"],
 
+    #EuroSAT
+    "eurosat": ["train", "test", "val", "ucmerced"],
 
     # PACS (default train_domain=photo)
     "pacs": ["train", "val", "test",

@@ -49,7 +49,7 @@ def build_reference_db(
         v2.ToDtype(torch.float32, scale=True),
         ResizeWhileRetainAspectRatio(size=input_size),
     ])
-    if split is not None:
+    if split is not None and split not in ["train", "val", "test"]:
         current_split = f"train@{split}"
     else:
         current_split = "train"

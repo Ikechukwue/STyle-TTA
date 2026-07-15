@@ -18,20 +18,20 @@ VIT_CLASSIFIERS=("vit_base_patch16_224" "swin_base_patch4_window7_224")
 FM_CLASSIFIERS=("dinov2_vitb14" "ViT-B-16" "vit_base_patch16_dinov3_lvd1689m")
 MODELS=("${CNN_CLASSIFIERS[@]}" "${VIT_CLASSIFIERS[@]}" "${FM_CLASSIFIERS[@]}")
 EVAL_STRATEGY=("vanilla")
-SEED=(71397589)
-VIEWS=(1)
-DATASET="imagenet"
-SPLIT="val"
+SEED=(71397589 133560673 265017005)
+VIEWS=(1 2 4 8 16 32 64)
+DATASET="camelyon17wilds"
+SPLIT="test"
 
 for MDL in "${MODELS[@]}"; do
     for VW in "${VIEWS[@]}"; do
         for SD in "${SEED[@]}"; do
             for EV in "${EVAL_STRATEGY[@]}"; do
-                WEIGHTS_PATH="pretrained"
+                #WEIGHTS_PATH="pretrained"
                 
-                if is_pretrained "$MDL"; then
-                    WEIGHTS_PATH="$MODEL_DIR/imagenet-$MDL-random_flip-random_resized_crop-seed42.pth"
-                fi
+                #if is_pretrained "$MDL"; then
+                WEIGHTS_PATH="$MODEL_DIR/$DATASET/$DATASET-$MDL-random_flip-random_resized_crop-seed42.pth"
+                #fi
 
                 # 1. FIXED: Now logging the actual loop variable ($MDL) 
                 echo "Geometric TTA: $MDL | $EVAL_STRATEGY | seed=$SD"

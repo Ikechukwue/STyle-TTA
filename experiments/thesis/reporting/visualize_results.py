@@ -267,9 +267,9 @@ def generate_all_plots(args):
     #plot_all_topk_metrics(results_dir, args.dataset, args.split)
     #plot_all_ablation_retr(results_dir, output_dir,'ablation/adain_tta',  args)
     done = []
-    for method in ['ablation/adain_tta', 'geometric_tta', 'ablation/retristyle']:
+    for method in ['hybrid_tta', 'geometric_tta']:#,'ablation/adain_tta',  'ablation/retristyle', ]:
         done.append(method)
-        #plot_ablation_nrefs_multi(results_dir, output_dir, done, args)
+        plot_ablation_nrefs_multi(results_dir, output_dir, done, args)
         anchors["best_n_refs"] = 16 #if method == 'ablation/retristyle' else 32
         #plot_all_ablation_nrefs(results_dir, output_dir, method, args, True)
         #plot_ablation_lines(results_dir, output_dir, "retrieval", method, args, **anchors)
@@ -281,12 +281,8 @@ def generate_all_plots(args):
         
     # --- New Best of Best Comparison Run ---
     print("\nGenerating Best-of-Best Method Comparison Profiles...")
-    plot_accuracy_vs_ece_integrated(results_dir, output_dir, done, args)
-    best_settings = {
-        "ablation/adain_tta": {"retr": "dino", "eval": "zero", "n_refs": 32},
-        "ablation/retristyle": {"retr": "dino", "eval": "zero", "n_refs": 16},
-        "geometric_tta": {"eval": "zero", "n_refs":64} 
-    }
+    #plot_accuracy_vs_ece_integrated(results_dir, output_dir, done, args)
+
     #plot_method_comparison(results_dir, output_dir, args, best_settings)
 
     print(f"\nAll figures written to {output_dir}/")

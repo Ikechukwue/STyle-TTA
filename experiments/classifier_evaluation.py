@@ -274,9 +274,37 @@ def compute_metrics(
         balanced_acc = balanced_accuracy_score(y_true_squeezed, y_pred_labels)
         top_5_accuracy = accuracy
         try:
-            auc = roc_auc_score(y_true_squeezed, y_pred[:, -1])
-        except ValueError:
+            if len(y_true_squeezed) > 30000:
+                print(f"  [Note] Dataset large ({len(y_true_squeezed)} samples). Stratifying 30k items for AUC...")
+                _, y_true_sub, _, y_pred_sub = train_test_split(
+                    y_true_squeezed, 
+                    y_pred, 
+                    test_size=30000,
+                    stratify=y_true_squeezed,   
+                    random_state=42
+                )
+            else:
+                y_true_sub = y_true_squeezed
+                y_pred_sub = y_pred            
+            active_classes = np.sort(np.unique(y_true_sub))
+            
+            y_pred_sliced = y_pred_sub[:, active_classes]
+            
+            row_sums = y_pred_sliced.sum(axis=1, keepdims=True)
+            row_sums = np.where(row_sums == 0, 1e-9, row_sums)
+            y_pred_sliced = y_pred_sliced / row_sums
+            
+            auc = roc_auc_score(
+                y_true_sub, 
+                y_pred_sliced, 
+                multi_class="ovr", 
+                labels=active_classes
+            )
+
+        except Exception as e:
+            print(f"  [Warning] Global AUC calculation fallback triggered: {e}")
             auc = 0.0
+
             
     else:
         # Multi-class classification
@@ -805,7 +833,7 @@ def evaluate_classifier(
         
         accelerator.print(f"\nEvaluating on {split} split...")
 
-        if (dataset == "imagenet" and ("@" in split or split in ["test_r", "test_abl", "test_r_c26"])) or (dataset == "eurosat" and split == "ucmerced"):
+        if (dataset == "imagenet" and ("@" in split or split in ["test_r", "test_abl", "test_r_c26"])) or (dataset == "eurosat" and "ucmerced" in split):
             accelerator.print(f"  Applying class subset masking for split: {split}")
             active_model = MaskedClassifier(model, split=split)
             split_num_classes = int(active_model.mask.sum().item())

@@ -362,7 +362,7 @@ if __name__=="__main__":
     g = random_seed(seed_value=42, use_cuda='store_true')
     
     print("Start")
-    dataset_name="eurosat"
+    dataset_name="camelyon17wilds"
     for model_name in ["ViT-B-16", "dinov2_vitb14"]:
         if model_name == "ViT-B-16":
             model = load_clip_classifier(model_name=model_name, num_classes=1000, device="cuda")

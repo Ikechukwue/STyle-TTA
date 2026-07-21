@@ -511,5 +511,6 @@ python -m experiments.thesis.domain_shift_feature \\
     --split_domain test_r \\
     --split_train train@test_r \\
     --split_val val@test_r \\
+    --no_umap \\
     --backbones resnet18 densenet121 vit_base_patch16_224 swin_base_patch4_window7_224 dinov2_vitb14
 """

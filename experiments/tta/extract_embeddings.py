@@ -190,8 +190,6 @@ def extract_and_cache(
 
     If the cache already exists and *force* is False, this is a no-op.
     """
-
-    
     transform = v2.Compose([
         v2.ToImage(),
         v2.ToDtype(torch.float32, scale=True),
@@ -204,59 +202,44 @@ def extract_and_cache(
             for k in use_stylized
         )
         if all_exist and not force:
-            print(f"  [skip] All K-intervals for {model_name} already exist.")
+            print(f"  [skip] All specified style views for {model_name} already exist.")
             return
-        
 
-        all_views_embeddings = []
-        shared_labels = None
-        n_views = use_stylized[-1]
-        for view_idx in range(n_views):
-                view_name = f"view_{view_idx:03d}.png"                
-                ds = create_dataset(
-                    dataset_name=dataset_name,
-                    data_path=data_path,
-                    split=split,
-                    transform=transform,
-                )
-                if view_idx != 0:
-                    inject_stylized_images_inplace(ds, view_name=view_name)
-
-                embs, labels = extract_embeddings(
-                    ds, model_name=model_name,
-                    batch_size=batch_size, num_workers=num_workers, device=device
-                )
-                
-                # embs shape: (N, D)
-                all_views_embeddings.append(embs)
-                if shared_labels is None:
-                    shared_labels = labels
-
-
-        stacked_embs = torch.stack(all_views_embeddings, dim=0).cpu() 
-
-        # Step 3: Compute K-slice intervals, Re-normalize, and Save
         for k in use_stylized:
             out_split_name = f"{split}_k{k}"
             out_path = embeddings_path(output_dir, dataset_name, model_name, out_split_name)
             
-            # Average the first 'k' slices along the view dimension (dim=0)
-            # mean_emb shape: (N, D)
-            mean_emb = stacked_embs[:k].mean(dim=0)
+            if out_path.exists() and not force:
+                print(f"  [skip] Style view k{k} already exists.")
+                continue
+
+            view_name = f"view_{k:03d}.png"                
+            ds = create_dataset(
+                dataset_name=dataset_name,
+                data_path=data_path,
+                split=split,
+                transform=transform,
+            )
+            if k != 0:
+                inject_stylized_images_inplace(ds, view_name=view_name)
+
+            embs, labels = extract_embeddings(
+                ds, model_name=model_name,
+                batch_size=batch_size, num_workers=num_workers, device=device
+            )
             
-            normalized_emb = F.normalize(mean_emb.float(), dim=1)
+            normalized_emb = F.normalize(embs.float(), dim=1)
             
-            # Save payload identically structured for your main domain_shift_feature.py script
             out_path.parent.mkdir(parents=True, exist_ok=True)
             torch.save({
-                "embeddings": normalized_emb, 
-                "labels": shared_labels,
+                "embeddings": normalized_emb.cpu(), 
+                "labels": labels,
                 "model_name": model_name, 
                 "split": out_split_name,
                 "dataset": dataset_name, 
                 "n": normalized_emb.shape[0], 
                 "dim": normalized_emb.shape[1],
-                "views_averaged": k
+                "style_view_id": k
             }, out_path)
             
             print(f"  [saved] {out_path} ({normalized_emb.shape[0]} × {normalized_emb.shape[1]})") 
@@ -284,7 +267,7 @@ def extract_and_cache(
                     "dataset": dataset_name, "n": embs.shape[0], "dim": embs.shape[1]}, out)
         print(f"  [saved] {out}  ({embs.shape[0]} × {embs.shape[1]})")
         return out
-
+    
 def cache_features(
     sample_idx: int, 
     views: torch.Tensor, 

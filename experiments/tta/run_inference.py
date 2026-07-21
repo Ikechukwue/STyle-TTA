@@ -61,7 +61,7 @@ import argparse
 import time
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
-
+from config.helpers import inject_stylized_images_inplace
 import numpy as np
 import torch
 import torch.nn as nn
@@ -253,6 +253,10 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
         split=eval_split,
         transform=test_transform,
     )
+
+    if args.style_id:
+        style_image_id = f"view_{args.style_id:03}.png"
+        inject_stylized_images_inplace(wrapped_dataset=test_set, view_name=style_image_id)
     test_loader = DataLoader(
         test_set, batch_size=1, shuffle=False,
         num_workers=args.num_workers, worker_init_fn=worker_seed, generator=g,
@@ -742,7 +746,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--retrieval_strategy", type=str, default="random",
                    choices=AVAILABLE_RETRIEVAL_STRATEGIES)
     p.add_argument("--metric_type", type=str, default="ssim", choices=["ssim", "mi"])
-    p.add_argument("--n_refs", type=int, default=64,
+    p.add_argument("--n_refs", type=int, default=1,
                    help="Style references per test image")
 
     # embedding / DINOv3
@@ -772,7 +776,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="FOODS OOD threshold")
 
     # augmentation-based TTA
-    p.add_argument("--n_views", type=int, default=DEFAULT_N_VIEWS,
+    p.add_argument("--n_views", type=int, default=1,
                    help="Number of stochastic views for augmentation TTA")
     p.add_argument("--train_aug", type=str, default="none",
                    help="Training augmentation used for the classifier (for key disambiguation)")
@@ -798,6 +802,7 @@ def build_parser() -> argparse.ArgumentParser:
             "generated on the fly, significantly reducing compute."
         ),
     )
+    p.add_argument("--style_id", type=int, default=None)
 
     # general
     p.add_argument("--seed", type=int, default=DEFAULT_SEED)

@@ -13,8 +13,8 @@ RETRIEVAL_STRATEGY="${BEST_RETRIEVAL:-dino}"
 N_REFS="${BEST_N_REFS:-1}"
 N_VIEWS=(3 7 15 31 63)
 SEED=$DEFAULT_SEED
-DATASET="eurosat"
-SPLIT="ucmerced"
+DATASET="imagenet"
+SPLIT="test_r"
 
 while [[ $# -gt 0 ]]; do
     case $1 in

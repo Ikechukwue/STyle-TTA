@@ -130,7 +130,8 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ---- cache directory ----------------------------------------------------
-    cache_name = _cache_dir_name(args)
+    #cache_name = _cache_dir_name(args)
+    cache_name = f"dino_{args.dataset}_{args.split}_s{args.seed}"
     cache_dir = Path(args.cache_root) / cache_name
     cache_dir.mkdir(parents=True, exist_ok=True)
 

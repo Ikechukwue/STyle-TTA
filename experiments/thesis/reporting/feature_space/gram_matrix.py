@@ -60,7 +60,7 @@ def get_class_metadata_map(dataset_obj, limit_classes: Optional[int] = None) -> 
         
     return groups
 
-def resolve_and_batch_tensors(
+def use_style_image(
     metadata_chunk: List[Tuple[str, int]], 
     k: int, 
     transform: v2.Compose, 
@@ -73,19 +73,15 @@ def resolve_and_batch_tensors(
     tensors = []
     for old_path, global_i in metadata_chunk:
         folder_name = f"{global_i:05d}"
-        
-        for view_idx in range(k):
-            if view_idx == 0:
-                # View 0 is always the clean original non-stylized image
-                img_path = old_path
-            else:
-                # Views 1 to k-1 are the stylized variants from your cache directory
-                view_name = f"view_{view_idx:03d}.png"
-                img_path = os.path.join(augmented_dir, folder_name, view_name)
-                
-            with Image.open(img_path).convert("RGB") as img:
-                tensors.append(transform(img))
-                
+        if k == 0:
+            # View 0 is always the clean original non-stylized image
+            img_path = old_path
+        else: 
+            view_name = f"view_{k:03d}.png"
+            img_path = os.path.join(augmented_dir, folder_name, view_name)
+            
+        with Image.open(img_path).convert("RGB") as img:
+            tensors.append(transform(img))
     return torch.stack(tensors)
 
 # ============================================================================
@@ -111,8 +107,8 @@ def compute_incremental_class_gram(
     for start_idx in range(0, len(metadata_items), chunk_size):
         chunk = metadata_items[start_idx:start_idx + chunk_size]
         
-        # Resolves paths for this chunk (Yields a maximum batch size of chunk_size * k)
-        X_batch = resolve_and_batch_tensors(chunk, k, transform, augmented_dir)
+        # Resolves paths to style images with k != 0
+        X_batch = use_style_image(chunk, k, transform, augmented_dir)
         
         with torch.no_grad():
             # Extract features: Shape (B * k, C, H', W')
@@ -177,8 +173,8 @@ def create_gram_results(
     
     for cls in tqdm(common_baseline_classes, desc="Processing Base Baselines"):
         # For standard sets, we use k=1 (only original images) and pass an empty cache path string
-        train_grams[cls] = compute_incremental_class_gram(train_meta[cls], 1, transform, model, device, "", base_chunk_size)
-        val_grams[cls] = compute_incremental_class_gram(val_meta[cls], 1, transform, model, device, "", base_chunk_size)
+        train_grams[cls] = compute_incremental_class_gram(train_meta[cls], 0, transform, model, device, "", base_chunk_size)
+        val_grams[cls] = compute_incremental_class_gram(val_meta[cls], 0, transform, model, device, "", base_chunk_size)
 
     # --- Step 2: Loop Over Target K-Slices for Domain Shifts ---
     print("\n>>> Extracting Multi-View Domain Shifts...")
@@ -245,7 +241,7 @@ if __name__ == "__main__":
     DATA_PATH = "./data"
     CACHE_DIR = "/home/stud/nemmler/retristyle/data/augmented_cache/dino_imagenet_test_r_s71397589"
     
-    K_INTERVALS = [2, 4, 8, 16]
+    K_INTERVALS = [0,1,2,3,4]
     MAX_CLASSES = None  # Change to an integer if you want a fast validation subset test
     
     gram_res_bundle = create_gram_results(

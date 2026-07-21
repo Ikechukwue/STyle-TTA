@@ -14,10 +14,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-DATASET="camelyon17wilds"
-SPLIT="test"
+DATASET="eurosat"
+SPLIT="ucmerced"
 RETRIEVAL_STRATEGY="${BEST_RETRIEVAL:-dino}"
-N_REFS=1
+N_REFS=16
 N_VIEWS=$DEFAULT_N_VIEWS
 SEED=$DEFAULT_SEED
 

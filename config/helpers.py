@@ -428,9 +428,8 @@ def get_base_image_folder(dataset: Dataset) -> ImageFolder:
         raise TypeError(f"Expected base dataset to be ImageFolder, but found {type(current_ds)}")
     return current_ds
 
-def inject_stylized_images_inplace(wrapped_dataset, new_base_dir_path="/home/stud/nemmler/retristyle/data/augmented_cache/dino_imagenet_test_r_s71397589", view_name="view_001.png"):
-    
-# Retrieve the raw underlying ImageFolder dataset
+def inject_stylized_images_inplace(wrapped_dataset, new_base_dir_path="/home/stud/nemmler/retristyle/data/augmented_cache/dino_imagenet_test_r_s71397589", view_name="view_001.png"):    
+    # Retrieve the raw underlying ImageFolder dataset
     base_ds = get_base_image_folder(wrapped_dataset)
     
     new_samples = []

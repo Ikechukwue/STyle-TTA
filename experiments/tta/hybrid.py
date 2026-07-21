@@ -396,6 +396,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--augmented_cache", type=str, default=None,
                    help="Path to the directory containing cached stylized views.")
     
+    p.add_argument("--num_sty", type=1, required=True)
     p.add_argument("--geo_frac", type=float, required=True,
                    help="Fraction of views from geometric augmentations (0.0–1.0)")
     p.add_argument("--n_views", type=int, default=64)

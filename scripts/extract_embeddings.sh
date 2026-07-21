@@ -20,8 +20,8 @@ FM_CLASSIFIERS=("ViT-B-16" "dinov2_vitb14" "vit_base_patch16_dinov3_lvd1689m")
 TIMM_CLASSIFIERS=("${CNN_CLASSIFIERS[@]}" "${VIT_CLASSIFIERS[@]}" "${FM_CLASSIFIERS[@]}")
 DATASET="imagenet"
 SPLIT="test_r"
-K_INTERVALS=(1 2 4 8 16)
-for EMBEDDING_MODEL in "${REST_CLASSIFIERS[@]}"; do
+K_INTERVALS=(1 2 3 4)
+for EMBEDDING_MODEL in "${TIMM_CLASSIFIERS[@]}"; do
 
     echo "Extracting embeddings: $DATASET / $SPLIT / $EMBEDDING_MODEL"
 

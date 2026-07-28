@@ -6,6 +6,8 @@ University of Bamberg
 Classification model training script with support for multiple data augmentation strategies
 including colorist color transfer augmentation.
 """
+import warnings
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated", category=UserWarning)
 
 import os
 import sys
@@ -28,7 +30,8 @@ from accelerate.utils import tqdm
 from timm.optim import create_optimizer_v2
 from timm.scheduler import CosineLRScheduler, create_scheduler_v2
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, roc_auc_score
-
+from torch.utils.data import WeightedRandomSampler
+from collections import Counter
 from sklearn.linear_model import LogisticRegression
 torch.cuda.empty_cache()
 
@@ -139,6 +142,7 @@ def prepare_dataloaders(
     batch_size: int,
     num_workers: int,
     augmentations: List[str],
+    split: Optional[str],
     color_transfer_params: Optional[Dict[str, Any]],
     g: Generator,
     classifier: Optional[str] = None,
@@ -239,7 +243,7 @@ def prepare_dataloaders(
     #     train_set = create_dataset(..., transform=None, ...)
     #     train_set = ColorTransferDataset(train_set, transform=train_transform)
 
-    if extract and classifier in PRETRAINED_CLASSIFIERS:
+    if 1==2: #extract and classifier in PRETRAINED_CLASSIFIERS:
         classifier = classifier.replace(".", "_") if "." in classifier else classifier
         cache = Path(f"./data/embeddings/{classifier}/{dataset}")
         if cache.exists():
@@ -255,7 +259,7 @@ def prepare_dataloaders(
         train_set = create_dataset(
             dataset_name=dataset,
             data_path=data_path,
-            split="train",
+            split="train" if not split else f"train@{split}",
             transform=train_transform,
             **kwargs
         )
@@ -263,18 +267,26 @@ def prepare_dataloaders(
         val_set = create_dataset(
             dataset_name=dataset,
             data_path=data_path,
-            split="val",
+            split="val" if not split else f"val@{split}",
             transform=val_transform,
             **kwargs
         )
         
     # Create dataloaders
+
+    targets = [label for _, label in train_set.samples] if hasattr(train_set, 'samples') else [train_set[i][1] for i in range(len(train_set))]
+    class_sample_count = np.bincount(targets)
+    weights_per_class = 1.0 / class_sample_count
+    sample_weights = [weights_per_class[t] for t in targets]
+
+    sampler = WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
+
     train_loader = DataLoader(
         dataset=train_set,
         batch_size=batch_size,
-        shuffle=True if extract else False,
         num_workers=num_workers,
         worker_init_fn=worker_seed,
+        sampler = sampler,
         generator=g,
     )
     
@@ -377,7 +389,7 @@ def compute_metrics(
     elif num_classes == 2:
         # Binary classification
         y_true_squeezed = y_true.squeeze()
-        y_pred_labels = (y_pred[:, -1] > 0.5).astype(int)
+        y_pred_labels = np.argmax(y_pred, axis=1)
         accuracy = accuracy_score(y_true_squeezed, y_pred_labels)
         balanced_acc = balanced_accuracy_score(y_true_squeezed, y_pred_labels)
         #auc = roc_auc_score(y_true_squeezed, y_pred[:, -1])
@@ -661,6 +673,7 @@ def train(
     use_cuda: bool,
     num_workers: int,
     use_wandb: bool,
+    split: Optional[str] = None,
     wandb_project: Optional[str] = None,
     wandb_entity: Optional[str] = None,
     wandb_path: Optional[str] = None,
@@ -714,7 +727,8 @@ def train(
         aug_str = f"{aug_str}-{color_transfer_space}-direct-{color_transfer_method}-{prob_percent}percent"
     
     classifier_name = classifier.replace(".", "_") if "." in classifier else classifier
-    run_name = f"{dataset}-{classifier_name}-{aug_str}-seed{seed}"
+    split_name = f"-{split}-" if split else ""
+    run_name = f"{dataset}{split_name}-{classifier_name}-{aug_str}-seed{seed}"
 
     latest_checkpoint_path = checkpoint_path / f"{run_name}_latest"
     final_model_path = output_path / f"{run_name}.pth"
@@ -804,6 +818,7 @@ def train(
         color_transfer_params=color_transfer_params,
         g=g,
         classifier=classifier,
+        split=split, 
         extraction=True,
         **kwargs
     )
@@ -872,7 +887,9 @@ def train(
         lr=lr,
         num_epochs=epochs
     )
-    
+    trainable = [(n, p.numel()) for n, p in model.named_parameters() if p.requires_grad]
+    accelerator.print(f"Trainable params: {trainable}")
+    accelerator.print(f"Total trainable: {sum(n for _, n in trainable)}")
     # Create loss function
     task_type = TASK_TYPE[dataset]
     if task_type == "multi-label":
@@ -1073,6 +1090,9 @@ def main():
     parser.add_argument('--output_path', type=str, default='./models', help='Path to save final trained models')
     parser.add_argument('--checkpoint_path', type=str, default='./checkpoints', help='Path to save checkpoints for resuming training')
     parser.add_argument('--train_mode', type=str, default='linear_probe', help='Trainigs Mode full finetune or just linear probe')
+    # Add this under Dataset configuration in main():
+    parser.add_argument('--split', type=str, default=None, 
+                        help='Dataset split to train on (e.g., train, train@breasts)')
     # Model configuration
     parser.add_argument('--classifier', type=str, default='resnet50', help='Classifier model name (from timm)')
     parser.add_argument('--input_size', type=int, default=224, help='Input image size')
@@ -1120,6 +1140,7 @@ def main():
     # Start training
     train(
         dataset=args.dataset,
+        split=args.split,
         data_path=args.data_path,
         output_path=args.output_path,
         checkpoint_path=args.checkpoint_path,
@@ -1143,7 +1164,7 @@ def main():
         resume_from_checkpoint=args.resume_from_checkpoint,
         save_checkpoint_every=args.save_checkpoint_every,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
-
+        train_mode=args.train_mode, 
     )
 
 

@@ -19,6 +19,7 @@ from experiments.data.peripheral_blood import PeripheralBlood
 from experiments.data.bone_marrow_smears_and_peripheral_blood import BoneMarrowSmearsAndPeripheralBlood
 from experiments.data.fitzpatrick import Fitzpatrick17k
 from experiments.data.ddi import DDI
+from experiments.data.midog import Midog2022
 from experiments.data.retina import Retina
 #from experiments.data.medmnist_dataset import MedMNIST, MEDMNIST_2D_DATASETS
 from experiments.data.imagefolder import ImageFolder
@@ -63,6 +64,16 @@ class CustomDataset(VisionDataset):
                 use_subset=use_subset, subset_size=subset_size, 
                 subset_seed=subset_seed, **kwargs
             )
+
+        elif dataset_name.lower() == "midog":
+            # Create the root directory to the data if it does not exist
+            self.dataset = Midog2022(
+                root_dir=data_path,
+                transform=transform, target_transform=target_transform,split=split,
+                use_subset=use_subset, subset_size=subset_size, 
+                subset_seed=subset_seed, **kwargs
+            )
+
         elif dataset_name.lower() == "ucmerced":
             # Create the root directory to the data if it does not exist
             self.dataset = UCMerced(

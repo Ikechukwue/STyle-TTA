@@ -433,6 +433,9 @@ def analyse():
                         help="In-domain validation split (baseline)")
     parser.add_argument("--backbones", nargs="+", default=[
         "resnet18"])
+    
+    parser.add_argument("--k_style", default=None, type=int)
+
     parser.add_argument("--no_umap", action="store_true",
                         help="Skip UMAP plots")
     parser.add_argument("--limit_cls",type=int, default=None, 
@@ -440,7 +443,8 @@ def analyse():
     args = parser.parse_args()
 
     split_domain = args.split_domain #if args.limit_cls != 26 else "test_r_c26"
-
+    if args.k_style:
+        split_domain += f"_k{args.k_style}"
     output_dir = Path(args.output_dir) / f"{split_domain}"
     if args.limit_cls:
         output_dir = output_dir / f"{str(args.limit_cls)}"
@@ -511,6 +515,6 @@ python -m experiments.thesis.domain_shift_feature \\
     --split_domain test_r \\
     --split_train train@test_r \\
     --split_val val@test_r \\
-    --no_umap \\
-    --backbones resnet18 densenet121 vit_base_patch16_224 swin_base_patch4_window7_224 dinov2_vitb14
+    --k_style 1\\
+    --backbones resnet18 densenet121 vit_base_patch16_224 swin_base_patch4_window7_224 dinov2_vitb14 ViT-B-16
 """

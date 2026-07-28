@@ -5,6 +5,7 @@ from .content_metrics import (_get_lpips_model, batch_lpips_distance,
 import torch 
 import numpy as np
 from tqdm import tqdm
+
 def model_run(set_A, set_B, common_classes, model_name, groups_A, groups_B, device):
     if model_name=="lpips":
         model = _get_lpips_model().to(device).eval()
@@ -51,10 +52,10 @@ def pixel_model_analysis(set_A, set_B, common_classes, groups_A, groups_B, model
 
         torch.cuda.empty_cache()
         with torch.no_grad():
-            if model_name in ['depthpro', 'depthanything_v2_large', 'dpt_large']:
-                model_results=calculate_depths_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra)
+            #if model_name in ['depthpro', 'depthanything_v2_large', 'dpt_large']:
+            #    model_results=calculate_depths_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra)
 
-            elif model_name=="lpips":
+            if model_name=="lpips":
                 model_results=calculate_lpips_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra)
         
             else:

@@ -1488,27 +1488,77 @@ def calculate_edge_metrics(set_A, set_B, common_classes, model_name, groups_A, g
     return model_results_per_class
 
 
-def calculate_lpips_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra):
+
+
+def calculate_lpips_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra, one_to_one=False, chunk_size=32):
     model = _get_lpips_model().to(device).eval()
     model_results_per_class = {}
 
     for cls in common_classes:
         images_A = [set_A[i][0] for i in groups_A[cls]]
         images_B = [set_B[i][0] for i in groups_B[cls]]
-        
+
         if not images_A or not images_B:
             continue
-        
+
         batch_A = torch.stack(images_A).to(device)
         batch_B = torch.stack(images_B).to(device)
-        
-        # result_grid is (N, M)
-        result_grid = batch_lpips_distance(batch_A, batch_B, model, intra)
-        
 
-        model_results_per_class[cls] = {f"{model_name}_score": result_grid.flatten()}
+        result = batch_lpips_distance(
+            batch_A, 
+            batch_B, 
+            model, 
+            intra, 
+            one_to_one=one_to_one, 
+            chunk_size=chunk_size
+        )
+
+        model_results_per_class[cls] = {f"{model_name}_score": result.flatten()}
 
     del model
     torch.cuda.empty_cache()
     return model_results_per_class
+
+
+def batch_lpips_distance(X: torch.Tensor, Y: torch.Tensor, lpips_model, intra: bool, one_to_one: bool = False, chunk_size: int = 32):
+    N, C, H, W = X.shape
+    M = Y.shape[0]
+
+    X_scaled = X * 2.0 - 1.0
+    Y_scaled = Y * 2.0 - 1.0
+
+    if one_to_one:
+        min_len = min(N, M)
+        X_sub = X_scaled[:min_len]
+        Y_sub = Y_scaled[:min_len]
+
+        distances_list = []
+        with torch.no_grad():
+            for i in range(0, min_len, chunk_size):
+                x_chunk = X_sub[i:i + chunk_size]
+                y_chunk = Y_sub[i:i + chunk_size]
+                dist = lpips_model(x_chunk, y_chunk)
+                distances_list.append(dist.flatten().cpu())
+
+        return torch.cat(distances_list).numpy()
+
+    X_exp = X_scaled.unsqueeze(1).expand(N, M, C, H, W).reshape(N * M, C, H, W)
+    Y_exp = Y_scaled.unsqueeze(0).expand(N, M, C, H, W).reshape(N * M, C, H, W)
+
+    distances_list = []
+    with torch.no_grad():
+        for i in range(0, N * M, chunk_size):
+            x_chunk = X_exp[i:i + chunk_size]
+            y_chunk = Y_exp[i:i + chunk_size]
+            dist = lpips_model(x_chunk, y_chunk)
+            distances_list.append(dist.flatten().cpu())
+
+    grid_np = torch.cat(distances_list).numpy().reshape(N, M)
+    grid_obj = grid_np.astype(object)
+
+    if intra:
+        for i in range(min(N, M)):
+            grid_obj[i, i] = None
+
+    return grid_obj
 

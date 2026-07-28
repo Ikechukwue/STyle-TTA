@@ -14,19 +14,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 TARGET_SPLIT="test_r"
-
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --target_split) TARGET_SPLIT="$2"; shift 2 ;;
-        *) echo "Unknown: $1"; exit 1 ;;
-    esac
-done
-
 echo "Domain shift analysis: imagenet/val → imagenet/${TARGET_SPLIT}"
-
-python -m experiments.domain_shift_analysis \
-    --source_dataset imagenet --source_split val \
-    --target_dataset imagenet --target_split "$TARGET_SPLIT" \
-    --data_path "$DATA_PATH" \
-    --output_dir "$OUTPUT_PATH/domain_shift_analysis" \
-    --n_samples 500 --seed 42
+for i in {1..4}; do
+python -m experiments.thesis.reporting.feature_space.domain_shift_feature \
+    --embedding_dir ./data/embeddings \
+    --dataset imagenet \
+    --split_domain test_r \
+    --split_train train@test_r \
+    --split_val val@test_r \
+    --k_style $i \
+    --no_umap \
+    --backbones resnet18 densenet121 vit_base_patch16_224 swin_base_patch4_window7_224 dinov2_vitb14 ViT-B-16
+done

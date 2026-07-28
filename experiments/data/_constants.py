@@ -20,7 +20,7 @@ NORMALIZATION_MEAN = {
 
     # Camelyon17WILDS (default dataset splits)
     #"camelyon17wilds": (0.7440, 0.5895, 0.7214),
-    "camelyon17wilds":(0.485, 0.456, 0.406),
+    "camelyon17wilds":(0.485, 0.456, 0.406), #as we use ImageNet models
     # Epithelium-Stroma (dataset splits across datasets)
     "epistr": (0.7360, 0.5158, 0.8072),  # Train: NKI / Val: VGH / Test: IHC
 
@@ -66,6 +66,8 @@ NORMALIZATION_MEAN = {
     "eurosat": (0.485, 0.456, 0.406),
     "ucmerced": (0.485, 0.456, 0.406),
 
+    # Midog 2022 (using ImageNet stats as proxy for thesis)
+    "midog":(0.485, 0.456, 0.406),
     # PACS (using ImageNet stats as proxy for natural images)
     "pacs": (0.485, 0.456, 0.406),
     # VLCS
@@ -151,6 +153,8 @@ NORMALIZATION_STD = {
     "eurosat": (0.229, 0.224, 0.225),
     "ucmerced": (0.229, 0.224, 0.225),
 
+    # Midog 2022 (uses ImageNet stats as proxy)
+    "midog": (0.229, 0.224, 0.225),
     # PACS (using ImageNet stats as proxy for natural images)
     "pacs": (0.229, 0.224, 0.225),
     # VLCS
@@ -185,6 +189,9 @@ NORMALIZATION_STD = {
 NUM_CLASSES = {
     # Camelyon17WILDS
     "camelyon17wilds": 2,
+
+    # Midog 2022
+    "midog": 2, 
 
     # Epithelium-Stroma
     "epistr": 2,
@@ -284,6 +291,7 @@ TASK_TYPE = {
     "nico": "multi-class",
     "metashift": "multi-class",
     "openmibood": "multi-class",
+    "midog": "multi-class",
 }
 
 # ============================================
@@ -292,6 +300,9 @@ TASK_TYPE = {
 DATASET_SPLITS = {
     # Camelyon17WILDS
     "camelyon17wilds": ["train", "val", "id_val", "test"],
+
+    # Midog 2022
+    "midog": ["train", "val", "test", "breasts", "train@breasts", "val@breasts"],
 
     # Epithelium-Stroma
     "epistr": ["train", "val", "test"],

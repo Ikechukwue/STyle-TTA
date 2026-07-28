@@ -547,15 +547,21 @@ def plot_ablation_nrefs_multi(results_dir, output_dir, strategy_keys, args):
                 results_store[s_key][cl] = {}
                 for rfs in cfg["axis"]:
                     accs = []
-                    for seed in [DEFAULT_SEED]:#ALL_SEEDS:
+                    for seed in [DEFAULT_SEED]:
                         if s_key == "hybrid_tta":
                             real_rfs, geo_fac = rfs
-                            f_name = cfg["template"].format(cl=cl, geo=geo_fac,rfs=real_rfs, seed=seed)
+                            f_name = cfg["template"].format(cl=cl, geo=geo_fac, rfs=real_rfs, seed=seed)
+                        elif s_key == "ablation/adain_tta":
+                            f_name = cfg["template"].format(cl=cl, eval="zero", retr="dino", rfs=rfs, seed=seed)
+                        elif s_key == "ablation/retristyle":
+                            f_name = cfg["template"].format(cl=cl, eval="vanilla", retr="dino", rfs=rfs, seed=seed)
+                        elif s_key == "geometric_tta":
+                            f_name = cfg["template"].format(cl=cl, eval="vanilla", rfs=rfs, seed=seed, retr="")
                         else:
-                
                             f_name = cfg["template"].format(cl=cl, rfs=rfs, seed=seed)
+                            
                         f = results_dir / s_key / f"tta_inference/results/{args.dataset}/{args.split}" / f_name
-                        print(f)
+                      
                         if not f.exists(): continue
                         
                         data = load_json(f)
@@ -578,7 +584,6 @@ def plot_ablation_nrefs_multi(results_dir, output_dir, strategy_keys, args):
         classifiers = ALL_CLASSIFIERS
         x_indices = np.arange(len(classifiers))
         
-        # Method-based positioning
         total_methods = len(strategy_keys)
         group_width = 0.6
         method_width = group_width / total_methods
@@ -587,18 +592,15 @@ def plot_ablation_nrefs_multi(results_dir, output_dir, strategy_keys, args):
             cfg = TTA_STRATEGIES[s_key]
             axis_vals = cfg["axis"]
             
-            # Sub-offset to spread rfs points within the method's assigned slot
             sub_step = method_width / len(axis_vals)
             
             for i, rfs in enumerate(axis_vals):
                 means = [results_store[s_key].get(cl, {}).get(str(rfs), np.nan) for cl in classifiers]
-                # Start from the left of the classifier bar and shift right by method index
                 offset = (s_idx * method_width) - (group_width / 2) + (i * sub_step)
                 
-                color = plt.cm.get_cmap(cfg["color_shade"])(0.3 + 0.7 * (i / len(axis_vals)))
+                color = plt.colormaps[cfg["color_shade"]](0.3 + 0.7 * (i / len(axis_vals)))
                 ax.scatter(x_indices + offset, means, color=color, label=f"{cfg['label']} (n={rfs})", s=40, alpha=0.9, zorder=3)
 
-        # Baselines
         for idx, cl in enumerate(classifiers):
             ax.hlines(baselines.get(cl, 0), xmin=idx - group_width/2, xmax=idx + group_width/2, 
                       colors="gray", linestyles="--", linewidth=1.2, zorder=2)

@@ -176,7 +176,7 @@ def create_gram_results(
         train_grams[cls] = compute_incremental_class_gram(train_meta[cls], 0, transform, model, device, "", base_chunk_size)
         val_grams[cls] = compute_incremental_class_gram(val_meta[cls], 0, transform, model, device, "", base_chunk_size)
 
-    # --- Step 2: Loop Over Target K-Slices for Domain Shifts ---
+    # --- Step 2: Loop Over Target K-views for Domain Shifts ---
     print("\n>>> Extracting Multi-View Domain Shifts...")
     ds_domain = create_dataset(dataset_name=dataset, data_path=data_path, split=split, transform=transform)
     domain_meta = get_class_metadata_map(ds_domain, limit_classes)
@@ -185,7 +185,7 @@ def create_gram_results(
     
     for k in use_stylized:
         out_split_name = f"{split}_k{k}"
-        print(f"\nEvaluating slice context: {out_split_name} (Averaging first {k} views)")
+        print(f"\nEvaluating slice context: {out_split_name} ({k} view image)")
         
         domain_gap_cls = {}
         baseline_gap_cls = {}

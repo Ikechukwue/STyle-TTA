@@ -1,23 +1,33 @@
 from pathlib import Path
 import json
 from typing import Dict, List, Optional, Tuple
-import numpy as np
+import os
 import re
-#import nltk
-#from nltk.corpus import wordnet as wn
+
+import numpy as np
 from scipy.cluster.hierarchy import linkage, leaves_list
 from scipy.spatial.distance import squareform
-from .constants import ALL_CLASSIFIERS, ALL_SEEDS, RETRIEVAL_STRATEGIES, N_REFS_VALUES, EVAL_STRATEGIES, TTA_STRATEGIES
-import os
+
+from torch.utils.data import Dataset
 from torchvision.datasets import ImageFolder
-from torch.utils.data import Subset, Dataset
-from tqdm import tqdm 
-from .constants import ALL_CLASSIFIERS
+from tqdm import tqdm
+
+from .constants import (
+    ALL_CLASSIFIERS,
+    ALL_SEEDS,
+    RETRIEVAL_STRATEGIES,
+    N_REFS_VALUES,
+    EVAL_STRATEGIES,
+    TTA_STRATEGIES,
+)
+
+# Optional visualization dependencies
 try:
     import seaborn as sns
     HAS_SNS = True
 except ImportError:
     HAS_SNS = False
+
 try:
     import matplotlib
     matplotlib.use("Agg")
@@ -26,6 +36,19 @@ try:
     HAS_MPL = True
 except ImportError:
     HAS_MPL = False
+
+# Optional WordNet dependencies
+try:
+    import nltk
+    from nltk.corpus import wordnet as wn
+    HAS_NLTK = True
+except ImportError:
+    HAS_NLTK = False
+
+
+# ==========================================
+# 1. FILE & JSON UTILITIES
+# ==========================================
 
 def load_json(path: Path) -> dict:
     with open(path) as f:
@@ -37,23 +60,81 @@ def find_json(directory: Path, pattern: str = "*.json") -> List[Path]:
         return []
     return sorted(directory.glob(pattern))
 
-def get_y_true(dataset:str, split:str):
-    """
-    Get the true labels per sample as list [int, int]
-    Need to have prepared some sort of of baseline prediciton file 
-    """
+
+def parse_filename_metadata(filepath: str) -> dict:
+    basename = Path(filepath).stem 
+    metadata = {}
+
+    seed_match = re.search(r'seed(\d+)', basename)
+    if seed_match:
+        metadata['seed'] = int(seed_match.group(1))
+
+    nviews_match = re.search(r'nviews(\d+)', basename)
+    nrefs_match = re.search(r'nrefs(\d+)', basename)
+    n_match = nviews_match if nviews_match else nrefs_match
+    if n_match:
+        metadata['n_refs'] = int(n_match.group(1))
+
+    for clf in sorted(ALL_CLASSIFIERS, key=len, reverse=True):
+        if clf in basename:
+            metadata['classifier'] = clf
+            break
+
+    for strat in EVAL_STRATEGIES:
+        if strat in basename:
+            metadata['eval_strategy'] = strat
+            break
+            
+    if 'geometric' in basename:
+        metadata['tta_method'] = 'geometric_tta'
+    elif 'retristyle' in basename:
+        metadata['tta_method'] = 'retristyle'
+    elif 'adain' in basename:
+        metadata['tta_method'] = 'adain_tta'
+
+    return metadata
+
+
+# ==========================================
+# 2. METADATA & EXPERIMENT PATH RESOLUTION
+# ==========================================
+
+def get_classifier_name(cls: str) -> tuple[str, str]:
+    mapping = {
+        "resnet18": ("ResNet-18", "CNN"),
+        "densenet121": ("DenseNet-121", "CNN"),
+        "vit_base_patch16_224": ("ViT-B/16 (224)", "Vision Transformer"),
+        "swin_base_patch4_window7_224": ("Swin-B (224)", "Vision Transformer"),
+        "ViT-B-16": ("CLIP ViT-B/16", "Vision-Language Model"),
+        "ViT-B-16@Zero": ("CLIP ViT-B/16 (Zero-Shot)", "Vision-Language Model"),
+        "dinov2_vitb14": ("DINOv2 ViT-B/14", "Foundation Model"),
+        "vit_base_patch16_dinov3_lvd1689m": ("DINOv3 ViT-B/16", "Foundation Model"),
+    }
+    return mapping.get(cls, (cls, "Unknown"))
+
+
+def get_names(split: str = "test_r",
+              subset_json: str = "./data/imagenet/imagenet_subsets.json",
+              name_json: str = "./data/imagenet/imagenet1k/imagenet_class_index.json") -> List[str]:
+    all_ids = load_json(name_json)
+    name_dict = {v[0]: v[1] for v in all_ids.values()}
+
+    sub_ids = load_json(subset_json)
+    split_ids = sub_ids[split]
+
+    return [name_dict[id] for id in split_ids]
+
+
+def get_y_true(dataset: str, split: str) -> list:
     if dataset == "imagenet":
         if split == "test_r":
             labels_data = load_json("/home/stud/nemmler/retristyle/results/baseline/tta_inference/predictions/imagenet/test_r/densenet121_geometric_tpt_nviews1_seed71397589.json")
+            return [i["y_true"] for i in labels_data["predictions"]]
+    return []
 
-            y_true = [i["y_true"] for i in labels_data["predictions"]]
-    else:
-        y_true = []
-
-    return y_true
 
 def get_baseline_results(file_name: str, predictions: bool = True, split: str = 'test_r', 
-                         baseline_dir: str = "./results/baseline/tta_inference"):
+                         baseline_dir: str = "./results/baseline/tta_inference") -> Path:
     classifier = None 
     seed = 71397589
     eval_strat = None 
@@ -71,15 +152,16 @@ def get_baseline_results(file_name: str, predictions: bool = True, split: str = 
     output = "predictions" if predictions else "results"
     output_dir = Path(baseline_dir) / output
     
-    # Standard baseline naming pattern
-    base_file = output_dir / "imagenet"/ split /  f"{classifier}_geometric_{eval_strat}_nviews1_seed{seed}.json"
-    #print(f"Looking for Path:{base_file}")
-    return base_file
- 
-def get_top_k(results: dict, k: int = 5):
+    return output_dir / "imagenet" / split / f"{classifier}_geometric_{eval_strat}_nviews1_seed{seed}.json"
+
+
+# ==========================================
+# 3. METRICS & TOP-K EVALUATION
+# ==========================================
+
+def get_top_k(results: dict, k: int = 5) -> Tuple[np.ndarray, np.ndarray]:
     y_pred_matrix = np.array([sample["y_pred"] for sample in results["predictions"]])
-    num_samples = y_pred_matrix.shape[0]
-    num_classes = y_pred_matrix.shape[1]
+    num_samples, num_classes = y_pred_matrix.shape
     
     k = min(k, num_classes)
     
@@ -89,7 +171,6 @@ def get_top_k(results: dict, k: int = 5):
         return final_indices, final_confidences
 
     top_k_unsorted_indices = np.argpartition(y_pred_matrix, -k, axis=-1)[:, -k:]
-    
     row_indices = np.arange(num_samples)[:, None]
     top_k_unsorted_values = y_pred_matrix[row_indices, top_k_unsorted_indices]
     
@@ -99,34 +180,14 @@ def get_top_k(results: dict, k: int = 5):
     
     return final_indices, final_confidences
 
-def get_classifier_name(cls: str) -> tuple[str, str]:
-    # Maps raw string -> (Display Name, Group Category)
-    mapping = {
-        # CNNs
-        "resnet18": ("ResNet-18", "CNN"),
-        "densenet121": ("DenseNet-121", "CNN"),
-        
-        # ViTs
-        "vit_base_patch16_224": ("ViT-B/16 (224)", "Vision Transformer"),
-        "swin_base_patch4_window7_224": ("Swin-B (224)", "Vision Transformer"),
-        
-        # VLMs
-        "ViT-B-16": ("CLIP ViT-B/16", "Vision-Language Model"),
-        "ViT-B-16@Zero": ("CLIP ViT-B/16 (Zero-Shot)", "Vision-Language Model"),
-        
-        # Foundation Models
-        "dinov2_vitb14": ("DINOv2 ViT-B/14", "Foundation Model"),
-        "vit_base_patch16_dinov3_lvd1689m": ("DINOv3 ViT-B/16", "Foundation Model"),
-    }
-    
-    return mapping.get(cls, (cls, "Unknown"))
 
 def top_k_acc(results: dict, final_indices: np.ndarray) -> float:
     y_true = np.array([sample["y_true"] for sample in results["predictions"]])
     correct_mask = np.any(final_indices == y_true[:, None], axis=-1)
     return float(np.mean(correct_mask) * 100)
 
-def calc_top_k(pred_path: Path, k: int = 5) -> float:
+
+def calc_top_k(pred_path: Path, k: int = 5) -> Optional[float]:
     if not pred_path.exists():
         return None
     try:
@@ -134,198 +195,67 @@ def calc_top_k(pred_path: Path, k: int = 5) -> float:
         final_indices, _ = get_top_k(data, k)
         return top_k_acc(data, final_indices)
     except Exception as e:
-        print(f"  [error] Could not calculate top-{k} for {pred_path.name}: {e}")
-        return None   
-def setup_style():
-    """Configure matplotlib for publication-quality plots."""
-    if HAS_SNS:
-        sns.set_theme(style="whitegrid", font_scale=1.1)
-    plt.rcParams.update({
-        "figure.dpi": 150,
-        "savefig.dpi": 300,
-        "savefig.bbox": "tight",
-        "font.size": 11,
-        "axes.titlesize": 13,
-        "axes.labelsize": 12,
-    })
+        print(f" [error] Could not calculate top-{k} for {pred_path.name}: {e}")
+        return None
 
-def get_names(split:str = "test_r",
-                subset_json: str = "./data/imagenet/imagenet_subsets.json",
-                name_json:str = "./data/imagenet/imagenet1k/imagenet_class_index.json" ):
-    all_ids = load_json(name_json)
-    name_dict = {}
-    for v in all_ids.values():
-        name_dict[v[0]] = v[1]
 
-    split_names = []
-    sub_ids = load_json(subset_json)
-    split_ids = sub_ids[split]
+# ==========================================
+# 4. NORMALIZATION UTILITIES
+# ==========================================
 
-    split_names = [name_dict[id] for id in split_ids]
-    return split_names 
-
-def parse_filename_metadata(filepath: str) -> dict:
-    """
-    Extracts 
-    classifier, 
-    eval strategy, 
-    n_refs, 
-    and seed from a filename.
-    Example: densenet121_geometric_vanilla_nviews1_seed265017005.json
-    """
-    # Get just the filename without the path or .json extension
-    basename = Path(filepath).stem 
-    metadata = {}
-
-    # 1. Extract Seed using regex (looks for 'seed' followed by digits)
-    seed_match = re.search(r'seed(\d+)', basename)
-    if seed_match:
-        metadata['seed'] = int(seed_match.group(1))
-
-    # 2. Extract n_refs from 'nviews' using regex
-    nviews_match = re.search(r'nviews(\d+)', basename)
-    nrefs_match = re.search(r'nrefs(\d+)', basename)
-    n_match = nviews_match if nviews_match else nrefs_match
-    if n_match:
-        metadata['n_refs'] = int(n_match.group(1))
-
-    # 3. Extract Classifier
-    # Sort classifiers by length descending so we match "ViT-B-16@Zero" before "ViT-B-16"
-    for clf in sorted(ALL_CLASSIFIERS, key=len, reverse=True):
-        if clf in basename:
-            metadata['classifier'] = clf
-            break
-
-    # 4. Extract Evaluation Strategy
-    for strat in EVAL_STRATEGIES:
-        if strat in basename:
-            metadata['eval_strategy'] = strat
-            break
+def normalize_values_intra(data: dict) -> dict:
+    global_summary = data.get("global_summary", {})
+    normed_global_means = {}
+    
+    for key, val in global_summary.items():
+        if key.endswith("_mean"):
+            base_metric = key.rsplit("_mean", 1)[0]
+            min_key, max_key = f"{base_metric}_min", f"{base_metric}_max"
             
-    # 5. Extract TTA Method (matching your TTA_STRATEGIES)
-    if 'geometric' in basename:
-        metadata['tta_method'] = 'geometric_tta'
-    elif 'retristyle' in basename:
-        metadata['tta_method'] = 'retristyle'
-    elif 'adain' in basename:
-        metadata['tta_method'] = 'adain_tta'
-
-    return metadata
-
-def get_wordnet_taxonomic_order(name_json_path: str = "./data/imagenet/imagenet1k/imagenet_class_index.json") -> list[int]:
-    """
-    Computes a taxonomic sort order for classes using true WordNet path similarity.
-    Groups classes by their lowest common subsumers via hierarchical clustering.
-    
-    Returns:
-        list[int]: A list of class indices sorted by their WordNet hierarchy proximity.
-    """
-    # Ensure WordNet data is available in the environment
-    try:
-        wn.ensure_loaded()
-    except LookupError:
-        nltk.download('wordnet', quiet=True)
-        nltk.download('omw-1.4', quiet=True)
-
-    # 1. Load the core map to extract WNIDs (e.g., "n02119789")
-    try:
-        with open(name_json_path) as f:
-            class_index_map = json.load(f)
-    except Exception as e:
-        print(f"Error loading class index map: {e}")
-        return []
-
-    # 2. Resolve WNIDs to actual WordNet Synsets
-    resolved_synsets = {}
-    valid_class_indices = []
-    
-    for idx_str, (wnid, _) in class_index_map.items():
-        idx = int(idx_str)
-        try:
-            # Parse ImageNet format: n02119789 -> offset 2119789, pos noun ('n')
-            offset = int(wnid[1:])
-            pos = wnid[0]
-            synset = wn.synset_from_pos_and_offset(pos, offset)
-            resolved_synsets[idx] = synset
-            valid_class_indices.append(idx)
-        except Exception:
-            # Skip or handle invalid mappings gracefully
-            continue
-
-    # Sort indices to establish a deterministic baseline matrix
-    valid_class_indices.sort()
-    n_classes = len(valid_class_indices)
-    
-    if n_classes == 0:
-        return []
-
-    # 3. Build a Distance Matrix based on WordNet Path Similarity
-    # Similarity is bounded (0, 1], where 1.0 means identical synsets.
-    # Distance = 1.0 - Similarity
-    distance_matrix = np.zeros((n_classes, n_classes))
-    
-    for i in range(n_classes):
-        syn_i = resolved_synsets[valid_class_indices[i]]
-        for j in range(i, n_classes):
-            syn_j = resolved_synsets[valid_class_indices[j]]
-            
-            # Compute path similarity (looks at shortest path in hypernym tree)
-            sim = syn_i.path_similarity(syn_j)
-            if sim is None:
-                sim = 0.001 # Fallback minimum connectivity if branches are distinct
+            if min_key in global_summary and max_key in global_summary:
+                min_val, max_val = global_summary[min_key], global_summary[max_key]
+                denom = max_val - min_val
+                normed_global_means[key] = (val - min_val) / denom if denom != 0 else 0.0
                 
-            dist = 1.0 - sim
-            distance_matrix[i, j] = dist
-            distance_matrix[j, i] = dist
+    global_summary.update(normed_global_means)
 
-    # 4. Perform Hierarchical Clustering to group by lowest mappings
-    # Convert square distance matrix to condensed form for scipy linkage
-    from scipy.spatial.distance import squareform
-    condensed_distances = squareform(distance_matrix)
-    
-    # Use Ward's minimum variance algorithm to create clean, compact thematic groups
-    row_linkage = linkage(condensed_distances, method="ward")
-    
-    # Extract the optimized leaves order from the tree
-    sorted_matrix_indices = leaves_list(row_linkage)
-    
-    # Map back to your original class integers
-    sorted_class_order = [valid_class_indices[i] for i in sorted_matrix_indices]
-    
-    return sorted_class_order
+    class_summaries = data.get("class_summaries", {})
+    for class_id, metrics in class_summaries.items():
+        normed_class_means = {}
+        for key, val in metrics.items():
+            if key.endswith("_mean"):
+                base_metric = key.rsplit("_mean", 1)[0]
+                min_key, max_key = f"{base_metric}_min", f"{base_metric}_max"
+                
+                if min_key in metrics and max_key in metrics:
+                    min_val, max_val = metrics[min_key], metrics[max_key]
+                    denom = max_val - min_val
+                    normed_class_means[key] = (val - min_val) / denom if denom != 0 else 0.0
+                    
+        metrics.update(normed_class_means)
+        
+    return data
+
 
 def normalize_values_inter(data_a: dict, data_b: dict) -> tuple[dict, dict]:
-    """
-    Finds the global min and max for each metric across to analyse train/split vs baseline test/val 
-    (checking both global and class metrics), then scales 'global_summary' and 
-    'class_summaries' for both datasets using those shared bounds.
-    """
-    # 1. Identify all unique base metrics across both files
     base_metrics = set()
     for dataset in [data_a, data_b]:
-        # Check global summaries
         for k in dataset.get("global_summary", {}).keys():
             if k.endswith("_mean"):
                 base_metrics.add(k.rsplit("_mean", 1)[0])
-        # Check class summaries
         for metrics in dataset.get("class_summaries", {}).values():
             for k in metrics.keys():
                 if k.endswith("_mean"):
                     base_metrics.add(k.rsplit("_mean", 1)[0])
 
-    # 2. Compute absolute global min/max across both datasets
     global_bounds = {}
     for metric in base_metrics:
-        mins = []
-        maxs = []
-        
+        mins, maxs = [], []
         for dataset in [data_a, data_b]:
-            # Pull from global summary if min/max keys exist there
             g_sum = dataset.get("global_summary", {})
             if f"{metric}_min" in g_sum: mins.append(g_sum[f"{metric}_min"])
             if f"{metric}_max" in g_sum: maxs.append(g_sum[f"{metric}_max"])
             
-            # Pull from all classes
             for metrics in dataset.get("class_summaries", {}).values():
                 if f"{metric}_min" in metrics: mins.append(metrics[f"{metric}_min"])
                 if f"{metric}_max" in metrics: maxs.append(metrics[f"{metric}_max"])
@@ -333,9 +263,7 @@ def normalize_values_inter(data_a: dict, data_b: dict) -> tuple[dict, dict]:
         if mins and maxs:
             global_bounds[metric] = {"min": min(mins), "max": max(maxs)}
 
-    # 3. Scale both datasets (Global and Class-wise summaries)
     for dataset in [data_a, data_b]:
-        # --- Scale Global Summary ---
         g_summary = dataset.get("global_summary", {})
         normed_g_means = {}
         for key, val in g_summary.items():
@@ -348,7 +276,6 @@ def normalize_values_inter(data_a: dict, data_b: dict) -> tuple[dict, dict]:
                     normed_g_means[key] = (val - g_min) / denom if denom != 0 else 0.0
         g_summary.update(normed_g_means)
 
-        # --- Scale Class Summaries ---
         c_summaries = dataset.get("class_summaries", {})
         for class_id, metrics in c_summaries.items():
             normed_c_means = {}
@@ -364,63 +291,93 @@ def normalize_values_inter(data_a: dict, data_b: dict) -> tuple[dict, dict]:
             
     return data_a, data_b
 
-def normalize_values_intra(data: dict) -> dict:
-    """
-    Finds all metrics ending with '_mean' in both global_summary and class_summaries, 
-    and normalizes them in-place [0, 1] using their corresponding internal
-    '_min' and '_max' bounds found within their respective dictionaries.
-    """
-    # --- 1. Normalize Global Summary ---
-    global_summary = data.get("global_summary", {})
-    normed_global_means = {}
+
+# ==========================================
+# 5. TAXONOMY & WORDNET UTILITIES
+# ==========================================
+
+def get_wordnet_taxonomic_order(name_json_path: str = "./data/imagenet/imagenet1k/imagenet_class_index.json") -> list[int]:
+    if not HAS_NLTK:
+        print("[error] NLTK is required for WordNet operations.")
+        return []
+
+    try:
+        wn.ensure_loaded()
+    except LookupError:
+        nltk.download('wordnet', quiet=True)
+        nltk.download('omw-1.4', quiet=True)
+
+    try:
+        with open(name_json_path) as f:
+            class_index_map = json.load(f)
+    except Exception as e:
+        print(f"Error loading class index map: {e}")
+        return []
+
+    resolved_synsets = {}
+    valid_class_indices = []
     
-    for key, val in global_summary.items():
-        if key.endswith("_mean"):
-            base_metric = key.rsplit("_mean", 1)[0]
-            min_key = f"{base_metric}_min"
-            max_key = f"{base_metric}_max"
+    for idx_str, (wnid, _) in class_index_map.items():
+        idx = int(idx_str)
+        try:
+            offset = int(wnid[1:])
+            pos = wnid[0]
+            synset = wn.synset_from_pos_and_offset(pos, offset)
+            resolved_synsets[idx] = synset
+            valid_class_indices.append(idx)
+        except Exception:
+            continue
+
+    valid_class_indices.sort()
+    n_classes = len(valid_class_indices)
+    
+    if n_classes == 0:
+        return []
+
+    distance_matrix = np.zeros((n_classes, n_classes))
+    for i in range(n_classes):
+        syn_i = resolved_synsets[valid_class_indices[i]]
+        for j in range(i, n_classes):
+            syn_j = resolved_synsets[valid_class_indices[j]]
             
-            # Check if this specific dictionary has the min/max bounds
-            if min_key in global_summary and max_key in global_summary:
-                mean_val = val
-                min_val = global_summary[min_key]
-                max_val = global_summary[max_key]
+            sim = syn_i.path_similarity(syn_j)
+            if sim is None:
+                sim = 0.001
                 
-                denom = max_val - min_val
-                normed_global_means[key] = (mean_val - min_val) / denom if denom != 0 else 0.0
-                
-    # Apply the updates to the global summary block
-    global_summary.update(normed_global_means)
+            dist = 1.0 - sim
+            distance_matrix[i, j] = dist
+            distance_matrix[j, i] = dist
 
-    # --- 2. Normalize Class Summaries ---
-    class_summaries = data.get("class_summaries", {})
+    condensed_distances = squareform(distance_matrix)
+    row_linkage = linkage(condensed_distances, method="ward")
+    sorted_matrix_indices = leaves_list(row_linkage)
     
-    for class_id, metrics in class_summaries.items():
-        normed_class_means = {}
-        
-        for key, val in metrics.items():
-            if key.endswith("_mean"):
-                base_metric = key.rsplit("_mean", 1)[0]
-                min_key = f"{base_metric}_min"
-                max_key = f"{base_metric}_max"
-                
-                if min_key in metrics and max_key in metrics:
-                    mean_val = val
-                    min_val = metrics[min_key]
-                    max_val = metrics[max_key]
-                    
-                    denom = max_val - min_val
-                    normed_class_means[key] = (mean_val - min_val) / denom if denom != 0 else 0.0
-        
-        # Apply the updates to this specific class dictionary
-        metrics.update(normed_class_means)
-        
-    return data
+    return [valid_class_indices[i] for i in sorted_matrix_indices]
 
 
+# ==========================================
+# 6. PLOTTING & VISUALIZATION STYLE
+# ==========================================
+
+def setup_style():
+    if HAS_SNS:
+        sns.set_theme(style="whitegrid", font_scale=1.1)
+    if HAS_MPL:
+        plt.rcParams.update({
+            "figure.dpi": 150,
+            "savefig.dpi": 300,
+            "savefig.bbox": "tight",
+            "font.size": 11,
+            "axes.titlesize": 13,
+            "axes.labelsize": 12,
+        })
+
+
+# ==========================================
+# 7. PYTORCH DATASET MANIPULATION
+# ==========================================
 
 def get_base_image_folder(dataset: Dataset) -> ImageFolder:
-    """Recursively drills down to find the underlying ImageFolder."""
     current_ds = dataset
     while hasattr(current_ds, 'dataset'):
         current_ds = current_ds.dataset
@@ -428,8 +385,8 @@ def get_base_image_folder(dataset: Dataset) -> ImageFolder:
         raise TypeError(f"Expected base dataset to be ImageFolder, but found {type(current_ds)}")
     return current_ds
 
-def inject_stylized_images_inplace(wrapped_dataset, new_base_dir_path="/home/stud/nemmler/retristyle/data/augmented_cache/dino_imagenet_test_r_s71397589", view_name="view_001.png"):    
-    # Retrieve the raw underlying ImageFolder dataset
+
+def inject_stylized_images_inplace(wrapped_dataset, new_base_dir_path: str = "/home/stud/nemmler/retristyle/data/augmented_cache/dino_imagenet_test_r_s71397589", view_name: str = "view_001.png"):    
     base_ds = get_base_image_folder(wrapped_dataset)
     
     new_samples = []
@@ -445,41 +402,3 @@ def inject_stylized_images_inplace(wrapped_dataset, new_base_dir_path="/home/stu
         
     base_ds.samples = new_samples
     base_ds.imgs = new_samples
-    
-if __name__=="__main__":
-    from experiments.data import create_dataset
-    from experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
-    from torchvision.transforms import v2
-    import torch 
-    transform = v2.Compose([
-        v2.ToImage(),
-        v2.ToDtype(torch.float32, scale=True),
-        ResizeWhileRetainAspectRatio(size=512),
-    ])
-    ds = create_dataset(
-        dataset_name="imagenet",
-        data_path="./data",
-        split="test_r_c26",
-        transform=transform,
-    )
-    cache_dir = "/home/stud/nemmler/retristyle/data/augmented_cache/extracted"
-
-    inject_stylized_images_inplace(ds, cache_dir)
-
-    print("\n" + "="*50)
-    print("DATASET INJECTION VERIFICATION")
-    print("="*50)
-
-    # Drill down to print the underlying paths cleanly
-    base_ds = ds
-    while hasattr(base_ds, 'dataset'):
-        base_ds = base_ds.dataset
-
-    total_samples = len(base_ds.samples)
-    first_sample_path, first_label = base_ds.samples[0]
-    last_sample_path, last_label = base_ds.samples[-1]
-
-    print(f"Total images in dataset: {total_samples}")
-    print(f"First image path:        {first_sample_path} (Class: {first_label})")
-    print(f"Last image path:         {last_sample_path} (Class: {last_label})")
-    print("="*50)

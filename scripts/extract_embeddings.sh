@@ -18,15 +18,23 @@ CNN_CLASSIFIERS=("densenet121" "resnet18")
 VIT_CLASSIFIERS=("vit_base_patch16_224" "swin_base_patch4_window7_224")
 FM_CLASSIFIERS=("ViT-B-16" "dinov2_vitb14" "vit_base_patch16_dinov3_lvd1689m")
 TIMM_CLASSIFIERS=("${CNN_CLASSIFIERS[@]}" "${VIT_CLASSIFIERS[@]}" "${FM_CLASSIFIERS[@]}")
-DATASET="imagenet"
-SPLIT="test_r"
-K_INTERVALS=(1 2 3 4)
+DATASET="eurosat"
+SPLIT=("train@ucmerced" "val@ucmerced")
+K_INTERVALS=(0 1 2 3 4)
 for EMBEDDING_MODEL in "${TIMM_CLASSIFIERS[@]}"; do
-
+for S in "${SPLIT[@]}"; do
     echo "Extracting embeddings: $DATASET / $SPLIT / $EMBEDDING_MODEL"
 
     python -m experiments.tta.extract_embeddings \
         --dataset "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
+        --output_dir "$EMBEDDING_DIR" \
+        --model_name "$EMBEDDING_MODEL" \
+        --input_size 224 
+done
+    echo "Extracting embeddings: $DATASET / UCMerced / $EMBEDDING_MODEL"
+
+    python -m experiments.tta.extract_embeddings \
+        --dataset "$DATASET" --data_path "$DATA_PATH" --split "ucmerced" \
         --output_dir "$EMBEDDING_DIR" \
         --model_name "$EMBEDDING_MODEL" \
         --input_size 224 \

@@ -7,8 +7,11 @@ from torch.utils.data import DataLoader
 from experiments.tta.reference_db_setup import build_reference_db, build_retriever
 from torchvision.transforms import v2
 from experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
-from config.helpers import load_json, get_y_true
+from config.helpers import load_json, get_y_true, get_top_k
+from config.constants import ALL_CLASSIFIERS
 from tabulate import tabulate
+import matplotlib.pyplot as plt
+import numpy as np
 
 def export_retrieval_mapping(
     retriever, 
@@ -316,9 +319,133 @@ def analyze_neighborhood_dynamics(retrieval_json, y_true, k_list=[2, 4, 8, 16, 3
     print(tabulate(safe_table, headers=["True Class", "True Votes", "Top Rival Class", "Rival Votes", "Margin (True-Rival)"], tablefmt="simple"))
     print("="*70 + "\n")
 
+
+def compute_sample_correlations(
+    retrieval_json, y_true, base_preds_json, tta_preds_json
+):
+    retrieval_data = load_json(retrieval_json)
+    base_data = load_json(base_preds_json)
+    tta_data = load_json(tta_preds_json)
+
+    presences = []
+    proportions = []
+    dino_scores = []
+    delta_accuracies = []
+    delta_confidences = []
+
+    for content_idx_str, retrieved_items in retrieval_data.items():
+        content_idx = int(content_idx_str)
+        true_class = int(y_true[content_idx])
+
+        if not retrieved_items:
+            continue
+
+        neighbor_classes = [item[1] for item in retrieved_items]
+        k = len(retrieved_items)
+
+        presence = 1 if true_class in neighbor_classes else 0
+        proportion = neighbor_classes.count(true_class) / k if k > 0 else 0
+
+        scores = [
+            item[2] if len(item) > 2 else 0.0 for item in retrieved_items
+        ]
+        avg_dino_score = np.mean(scores) if scores else 0.0
+
+        base_sample = base_data["predictions"][content_idx]
+        tta_sample = tta_data["predictions"][content_idx]
+
+        base_pred = base_sample["y_pred"]
+        tta_pred = tta_sample["y_pred"]
+
+        base_correct = 1 if int(np.argmax(base_pred)) == true_class else 0
+        tta_correct = 1 if int(np.argmax(tta_pred)) == true_class else 0
+        delta_acc = tta_correct - base_correct
+
+        base_conf = np.max(base_pred)
+        tta_conf = np.max(tta_pred)
+        delta_conf = tta_conf - base_conf
+
+        presences.append(presence)
+        proportions.append(proportion)
+        dino_scores.append(avg_dino_score)
+        delta_accuracies.append(delta_acc)
+        delta_confidences.append(delta_conf)
+
+    results = {
+        "presence_vs_delta_acc": np.corrcoef(presences, delta_accuracies)[0, 1],
+        "proportion_vs_delta_acc": np.corrcoef(proportions, delta_accuracies)[
+            0, 1
+        ],
+        "dino_vs_delta_acc": np.corrcoef(dino_scores, delta_accuracies)[0, 1],
+        "presence_vs_delta_conf": np.corrcoef(presences, delta_confidences)[
+            0, 1
+        ],
+        "proportion_vs_delta_conf": np.corrcoef(proportions, delta_confidences)[
+            0, 1
+        ],
+        "dino_vs_delta_conf": np.corrcoef(dino_scores, delta_confidences)[0, 1],
+    }
+
+    return results
+
+
+def plot_class_dominance_ranking(
+    json_paths, y_true, output_path="./results/retrieval_mapping"
+):
+    strategies_data = {}
+    output_name = f"{output_path}/dominance_ranking.png"
+    for name, path in json_paths.items():
+        data = load_json(path)
+        class_neighborhoods = {}
+        for content_idx_str, retrieved_items in data.items():
+            content_idx = int(content_idx_str)
+            target_class = int(y_true[content_idx])
+
+            if target_class not in class_neighborhoods:
+                class_neighborhoods[target_class] = []
+            class_neighborhoods[target_class].extend(
+                [item[1] for item in retrieved_items]
+            )
+
+        dominance_values = []
+        for target_class, all_neighbors in class_neighborhoods.items():
+            if not all_neighbors:
+                continue
+            true_count = all_neighbors.count(target_class)
+            total_votes = len(all_neighbors)
+            dominance = true_count / total_votes if total_votes > 0 else 0
+            dominance_values.append(dominance)
+
+        dominance_values.sort(reverse=True)
+        strategies_data[name] = dominance_values
+
+    plt.figure(figsize=(10, 6))
+
+    for name, dominance_values in strategies_data.items():
+        x = np.arange(len(dominance_values))
+        plt.plot(x, dominance_values, label=name, linewidth=2)
+
+    plt.xlabel("Sorted Classes")
+    plt.ylabel("Class Dominance")
+    plt.title("Class Dominance Ranking Across Retrieval Strategies")
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.tight_layout()
+    plt.savefig(output_name, dpi=300)
+    plt.close()
+
 if __name__ == "__main__":
+    json_paths = {}
     for method in ["dino", "random", "balanced_random"]:
         print(f"----Analysis for {method}----")
         path = f"/home/stud/nemmler/retristyle/results/retrieval_mapping/retrieval_mapping_{method}_test_r_s71397589.json"
         y_true = get_y_true("imagenet", "test_r")
-        analyze_neighborhood_dynamics(path,y_true)
+        #analyze_neighborhood_dynamics(path,y_true)
+        json_paths[method] = path
+
+        for cl in ALL_CLASSIFIERS:
+            base_path = f"./results/geometric_tta/tta_inference/predictions/imagenet/test_r/{cl}_geometric_zero_nviews1_seed71397589.json"
+            ood_path = f"./results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/{cl}_adain_tta_zero_{method}_nrefs32_seed71397589.json"
+            compute_sample_correlations(path, y_true, base_path, ood_path)
+    #plot_class_dominance_ranking(json_paths, y_true)
+

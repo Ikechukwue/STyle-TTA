@@ -21,7 +21,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-CLASSIFIER="vit_base_patch16_dinov3_lvd1689m"
+
 EVAL_STRATEGY="vanilla"
 RETRIEVAL_STRATEGY="dino"
 SEED=$DEFAULT_SEED

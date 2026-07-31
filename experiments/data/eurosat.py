@@ -4,22 +4,19 @@ from torch.utils.data import Subset
 from torchvision.datasets import ImageFolder
 from torchvision.datasets.vision import VisionDataset
 from typing import Any, Callable, Optional, Tuple
-
+from experiments.data.ucmerced import UCMerced
 class EuroSAT(VisionDataset):
     """
     Dataset class for EuroSAT with support for class mapping via '@' syntax.
-    
-    Example: 
-        EuroSAT(root_dir='...', split='train@mapped')
     """
     
     VALID_SPLITS = ["train", "val", "test", "ucmerced"]
     
+    # Exclude Industrial to align clean 4-class shared taxonomy
     EUROSAT_MAP = {
         "Forest": "forest",
         "Residential": "residential",
         "River": "river",
-        "Industrial": "industrial",
         "AnnualCrop": "agricultural",
         "PermanentCrop": "agricultural",
         "Pasture": "agricultural"
@@ -35,9 +32,8 @@ class EuroSAT(VisionDataset):
                  val_ratio: float = 0.1,
                  **kwargs) -> None:
         super(EuroSAT, self).__init__(root_dir, transform=transform,
-                                      target_transform=target_transform)
+                                     target_transform=target_transform)
         
-        # Handle split@mapping syntax
         mapping_key = None
         if "@" in split:
             main_split, mapping_key = split.split("@")
@@ -46,7 +42,6 @@ class EuroSAT(VisionDataset):
             
         assert main_split in self.VALID_SPLITS, f"Split must be one of {self.VALID_SPLITS}"
         
-        # Determine base path
         base_path = os.path.join(root_dir, 'satelite')
         if os.path.isdir(os.path.join(base_path, '21_classes')):
             source_path = os.path.join(base_path, '21_classes')
@@ -55,16 +50,14 @@ class EuroSAT(VisionDataset):
         else:
             source_path = base_path
 
-        # Determine if we need to link
-        if mapping_key == "ucmerced": # legacy path
+        if mapping_key == "ucmerced":
             path = self._get_linkfolder(root_dir, source_path)
         else:
             path = source_path
 
         self._check_dir(path, "EuroSAT")
         
-        
-        self.dataset = self._get_split(path, main_split, train_ratio, val_ratio)
+        self.dataset = self._get_split(path, main_split, train_ratio, val_ratio, root_dir, kwargs)
         
         if use_subset and subset_size is not None:
             self._apply_subset(subset_size, subset_seed)
@@ -87,13 +80,18 @@ class EuroSAT(VisionDataset):
                                    os.path.join(target_path, img_name))
         return subset_dir
 
-    def _get_split(self, path: str, split: str, train_ratio: float, val_ratio: float) -> Subset:
-        
+    def _get_split(self, path: str, split: str, train_ratio: float, val_ratio: float, root_dir: str, kwargs: dict) -> Any:
         if split == "ucmerced":
-            data_path = "/home/stud/nemmler/retristyle/data/satelite/UCMerced_LandUse/subsets/mapped"
-            dataset = ImageFolder(data_path)
-            split_indices = list(range(len(dataset)))
-            print("Loaded UCMerced subset")
+            # Delegate to UCMerced class with "mapped" split to ensure symlinks and loaders are set up correctly
+            ucmerced_dataset = UCMerced(
+                root_dir=root_dir,
+                split="mapped",
+                transform=None,
+                target_transform=None,
+                **kwargs
+            )
+            print("Loaded UCMerced mapped subset via UCMerced class.")
+            return ucmerced_dataset
         else:   
             dataset = ImageFolder(path)
             dataset_size = len(dataset)
@@ -110,7 +108,7 @@ class EuroSAT(VisionDataset):
                 split_indices = indices[train_end:val_end]
             else:
                 split_indices = indices[val_end:]
-        return Subset(dataset, split_indices)
+            return Subset(dataset, split_indices)
 
     @staticmethod
     def _check_dir(path: str, name: str) -> None:

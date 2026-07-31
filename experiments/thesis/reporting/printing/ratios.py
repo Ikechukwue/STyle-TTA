@@ -241,8 +241,7 @@ def accuracy_metric_correlation(domain_path):
 
 def print_correlation_report(correlations: dict):
     """
-    Takes the correlations dictionary output and prints a beautifully formatted,
-    scannable analysis table comparing all classifiers.
+    Takes the correlations dictionary output and prints an analysis table comparing all classifiers.
     """
     metrics = ["gram_distance", "mmd", "wasserstein", "kl_symmetric"]
     

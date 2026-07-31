@@ -65,50 +65,69 @@ class Midog2022(VisionDataset):
             self._apply_subset(subset_size, subset_seed)
 
     def _get_split(self, split: str, train_ratio: float) -> List[Dict[str, Any]]:
-        if split == "breasts":
-            valid_ids = set(range(101, 151))
-        elif split == "train@breasts":
-            valid_ids = set(range(1, 91))
-        elif split == "val@breasts":
-            valid_ids = set(range(91, 101))
+            if split == "breasts":
+                valid_ids = set(range(101, 151))
+            elif split == "train@breasts":
+                valid_ids = set(range(1, 91))
+            elif split == "val@breasts":
+                valid_ids = set(range(91, 101))
+            elif split in ["train", "val"]:
+                train_val_cases = self.SCANNER_A + self.SCANNER_B + self.SCANNER_C + self.SCANNER_E
+                rng = random.Random(42)
+                rng.shuffle(train_val_cases)
+                split_idx = int(train_ratio * len(train_val_cases))
+                valid_ids = set(train_val_cases[:split_idx]) if split == "train" else set(train_val_cases[split_idx:])
+            elif split == "test":
+                valid_ids = set(self.SCANNER_D)
 
-        elif split in ["train", "val"]:
-            train_val_cases = self.SCANNER_A + self.SCANNER_B + self.SCANNER_C + self.SCANNER_E
-            rng = random.Random(42)
-            rng.shuffle(train_val_cases)
+            img_to_anns = {}
+            for ann in self.coco_data.get("annotations", []):
+                img_id = ann.get("image_id")
+                if img_id in valid_ids:
+                    img_to_anns.setdefault(img_id, []).append(ann)
 
-            split_idx = int(train_ratio * len(train_val_cases))
+            img_dimensions = {img["id"]: (img["width"], img["height"]) for img in self.coco_data.get("images", [])}
 
-            if split == "train":
-                valid_ids = set(train_val_cases[:split_idx])
-            else:  
-                valid_ids = set(train_val_cases[split_idx:])
+            samples = []
 
-        elif split == "test":
-            valid_ids = set(self.SCANNER_D)
+            for img_id, anns in img_to_anns.items():
+                # Prioritize class 1 (mitosis) over class 0 so positive annotations take precedence on collision
+                sorted_anns = sorted(anns, key=lambda a: 0 if a.get("category_id") == 1 else 1)
+                
+                img_w, img_h = img_dimensions.get(img_id, (7000, 5000))
+                seen_crop_boxes = set()
 
-        samples = []
-        for ann in self.coco_data.get("annotations", []):
-            img_id = ann.get("image_id")
-            if img_id in valid_ids:
-                ann_id = ann["id"]
-                label = 1 if ann.get("category_id") == 1 else 0
-                patch_path = os.path.join(self.patch_dir, str(label), f"patch_{ann_id}.png")
+                for ann in sorted_anns:
+                    x, y, w, h = ann["bbox"]
+                    cx = x + (w / 2.0)
+                    cy = y + (h / 2.0)
 
-                x, y, w, h = ann["bbox"]
-                cx = x + (w / 2.0)
-                cy = y + (h / 2.0)
+                    # Compute the exact clamped coordinates as done in _cache_patches
+                    left = int(round(cx - self.patch_size / 2.0))
+                    top = int(round(cy - self.patch_size / 2.0))
+                    left = max(0, min(left, img_w - self.patch_size))
+                    top = max(0, min(top, img_h - self.patch_size))
+                    crop_box = (left, top, left + self.patch_size, top + self.patch_size)
 
-                samples.append({
-                    "ann_id": ann_id,
-                    "image_id": img_id,
-                    "cx": cx,
-                    "cy": cy,
-                    "patch_path": patch_path,
-                    "label": label
-                })
+                    # Skip if this exact pixel crop box was already generated for this image
+                    if crop_box in seen_crop_boxes:
+                        continue
 
-        return samples
+                    seen_crop_boxes.add(crop_box)
+                    ann_id = ann["id"]
+                    label = 1 if ann.get("category_id") == 1 else 0
+                    patch_path = os.path.join(self.patch_dir, str(label), f"patch_{ann_id}.png")
+
+                    samples.append({
+                        "ann_id": ann_id,
+                        "image_id": img_id,
+                        "cx": cx,
+                        "cy": cy,
+                        "patch_path": patch_path,
+                        "label": label
+                    })
+
+            return samples
 
     def _cache_patches(self, samples: List[Dict[str, Any]]) -> None:
         os.makedirs(os.path.join(self.patch_dir, "0"), exist_ok=True)

@@ -28,12 +28,10 @@ VIT_CLASSIFIERS = [
 
 VLM_CLASSIFIERS = [
     "ViT-B-16",
-    #"ViT-B-16@Zero",
 ]
 
 FM_CLASSIFIERS = [
     "dinov2_vitb14",
-    #"vit_base_patch16_dinov3_lvd1689m"
 ]
 
 ALL_CLASSIFIERS = (
@@ -46,7 +44,6 @@ ALL_CLASSIFIERS = (
 PRETRAINED_CLASSIFIERS = {
     "ViT-B-16",
     "dinov2_vitb14",
-    #"vit_base_patch16_dinov3_lvd1689m",
 }
 
 # ============================================================================

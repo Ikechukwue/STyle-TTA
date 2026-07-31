@@ -323,7 +323,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--dataset", type=str, required=True)
     p.add_argument("--data_path", type=str, required=True)
-    p.add_argument("--output_dir", type=str, default="./embeddings")
+    p.add_argument("--output_dir", type=str, default="./data/embeddings")
     p.add_argument("--model_name", type=str, default=DEFAULT_EMBEDDING_MODEL)
     p.add_argument("--splits", nargs="+", default=["train", "test"])
     p.add_argument("--input_size", type=int, default=224)

@@ -2,7 +2,7 @@
 
 export PYTHONWARNINGS="ignore::UserWarning:pkg_resources"
 # Define the dataset to evaluate
-DATASET="midog"
+DATASET="epistr"
 DATA_PATH="./data"
 OUTPUT_PATH="./data/models/$DATASET"
 # 1. Models designated for LINEAR PROBING
@@ -32,12 +32,12 @@ do
         --dataset "$DATASET" \
         --data_path "$DATA_PATH" \
         --classifier "$CL" \
+        --augmentations "random_flip" "random_resized_crop" \
         --train_mode "linear_probe" \
         --epochs 50 \
         --lr 0.01 \
         --batch_size 32 \
         --seed 42 \
-        --augmentations random_flip random_resized_crop \
         --output_path "$OUTPUT_PATH" \
         --use_cuda 2>&1 | tee "logs/${DATASET}-${CL}-linear_probe.log"
 done
@@ -51,11 +51,11 @@ do
         --data_path "$DATA_PATH" \
         --classifier "$CL" \
         --train_mode "finetune" \
+        --augmentations "random_flip" "random_resized_crop" \
         --epochs 20 \
         --lr 0.0003 \
         --batch_size 32 \
         --seed 42 \
-        --augmentations random_flip random_resized_crop \
         --output_path "$OUTPUT_PATH" \
         --use_cuda 2>&1 | tee "logs/${DATASET}-${CL}-finetune.log"
 done

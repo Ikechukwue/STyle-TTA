@@ -559,158 +559,139 @@ def compute_gatys_style_loss(image1: torch.Tensor, image2: torch.Tensor,
         warnings.warn(f"Gatys style loss computation failed: {e}")
         return 1.0
 
-def batch_wasserstein_distance(X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
+
+def batch_wasserstein_distance(X: torch.Tensor, Y: torch.Tensor, one_to_one: bool = False) -> torch.Tensor:
     """
     Computes 1D Wasserstein distance pairwise between batch X (N, C, H, W) 
-    and batch Y (M, C, H, W) natively in PyTorch.
-    
-    Returns a matrix of shape (N, M).
+    and batch Y (M, C, H, W).
+    Returns shape (N, M) if one_to_one=False, or shape (min(N, M),) if one_to_one=True.
     """
     N, C, H, W = X.shape
     M = Y.shape[0]
-    
-    # 1. Flatten spatial dimensions -> Shape: (N, C, H*W)
+
     pixels_X = X.reshape(N, C, -1)
     pixels_Y = Y.reshape(M, C, -1)
-    
-    # 2. Sort the pixels along the spatial dimension (Crucial for 1D Wasserstein math)
-    pixels_X_sorted, _ = torch.sort(pixels_X, dim=-1) # (N, C, H*W)
-    pixels_Y_sorted, _ = torch.sort(pixels_Y, dim=-1) # (M, C, H*W)
-    
-    # 3. Broadcast to compute all N x M pairwise cross-combinations
-    # Expand shapes to: (N, M, C, H*W)
+
+    pixels_X_sorted, _ = torch.sort(pixels_X, dim=-1)
+    pixels_Y_sorted, _ = torch.sort(pixels_Y, dim=-1)
+
+    if one_to_one:
+        min_len = min(N, M)
+        X_sub = pixels_X_sorted[:min_len]
+        Y_sub = pixels_Y_sorted[:min_len]
+        return torch.abs(X_sub - Y_sub).mean(dim=-1).mean(dim=-1)
+
     X_exp = pixels_X_sorted.unsqueeze(1).expand(N, M, C, -1)
     Y_exp = pixels_Y_sorted.unsqueeze(0).expand(N, M, C, -1)
-    
-    # 4. L1 distance over sorted distributions yields the exact 1D Wasserstein metric
-    # Average across the spatial dimension, then average across color channels
-    pairwise_wasserstein = torch.abs(X_exp - Y_exp).mean(dim=-1).mean(dim=-1) # Shape: (N, M)
-    
-    return pairwise_wasserstein
 
-import torch
+    return torch.abs(X_exp - Y_exp).mean(dim=-1).mean(dim=-1)
 
-def batch_color_moment_distance(X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
+
+def batch_color_moment_distance(X: torch.Tensor, Y: torch.Tensor, one_to_one: bool = False) -> torch.Tensor:
     """
     Computes pairwise color moment distances between batch X (N, C, H, W) 
-    and batch Y (M, C, H, W) completely on the GPU.
-    
-    Returns a matrix of shape (N, M).
+    and batch Y (M, C, H, W).
+    Returns shape (N, M) if one_to_one=False, or shape (min(N, M),) if one_to_one=True.
     """
     N, C, H, W = X.shape
     M = Y.shape[0]
-    P = H * W  # Number of pixels per image
+    P = H * W
 
     flat_X = X.reshape(N, C, P)
     flat_Y = Y.reshape(M, C, P)
 
-    # 2. Compute means for every image across the pixel dimension -> Shape: (N, C) and (M, C)
     means_X = flat_X.mean(dim=-1)
     means_Y = flat_Y.mean(dim=-1)
 
-    # 3. Compute Covariances completely vectorized
-    # Center the pixels by subtracting their respective means
-    centered_X = flat_X - means_X.unsqueeze(-1)  # (N, C, P)
-    centered_Y = flat_Y - means_Y.unsqueeze(-1)  # (M, C, P)
+    centered_X = flat_X - means_X.unsqueeze(-1)
+    centered_Y = flat_Y - means_Y.unsqueeze(-1)
 
-    # Matrix multiply centered matrices to get covariance pools
-    # (N, C, P) @ (N, P, C) -> Shape: (N, C, C)
     covs_X = torch.bmm(centered_X, centered_X.transpose(1, 2)) / (P - 1)
-    # (M, C, P) @ (M, P, C) -> Shape: (M, C, C)
     covs_Y = torch.bmm(centered_Y, centered_Y.transpose(1, 2)) / (P - 1)
 
+    if one_to_one:
+        min_len = min(N, M)
+        mean_diffs = torch.norm(means_X[:min_len] - means_Y[:min_len], p=2, dim=-1)
+        cov_diffs = torch.norm(covs_X[:min_len] - covs_Y[:min_len], p='fro', dim=(-2, -1))
+        return 0.5 * mean_diffs + 0.5 * cov_diffs
 
     means_X_exp = means_X.unsqueeze(1).expand(N, M, C)
     means_Y_exp = means_Y.unsqueeze(0).expand(N, M, C)
-    
-    # L2 Norm (Euclidean distance) of the mean differences along the channel dimension
-    # Shape: (N, M)
+
     mean_diffs = torch.norm(means_X_exp - means_Y_exp, p=2, dim=-1)
 
-    # Expand Covariances to (N, M, C, C) to cross-compare matrices
     covs_X_exp = covs_X.unsqueeze(1).expand(N, M, C, C)
     covs_Y_exp = covs_Y.unsqueeze(0).expand(N, M, C, C)
 
-    # Frobenius norm is mathematically equivalent to flattening the C x C matrix and taking the L2 norm
-    # Shape: (N, M)
     cov_diffs = torch.norm(covs_X_exp - covs_Y_exp, p='fro', dim=(-2, -1))
 
-    # 5. Compute the final weighted combination matrix
-    pairwise_moment_distances = 0.5 * mean_diffs + 0.5 * cov_diffs
-
-    return pairwise_moment_distances
-
+    return 0.5 * mean_diffs + 0.5 * cov_diffs
 
 def batch_compute_histograms(batch_tensor: torch.Tensor, bins: int = 256) -> torch.Tensor:
     """
-    Computes normalized histograms for an entire batch (N, C, H, W) at once on GPU.
-    
-    Returns:
-        Tensor of shape (N, C, bins) containing normalized, safe histograms.
+    Computes normalized histograms per channel for an entire batch (N, C, H, W) on GPU
+    without high-dimensional broadcasting memory spikes.
     """
     N, C, H, W = batch_tensor.shape
-    # Flatten spatial dimensions -> (N, C, H*W)
-    flat = batch_tensor.reshape(N, C, -1)
+    # Scale values to integer bin indices [0, bins - 1]
+    scaled = torch.clamp(batch_tensor * bins, 0, bins - 1).long()
     
-    # Generate bin centers evenly spaced between 0 and 1
-    bin_edges = torch.linspace(0.0, 1.0, bins + 1, device=batch_tensor.device)
-    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0  # Shape: (bins,)
-    bin_width = 1.0 / bins
-
-    # Broadcast flat pixels against bin centers to compute a soft linear assignment
-    # flat: (N, C, pixels, 1) | bin_centers: (1, 1, 1, bins)
-    dist = torch.abs(flat.unsqueeze(-1) - bin_centers.view(1, 1, 1, bins))
+    # Flatten spatial and channel indices for one-hot/scatter encoding
+    # Shape: (N, C, H*W)
+    flat = scaled.view(N, C, -1)
     
-    # Soft thresholding: assign a pixel to a bin if it falls within the bin width
-    # We use a fast ReLU clamp approximation to mimic standard hard bin counting
-    counts = torch.clamp(1.0 - (dist / bin_width), min=0.0)
-    histograms = counts.sum(dim=2)  # Sum across all pixels -> Shape: (N, C, bins)
+    # Compute histogram counts per (N, C) using scatter_add
+    histograms = torch.zeros((N, C, bins), device=batch_tensor.device, dtype=batch_tensor.dtype)
+    histograms.scatter_add_(-1, flat, torch.ones_like(flat, dtype=batch_tensor.dtype))
 
-    # Add epsilon to prevent division by zero or log(0) down the line
+    # Normalize to probability distributions
     histograms = histograms + 1e-10
-    
-    # Normalize each channel's histogram so it sums to 1.0
     histograms = histograms / histograms.sum(dim=-1, keepdim=True)
-    
+
     return histograms
 
-def batch_histogram_distances(X: torch.Tensor, Y: torch.Tensor, bins: int = 256) -> tuple:
+
+def batch_histogram_distances(X: torch.Tensor, Y: torch.Tensor, bins: int = 256, one_to_one: bool = False) -> tuple:
     """
-    Computes KL, JS, Chi-Square, and Intersection matrices pairwise between 
+    Computes KL, JS, Chi-Square, and Intersection matrices/vectors pairwise between 
     batch X (N, C, H, W) and batch Y (M, C, H, W).
-    
-    Returns:
-        Tuple of four matrices, each of shape (N, M)
     """
     N, C, _, _ = X.shape
     M = Y.shape[0]
 
-    # 1. Extract histograms for all images in both batches -> (N, C, bins) and (M, C, bins)
     hist_A = batch_compute_histograms(X, bins=bins)
     hist_B = batch_compute_histograms(Y, bins=bins)
 
-    # 2. Expand to cross-combination dimensions -> Shape: (N, M, C, bins)
+    if one_to_one:
+        min_len = min(N, M)
+        hA_sub = hist_A[:min_len]
+        hB_sub = hist_B[:min_len]
+
+        kl_vector = torch.sum(hA_sub * torch.log(hA_sub / hB_sub), dim=-1).mean(dim=-1)
+
+        m = 0.5 * (hA_sub + hB_sub)
+        kl_pm = torch.sum(hA_sub * torch.log(hA_sub / m), dim=-1)
+        kl_qm = torch.sum(hB_sub * torch.log(hB_sub / m), dim=-1)
+        js_vector = (0.5 * kl_pm + 0.5 * kl_qm).mean(dim=-1)
+
+        chi_vector = torch.sum(((hA_sub - hB_sub) ** 2) / hB_sub, dim=-1).mean(dim=-1)
+
+        intersect_vector = torch.sum(torch.minimum(hA_sub, hB_sub), dim=-1).mean(dim=-1)
+
+        return kl_vector, js_vector, chi_vector, intersect_vector
+
     hA_exp = hist_A.unsqueeze(1).expand(N, M, C, bins)
     hB_exp = hist_B.unsqueeze(0).expand(N, M, C, bins)
 
-    # --- Metric 1: KL Divergence ---
-    # sum(p * log(p / q))
     kl_matrix = torch.sum(hA_exp * torch.log(hA_exp / hB_exp), dim=-1).mean(dim=-1)
 
-    # --- Metric 2: JS Divergence ---
-    # 0.5 * KL(p || m) + 0.5 * KL(q || m) where m = 0.5 * (p + q)
     m = 0.5 * (hA_exp + hB_exp)
     kl_pm = torch.sum(hA_exp * torch.log(hA_exp / m), dim=-1)
     kl_qm = torch.sum(hB_exp * torch.log(hB_exp / m), dim=-1)
     js_matrix = (0.5 * kl_pm + 0.5 * kl_qm).mean(dim=-1)
 
-    # --- Metric 3: Chi-Square Distance ---
-    # sum((p - q)^2 / q)
     chi_matrix = torch.sum(((hA_exp - hB_exp) ** 2) / hB_exp, dim=-1).mean(dim=-1)
 
-    # --- Metric 4: Histogram Intersection ---
-    # sum(min(p, q))
     intersect_matrix = torch.sum(torch.minimum(hA_exp, hB_exp), dim=-1).mean(dim=-1)
 
-    # All returned shapes are (N, M), perfectly matching your tracking grids
     return kl_matrix, js_matrix, chi_matrix, intersect_matrix

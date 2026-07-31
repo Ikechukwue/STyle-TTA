@@ -19,31 +19,39 @@ MODELS=(
 )
 
 # Define splits to evaluate all at once
-SPLITS=("train" "val" "test")
-DATASET="camelyon17wilds"
-AUGMENTATION="none"
+
+DATASET=("eurosat")
+
 SEED=$DEFAULT_SEED
 
-for MDL in "${MODELS[@]}"; do
-    echo "----------------------------------------------------------"
-    echo "RUNNING EVALUATION: Model=$MDL on Dataset=$DATASET"
-    echo "Splits: ${SPLITS[*]}"
-    echo "----------------------------------------------------------"
+for DS in "${DATASET[@]}"; do
+    for MDL in "${MODELS[@]}"; do
+        AUGMENTATION="none"
+        SPLITS=("train" "val" "test")
+        if [[ "$DS" == "eurosat" ]]; then
+            AUGMENTATION="random_flip-random_resized_crop"
+            SPLITS=("train" "val" "train@ucmerced" "val@ucmerced" "ucmerced")
+        fi
+        echo "----------------------------------------------------------"
+        echo "RUNNING EVALUATION: Model=$MDL on Dataset=$DS"
+        echo "Splits: ${SPLITS[*]}"
+        echo "----------------------------------------------------------"
 
-    WEIGHTS_PATH="$MODEL_DIR/$DATASET/$DATASET-$MDL-random_flip-random_resized_crop-seed42.pth"
+        WEIGHTS_PATH="$MODEL_DIR/$DS/$DS-$MDL-$AUGMENTATION-seed42.pth"
 
-    echo "Weights target resolving to: $WEIGHTS_PATH"
+        echo "Weights target resolving to: $WEIGHTS_PATH"
 
-    # Pass the entire SPLITS array directly to the argument
-    python -m experiments.classifier_evaluation \
-        --dataset "$DATASET" \
-        --data_path "./data" \
-        --classifier "$MDL" \
-        --weights_path "$WEIGHTS_PATH" \
-        --method "$AUGMENTATION" \
-        --seed "$SEED" \
-        --splits "${SPLITS[@]}" \
-        --output_path "results/classifier_eval"
+        # Pass the entire SPLITS array directly to the argument
+        python -m experiments.classifier_evaluation \
+            --dataset "$DS" \
+            --data_path "./data" \
+            --classifier "$MDL" \
+            --weights_path "$WEIGHTS_PATH" \
+            --method "$AUGMENTATION" \
+            --seed "$SEED" \
+            --splits "${SPLITS[@]}" \
+            --output_path "results/classifier_eval"
 
-    echo "Finished evaluating $MDL"
+        echo "Finished evaluating $MDL"
+    done
 done

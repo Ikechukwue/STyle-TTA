@@ -28,10 +28,10 @@ done
 # Outer loop: Classifiers
 for CLASSIFIER in "${ALL_CLASSIFIERS[@]}"; do
 
-    WEIGHTS_PATH="pretrained"
-    if is_pretrained "$CLASSIFIER"; then
-        WEIGHTS_PATH="${MODEL_DIR}/${DATASET}-${CLASSIFIER}-random_flip-random_resized_crop-seed42.pth"
-    fi
+    #WEIGHTS_PATH="pretrained"
+    #if is_pretrained "$CLASSIFIER"; then
+    WEIGHTS_PATH="${MODEL_DIR}/${DATASET}-${CLASSIFIER}-random_flip-random_resized_crop-seed42.pth"
+    #fi
 
     for N_VIEWS in "${N_VIEWS_LIST[@]}"; do
         for N_REFS in "${N_REFS_LIST[@]}"; do

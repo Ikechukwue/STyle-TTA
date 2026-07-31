@@ -436,16 +436,16 @@ def plot_class_dominance_ranking(
 
 if __name__ == "__main__":
     json_paths = {}
-    for method in ["dino", "random", "balanced_random"]:
+    for method in ["dino"]:
         print(f"----Analysis for {method}----")
         path = f"/home/stud/nemmler/retristyle/results/retrieval_mapping/retrieval_mapping_{method}_test_r_s71397589.json"
         y_true = get_y_true("imagenet", "test_r")
-        #analyze_neighborhood_dynamics(path,y_true)
+        analyze_neighborhood_dynamics(path,y_true)
         json_paths[method] = path
 
         for cl in ALL_CLASSIFIERS:
             base_path = f"./results/geometric_tta/tta_inference/predictions/imagenet/test_r/{cl}_geometric_zero_nviews1_seed71397589.json"
             ood_path = f"./results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/{cl}_adain_tta_zero_{method}_nrefs32_seed71397589.json"
             compute_sample_correlations(path, y_true, base_path, ood_path)
-    #plot_class_dominance_ranking(json_paths, y_true)
+    plot_class_dominance_ranking(json_paths, y_true)
 

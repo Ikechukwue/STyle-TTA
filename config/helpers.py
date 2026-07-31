@@ -7,7 +7,7 @@ import re
 import numpy as np
 from scipy.cluster.hierarchy import linkage, leaves_list
 from scipy.spatial.distance import squareform
-
+from scipy.stats import entropy
 from torch.utils.data import Dataset
 from torchvision.datasets import ImageFolder
 from tqdm import tqdm
@@ -158,6 +158,35 @@ def get_baseline_results(file_name: str, predictions: bool = True, split: str = 
 # ==========================================
 # 3. METRICS & TOP-K EVALUATION
 # ==========================================
+def extract_class_metrics(pred_path):
+    """Extracts accuracy, confidence, and entropy per class from raw predictions."""
+    pred_json = load_json(pred_path)
+    class_data = {}
+    for p in pred_json["predictions"]:
+        c_id = str(p["y_true"])
+        y_pred_probs = np.array(p["y_pred"])
+        
+        is_correct = int(np.argmax(y_pred_probs) == p["y_true"])
+        confidence = np.max(y_pred_probs)
+        pred_entropy = entropy(y_pred_probs)
+        
+        if c_id not in class_data:
+            class_data[c_id] = {"acc": [], "conf": [], "ent": []}
+            
+        class_data[c_id]["acc"].append(is_correct)
+        class_data[c_id]["conf"].append(confidence)
+        class_data[c_id]["ent"].append(pred_entropy)
+        
+    # Average across instances to get clean per-class baseline/TTA values
+    return {
+        c: {
+            "acc": np.mean(v["acc"]),
+            "conf": np.mean(v["conf"]),
+            "ent": np.mean(v["ent"])
+        }
+        for c, v in class_data.items()
+    }
+
 
 def get_top_k(results: dict, k: int = 5) -> Tuple[np.ndarray, np.ndarray]:
     y_pred_matrix = np.array([sample["y_pred"] for sample in results["predictions"]])
@@ -386,7 +415,7 @@ def get_base_image_folder(dataset: Dataset) -> ImageFolder:
     return current_ds
 
 
-def inject_stylized_images_inplace(wrapped_dataset, new_base_dir_path: str = "/home/stud/nemmler/retristyle/data/augmented_cache/dino_imagenet_test_r_s71397589", view_name: str = "view_001.png"):    
+def inject_stylized_images_inplace(wrapped_dataset, new_base_dir_path: str = "/home/stud/nemmler/retristyle/data/augmented_cache/adain_dino_imagenet_test_r_s71397589", view_name: str = "view_001.png"):    
     base_ds = get_base_image_folder(wrapped_dataset)
     
     new_samples = []

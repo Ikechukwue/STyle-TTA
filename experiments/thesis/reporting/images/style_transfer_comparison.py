@@ -1,28 +1,34 @@
-import os 
-from experiments.data import create_dataset
+import argparse
+import json
+import os
+from collections import defaultdict
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import torch
+from torchvision.transforms import v2
+from tqdm import tqdm
+
 from config.helpers import inject_stylized_images_inplace
 from experiments.data import create_dataset
-from experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
 from experiments.metrics.color_metrics import (
-    compute_color_moment_distance, batch_color_moment_distance, batch_histogram_distances
+    batch_color_moment_distance,
+    batch_histogram_distances,
+    compute_color_moment_distance,
 )
 from experiments.metrics.content_metrics import (
-    batch_sobel_edge_similarity, batch_ssim
+    batch_sobel_edge_similarity,
+    batch_ssim,
 )
 from experiments.metrics.model import pixel_model_analysis
-import torch
-import numpy as np
-import json
-from pathlib import Path
-from tqdm import tqdm
-from typing import List, Dict, Optional, Tuple
-from torchvision.transforms import v2
-from collections import defaultdict
-import argparse
+from experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
+
 
 def _save_json(output_path: Path, results):
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
+
 
 def calculate_batched_metrics(images_A: List[torch.Tensor], images_B: List[torch.Tensor], device="cuda") -> List[Dict]:
     """
@@ -35,19 +41,17 @@ def calculate_batched_metrics(images_A: List[torch.Tensor], images_B: List[torch
     batch_B = torch.stack(images_B).to(device)
 
     with torch.no_grad():
-        # Assuming metric functions accept 1:1 batches and return 1D tensors (length N)
-        ssim_scores = batch_ssim(batch_A, batch_B).cpu().numpy()
-        edge_scores = batch_sobel_edge_similarity(batch_A, batch_B).cpu().numpy()
-        color_scores = batch_color_moment_distance(batch_A, batch_B).cpu().numpy() 
-        _, _, _, hist_int = batch_histogram_distances(batch_A, batch_B)
+        ssim_scores = batch_ssim(batch_A, batch_B, one_to_one=True).cpu().numpy()
+        edge_scores = batch_sobel_edge_similarity(batch_A, batch_B, one_to_one=True).cpu().numpy()
+        color_scores = batch_color_moment_distance(batch_A, batch_B, one_to_one=True).cpu().numpy()
+        kl_dist, js_dist, chi_dist, hist_int = batch_histogram_distances(batch_A, batch_B, one_to_one=True)
         hist_scores = hist_int.cpu().numpy()
-        
+
     torch.cuda.empty_cache()
 
     batched_pair_results = []
     N = len(images_A)
-    
-    # Simple 1:1 linear pass
+
     for i in range(N):
         batched_pair_results.append({
             "ssim": float(ssim_scores[i]),
@@ -55,21 +59,23 @@ def calculate_batched_metrics(images_A: List[torch.Tensor], images_B: List[torch
             "color_moment_distance": float(color_scores[i]),
             "histogramm_distance": float(hist_scores[i]),
         })
-        
+
     return batched_pair_results
+
 
 def group_by_class(dataset, max_samples, max_cls):
     groups = defaultdict(list)
-    labels = getattr(dataset, 'targets', None) 
+    labels = getattr(dataset, 'targets', None)
     if labels is None:
-        labels = dataset.dataset.dataset.targets 
-        
+        labels = dataset.dataset.dataset.targets
+
     for i, label in enumerate(labels):
         if not max_cls or (int(label) in groups or len(groups.keys()) < max_cls):
             if not max_samples or len(groups[int(label)]) < max_samples:
                 groups[int(label)].append(i)
 
     return groups
+
 
 def prepare_datasets(args):
     transform = v2.Compose([
@@ -78,30 +84,28 @@ def prepare_datasets(args):
         ResizeWhileRetainAspectRatio(size=256),
     ])
 
-    # 1. Create original dataset (Set A)
     set_A = create_dataset(
-        args.dataset, 
-        args.data_path, 
+        args.dataset,
+        args.data_path,
         args.split,
         transform=transform,
     )
 
-    # 2. Create base dataset for Set B (same split/content structure)
     set_B = create_dataset(
-        args.dataset, 
-        args.data_path, 
+        args.dataset,
+        args.data_path,
         args.split,
         transform=transform,
     )
 
-    # 3. Inject the stylized file paths into Set B in-place
     inject_stylized_images_inplace(
-        set_B, 
-        new_base_dir_path=args.stylized_dir, 
+        set_B,
+        new_base_dir_path=args.stylized_dir,
         view_name=args.view_name
     )
 
     return set_A, set_B
+
 
 def aggregate_class_metrics(class_metrics: list) -> dict:
     if not class_metrics:
@@ -110,7 +114,7 @@ def aggregate_class_metrics(class_metrics: list) -> dict:
     metric_keys = set()
     for m in class_metrics:
         metric_keys.update(m.keys())
-    
+
     summary = {}
     for key in metric_keys:
         valid_values = [m[key] for m in class_metrics if m.get(key) is not None]
@@ -128,16 +132,16 @@ def aggregate_class_metrics(class_metrics: list) -> dict:
     summary["n_pairs"] = len(class_metrics)
     return summary
 
+
 def classes_analysis(set_A, set_B, args):
-    max_samples = 0 #args.max_samples or 30
+    max_samples = 0
     max_cls = args.max_classes or 0
 
     groups_A = group_by_class(set_A, max_samples, max_cls)
     groups_B = group_by_class(set_B, max_samples, max_cls)
-    
+
     common_classes = set(groups_A.keys()).intersection(set(groups_B.keys()))
-    
-    # Ensure matched subset sizes per class
+
     balanced_groups_A = {}
     balanced_groups_B = {}
     for cls in common_classes:
@@ -156,9 +160,10 @@ def classes_analysis(set_A, set_B, args):
     print(f"Processing {len(common_classes)} classes with total {total_pairs} 1:1 image pairs.")
 
     models = ["lpips", "ldc", "depthanything_v2_large", "dpt_large"]
-    
-    # Note: model_analysis must handle 1:1 evaluations matching pair (A[i], B[i])
-    model_metrics = pixel_model_analysis(set_A, set_B, common_classes, groups_A, groups_B, models, intra=False)
+
+    model_metrics = pixel_model_analysis(
+        set_A, set_B, common_classes, groups_A, groups_B, models, intra=False, one_to_one=True
+    )
 
     for cls in tqdm(common_classes, desc="Processing Classes"):
         images_A = [set_A[i][0] for i in groups_A[cls]]
@@ -173,7 +178,7 @@ def classes_analysis(set_A, set_B, args):
                     if idx < len(flat_scores):
                         val = flat_scores[idx]
                         pair_dict[metric_name] = float(val) if val is not None else None
-                        
+
         all_metrics.extend(class_metrics)
         class_summaries[str(cls)] = aggregate_class_metrics(class_metrics)
 
@@ -187,24 +192,26 @@ def classes_analysis(set_A, set_B, args):
 
     return {"global_summary": summary, "class_summaries": class_summaries}
 
+
 def domain_analysis(args):
     output_dir = Path(args.output_dir)
     result_dir = output_dir / f"{args.dataset}_{args.split}"
     result_dir.mkdir(parents=True, exist_ok=True)
-    
-    set_A, set_B = prepare_datasets(args) 
+
+    set_A, set_B = prepare_datasets(args)
     class_results = classes_analysis(set_A, set_B, args)
-    
+
     result_name = f"paired_{args.max_classes}_{args.max_samples}_{args.dataset}_{args.split}.json"
     _save_json(result_dir / result_name, class_results)
+
 
 def get_args():
     parser = argparse.ArgumentParser(description="1:1 Paired Analysis: Original vs Stylized")
 
     parser.add_argument("--dataset", type=str, default="imagenet")
     parser.add_argument("--data_path", type=str, default="./data")
-    parser.add_argument("--stylized_dir", type=str, 
-                        default="/home/stud/nemmler/retristyle/data/augmented_cache/dino_imagenet_test_r_s71397589",
+    parser.add_argument("--stylized_dir", type=str,
+                        default="/home/stud/nemmler/retristyle/data/augmented_cache/adain_dino_imagenet_test_r_s71397589",
                         help="Root directory containing stylized image folders")
     parser.add_argument("--view_name", type=str, default="view_001.png",
                         help="Specific view filename inside the sample directory")
@@ -215,7 +222,7 @@ def get_args():
 
     return parser.parse_args()
 
+
 if __name__ == "__main__":
     args = get_args()
     domain_analysis(args)
-

@@ -1,21 +1,3 @@
-"""
-xAILab Bamberg
-University of Bamberg
-
-@description:
-Dataset class for the Camelyon17-WILDS dataset.
-
-@references:
-- Paper:
-    - WILDS: Pang Wei Koh, et al. "WILDS: A Benchmark of in-the-Wild Distribution
-        Shifts". International Conference on Machine Learning (ICML). 2021.
-    - Camelyon17: Peter Bandi, et al. "From detection of individual metastases to
-        classification of lymph node status at the patient level: the CAMELYON17
-        challenge". IEEE Transactions on Medical Imaging. 2018.
-- Data: https://worksheets.codalab.org/worksheets/0xb44731cc8e8a4265a20146c3887b6b90
-- Code: https://github.com/p-lambda/wilds/tree/main
-"""
-
 import random
 from torch.utils.data import Subset
 from torchvision.datasets.vision import VisionDataset
@@ -32,23 +14,6 @@ class Camelyon17WILDS(VisionDataset):
                  target_transform: Optional[Callable] = None, use_subset: bool = False,
                  subset_size: Optional[int] = None,
                  subset_seed: Optional[int] = None) -> None:
-        """
-        Initialize the Camelyon17-WILDS dataset.
-
-        Args:
-            root (str): Root directory of the dataset.
-            split (str): Split of the dataset (train, val, test).
-            transform (torchvision.transforms, optional): Transformations to apply to
-                the dataset. Defaults to None.
-            target_transform (torchvision.transforms, optional): Transformations to
-                apply to the target. Defaults to None.
-            use_subset (bool): Whether to use only a subset of the dataset.
-                Defaults to False.
-            subset_size (int, optional): Number of samples to use if use_subset
-                is True. Defaults to None.
-            subset_seed (int, optional): Random seed for subset selection.
-                Defaults to None.
-        """
         super(Camelyon17WILDS, self).__init__(root_dir, transform=transform,
                                               target_transform=target_transform)
         self.transform = transform
@@ -58,46 +23,38 @@ class Camelyon17WILDS(VisionDataset):
                                    root_dir=root_dir)
         self.dataset = full_dataset.get_subset(split)
 
-        # Apply subsetting if requested
+        # Enforce 2,000 subset restriction specifically for test split
+        if split == "test":
+            use_subset = True
+            subset_size = 2000 if subset_size is None else subset_size
+
         if use_subset and subset_size is not None:
             self._apply_subset(subset_size, subset_seed)
 
     def _apply_subset(self, subset_size: int,
                       subset_seed: Optional[int] = None) -> None:
-        """
-        Apply subsetting to the dataset.
-
-        Args:
-            subset_size (int): Number of samples to use for the subset.
-            subset_seed (int, optional): Random seed for subset selection.
-                If None, uses default PyTorch behavior.
-        """
         dataset_size = len(self.dataset)
         seed = subset_seed if subset_seed is not None else 42
         random.seed(seed)
 
         if subset_size >= dataset_size:
-            # Calculate how many times to repeat the dataset
             repeats = (subset_size + dataset_size - 1) // dataset_size
             print(f"Warning: Requested subset size ({subset_size}) is >= dataset size "
                   f"({dataset_size}). Repeating dataset {repeats}x to fulfill "
                   f"requirements.")
 
-            # Create repeated indices with shuffling between repeats
             all_indices = []
             for _ in range(repeats):
                 indices = list(range(dataset_size))
                 random.shuffle(indices)
                 all_indices.extend(indices)
 
-            # Trim to exact subset size
             indices = all_indices[:subset_size]
             self.dataset = Subset(self.dataset, indices)
             print(f"Using subset of {subset_size} samples (repeated from "
                   f"{dataset_size} originals, seed={subset_seed}).")
             return
 
-        # Create random indices for the subset
         indices = random.sample(range(dataset_size), subset_size)
         self.dataset = Subset(self.dataset, indices)
 

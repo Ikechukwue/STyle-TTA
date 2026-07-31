@@ -269,43 +269,39 @@ def compute_metrics(
     elif num_classes == 2 or task_type in ["binary-class"]:
         # Binary classification
         y_true_squeezed = y_true.squeeze()
-        y_pred_labels = (y_pred[:, -1] > 0.5).astype(int)
+        
+        # Extract positive class probabilities (assuming index 1 is positive class)
+        if y_pred.ndim == 2 and y_pred.shape[1] == 2:
+            y_prob_pos = y_pred[:, 1]
+        else:
+            y_prob_pos = y_pred.squeeze()
+
+        y_pred_labels = (y_prob_pos > 0.5).astype(int)
         accuracy = accuracy_score(y_true_squeezed, y_pred_labels)
         balanced_acc = balanced_accuracy_score(y_true_squeezed, y_pred_labels)
         top_5_accuracy = accuracy
+
         try:
             if len(y_true_squeezed) > 30000:
                 print(f"  [Note] Dataset large ({len(y_true_squeezed)} samples). Stratifying 30k items for AUC...")
-                _, y_true_sub, _, y_pred_sub = train_test_split(
+                _, y_true_sub, _, y_prob_sub = train_test_split(
                     y_true_squeezed, 
-                    y_pred, 
+                    y_prob_pos, 
                     test_size=30000,
                     stratify=y_true_squeezed,   
                     random_state=42
                 )
             else:
                 y_true_sub = y_true_squeezed
-                y_pred_sub = y_pred            
-            active_classes = np.sort(np.unique(y_true_sub))
+                y_prob_sub = y_prob_pos            
             
-            y_pred_sliced = y_pred_sub[:, active_classes]
-            
-            row_sums = y_pred_sliced.sum(axis=1, keepdims=True)
-            row_sums = np.where(row_sums == 0, 1e-9, row_sums)
-            y_pred_sliced = y_pred_sliced / row_sums
-            
-            auc = roc_auc_score(
-                y_true_sub, 
-                y_pred_sliced, 
-                multi_class="ovr", 
-                labels=active_classes
-            )
+            # Standard binary AUC computation expecting 1D inputs
+            auc = roc_auc_score(y_true_sub, y_prob_sub)
 
         except Exception as e:
             print(f"  [Warning] Global AUC calculation fallback triggered: {e}")
             auc = 0.0
-
-            
+                
     else:
         # Multi-class classification
         y_true_squeezed = y_true.squeeze()
@@ -439,35 +435,37 @@ class MaskedClassifier(nn.Module):
         self.base_model = base_model
         self.split = split
         
-        # Determine if we are using a satellite mapping or ImageNet subset
         if "ucmerced" in self.split:
-            # For satellite, we assume a direct index mask
             mask_list = [True] * 10
+            
+            # Target order: [agricultural, forest, residential, river]
+            matrix = torch.zeros((10, 4), dtype=torch.float32)
+
+            # EuroSAT indices mapping:
+            matrix[[0, 5, 6], 0] = 1.0  # AnnualCrop, Pasture, PermanentCrop -> agricultural
+            matrix[1, 1] = 1.0                # Forest -> forest
+            matrix[7, 2] = 1.0                # Residential -> residential
+            matrix[8, 3] = 1.0                # River -> river
+            
+            self.register_buffer("satellite_matrix", matrix)
         else:
-            # For ImageNet, use existing wnid logic
             mask_list = self._set_class_mask()
+            self.satellite_matrix = None
             
         self.register_buffer("mask", torch.tensor(mask_list, dtype=torch.bool))
-
         self.backbone = base_model.backbone if hasattr(base_model, 'backbone') else base_model
 
     def forward(self, x):
         logits = self.base_model(x)
-        if "ucmerced" in self.split:
-
-            # Shape: [10 source classes -> 5 target classes]
-            matrix = torch.zeros((10, 5), dtype=torch.float32).to(logits.device)
+        
+        if "ucmerced" in self.split and self.satellite_matrix is not None:
+            # Convert raw logits to probabilities before pooling to preserve calibrated scale
+            probs = torch.softmax(logits, dim=-1)
+            mapped_probs = torch.matmul(probs, self.satellite_matrix)
             
-            # Map based on alphabetical order of EuroSAT folders:
-            # 0: AnnualCrop, 1: Forest, 2: HerbaceousVegetation, 3: Highway, 4: Industrial,
-            # 5: Pasture, 6: PermanentCrop, 7: Residential, 8: River, 9: SeaLake
-            matrix[[0, 5, 6], 0] = 1.0  # AnnualCrop, Pasture, PermanentCrop -> agricultural
-            matrix[1, 1] = 1.0          # Forest -> forest
-            matrix[4, 2] = 1.0          # Industrial -> industrial
-            matrix[7, 3] = 1.0          # Residential -> residential
-            matrix[8, 4] = 1.0          # River -> river
+            # Convert back to log space to match logit expectations for downstream losses/metrics
+            return torch.log(mapped_probs + 1e-8)
             
-            return torch.matmul(logits, matrix)
         return logits[:, self.mask]
 
     def _set_class_mask(self) -> list[bool]:
@@ -479,7 +477,6 @@ class MaskedClassifier(nn.Module):
         subset_wnids = data.get(split, [])
         all_wnids = data.get("full", [])
         return [wnid in subset_wnids for wnid in all_wnids]
-
 
 def load_classifier(
     weights_path: str,
@@ -836,7 +833,7 @@ def evaluate_classifier(
         if (dataset == "imagenet" and ("@" in split or split in ["test_r", "test_abl", "test_r_c26"])) or (dataset == "eurosat" and "ucmerced" in split):
             accelerator.print(f"  Applying class subset masking for split: {split}")
             active_model = MaskedClassifier(model, split=split)
-            split_num_classes = int(active_model.mask.sum().item())
+            split_num_classes = int(active_model.mask.sum().item()) if not split == "ucmerced" else active_model.satellite_matrix.shape[1]
         else:
             active_model = model
             split_num_classes = num_classes

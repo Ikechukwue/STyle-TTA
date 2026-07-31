@@ -223,7 +223,7 @@ def prepare_dataloaders(
             train_transform = v2.Compose([
                 v2.ToImage(),
                 v2.ToDtype(torch.float32, scale=True),
-                ResizeWhileRetainAspectRatio(size=input_size),
+                #ResizeWhileRetainAspectRatio(size=input_size),
                 *train_augmentations,
                 v2.Normalize(mean, std)
             ])

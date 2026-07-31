@@ -20,7 +20,6 @@ import torch.nn.functional as F
 from scipy.stats import spearmanr
 from scipy.ndimage import distance_transform_edt
 from scipy.spatial.distance import cdist
-
 # Global model instances (lazy-loaded)
 _lpips_model = None
 _depth_models = {}  # Dictionary to store depth estimation pipelines
@@ -1070,155 +1069,162 @@ def compute_depth_ssim(img1, img2, method: str = 'depthanything_v2_large') -> fl
 # Batch Formulas
 ##############################################################################
 
-def batch_ssim(X: torch.Tensor, Y: torch.Tensor, window_size: int = 11, size_average: bool = False, use_luminance: bool = False,) -> torch.Tensor:
+
+
+
+def batch_ssim(X: torch.Tensor, Y: torch.Tensor, window_size: int = 11, size_average: bool = False, use_luminance: bool = False, one_to_one: bool = False) -> torch.Tensor:
     """
     Computes SSIM pairwise between batch X (N, C, H, W) and batch Y (M, C, H, W).
-    Returns a matrix of shape (N, M) containing the SSIM for every pair.
+    Returns a matrix of shape (N, M) if one_to_one=False, or a 1D vector (min(N,M),) if one_to_one=True.
     """
-    
-    # Create a 2D Gaussian window
     def gaussian(w_size, sigma, device, dtype):
-        coords = torch.arange(w_size, device=device, dtype=dtype)
-        coords -= w_size // 2
-
+        coords = torch.arange(w_size, device=device, dtype=dtype) - (w_size // 2)
         gauss = torch.exp(-(coords ** 2) / (2 * sigma ** 2))
         return gauss / gauss.sum()
 
     def luminance(img1, img2):
-        gray1 = (
-            0.2989 * img1[:, 0:1]
-            + 0.5870 * img1[:, 1:2]
-            + 0.1140 * img1[:, 2:3]
-        )
-        gray2 = (
-            0.2989 * img2[:, 0:1]
-            + 0.5870 * img2[:, 1:2]
-            + 0.1140 * img2[:, 2:3]
-        )
+        gray1 = 0.2989 * img1[:, 0:1] + 0.5870 * img1[:, 1:2] + 0.1140 * img1[:, 2:3]
+        gray2 = 0.2989 * img2[:, 0:1] + 0.5870 * img2[:, 1:2] + 0.1140 * img2[:, 2:3]
         return gray1, gray2
-    
+
     if use_luminance:
-        X, Y = luminance(X,Y)
+        X, Y = luminance(X, Y)
 
     N, C, H, W = X.shape
     M = Y.shape[0]
-    
+
     _1D_window = gaussian(window_size, 1.5, X.device, X.dtype).unsqueeze(1)
     _2D_window = _1D_window.mm(_1D_window.t()).to(dtype=X.dtype).unsqueeze(0).unsqueeze(0).to(X.device)
     window = _2D_window.expand(C, 1, window_size, window_size)
 
-    # To do an N x M pairwise cross comparison efficiently, we expand the tensors
-    # X_exp: (N, M, C, H, W) -> reshaped to (N*M, C, H, W)
+    if one_to_one:
+        min_len = min(N, M)
+        X_sub, Y_sub = X[:min_len], Y[:min_len]
+
+        mu1 = F.conv2d(X_sub, window, groups=C, padding=window_size // 2)
+        mu2 = F.conv2d(Y_sub, window, groups=C, padding=window_size // 2)
+
+        mu1_sq = mu1.pow(2)
+        mu2_sq = mu2.pow(2)
+        mu1_mu2 = mu1 * mu2
+
+        sigma1_sq = F.conv2d(X_sub * X_sub, window, groups=C, padding=window_size // 2) - mu1_sq
+        sigma2_sq = F.conv2d(Y_sub * Y_sub, window, groups=C, padding=window_size // 2) - mu2_sq
+        sigma12 = F.conv2d(X_sub * Y_sub, window, groups=C, padding=window_size // 2) - mu1_mu2
+
+        C1 = 0.01 ** 2
+        C2 = 0.03 ** 2
+
+        ssim_map = ((2 * mu1_mu2 + C1) * (2 * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2))
+        return ssim_map.mean(dim=[1, 2, 3])
+
     X_exp = X.unsqueeze(1).expand(N, M, C, H, W).reshape(N * M, C, H, W)
     Y_exp = Y.unsqueeze(0).expand(N, M, C, H, W).reshape(N * M, C, H, W)
 
-    # Compute local means
-    mu1 = F.conv2d(X_exp, window, groups=C, padding=window_size//2)
-    mu2 = F.conv2d(Y_exp, window, groups=C, padding=window_size//2)
+    mu1 = F.conv2d(X_exp, window, groups=C, padding=window_size // 2)
+    mu2 = F.conv2d(Y_exp, window, groups=C, padding=window_size // 2)
 
     mu1_sq = mu1.pow(2)
     mu2_sq = mu2.pow(2)
     mu1_mu2 = mu1 * mu2
 
-    # Compute local variances and covariances
-    sigma1_sq = F.conv2d(X_exp * X_exp, window, groups=C, padding=window_size//2) - mu1_sq
-    sigma2_sq = F.conv2d(Y_exp * Y_exp, window, groups=C, padding=window_size//2) - mu2_sq
-    sigma12 = F.conv2d(X_exp * Y_exp, window, groups=C, padding=window_size//2) - mu1_mu2
+    sigma1_sq = F.conv2d(X_exp * X_exp, window, groups=C, padding=window_size // 2) - mu1_sq
+    sigma2_sq = F.conv2d(Y_exp * Y_exp, window, groups=C, padding=window_size // 2) - mu2_sq
+    sigma12 = F.conv2d(X_exp * Y_exp, window, groups=C, padding=window_size // 2) - mu1_mu2
 
     C1 = 0.01 ** 2
     C2 = 0.03 ** 2
 
-    # SSIM formula applied across all NxM pairs at once
     ssim_map = ((2 * mu1_mu2 + C1) * (2 * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2))
-    
-    # Average over spatial dimensions and channels -> Shape (N * M) -> Reshape to (N, M)
     return ssim_map.mean(dim=[1, 2, 3]).reshape(N, M)
 
 
-def batch_sobel_edge_similarity(X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
+def batch_sobel_edge_similarity(X: torch.Tensor, Y: torch.Tensor, one_to_one: bool = False) -> torch.Tensor:
     """
     Computes Sobel Edge Magnitude similarity pairwise between batch X and batch Y.
-    Returns a matrix of shape (N, M).
+    Returns a matrix of shape (N, M) if one_to_one=False, or a 1D vector (min(N,M),) if one_to_one=True.
     """
     def rgb_to_gray(img):
-        return (
-            0.2989 * img[:, 0:1]
-            + 0.5870 * img[:, 1:2]
-            + 0.1140 * img[:, 2:3]
-        )
-    
-    
+        return 0.2989 * img[:, 0:1] + 0.5870 * img[:, 1:2] + 0.1140 * img[:, 2:3]
+
     X = rgb_to_gray(X)
     Y = rgb_to_gray(Y)
 
     N, C, H, W = X.shape
     M = Y.shape[0]
 
-    # Define Sobel kernels
-    sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=X.dtype).view(1, 1, 3, 3).to(X.device)
-    sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=X.dtype).view(1, 1, 3, 3).to(X.device)
-
-    # Expand to match channels
-    sobel_x = sobel_x.expand(C, 1, 3, 3)
-    sobel_y = sobel_y.expand(C, 1, 3, 3)
+    sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=X.dtype, device=X.device).view(1, 1, 3, 3).expand(C, 1, 3, 3)
+    sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=X.dtype, device=X.device).view(1, 1, 3, 3).expand(C, 1, 3, 3)
 
     def get_edge_magnitude(img_batch):
-        # Flatten channels to batch dimension to apply grayscale Sobel or handle per channel
         grad_x = F.conv2d(img_batch, sobel_x, groups=C, padding=1)
         grad_y = F.conv2d(img_batch, sobel_y, groups=C, padding=1)
         magnitude = torch.sqrt(grad_x**2 + grad_y**2 + 1e-8)
-        return magnitude.mean(dim=1, keepdim=True) # Average channels to get single edge map
+        return magnitude.mean(dim=1, keepdim=True)
 
-    # Compute edge maps for both blocks independently
-    edges_X = get_edge_magnitude(X) # (N, 1, H, W)
-    edges_Y = get_edge_magnitude(Y) # (M, 1, H, W)
+    edges_X = get_edge_magnitude(X)
+    edges_Y = get_edge_magnitude(Y)
 
-    # Cross-compare via Mean Squared Error or Mean Absolute Error across all pairs
-    # Expand shapes to (N, M, 1, H, W)
+    if one_to_one:
+        min_len = min(N, M)
+        edge_diff = torch.mean(torch.abs(edges_X[:min_len] - edges_Y[:min_len]), dim=[1, 2, 3])
+        return 1.0 / (1.0 + edge_diff)
+
     edges_X_exp = edges_X.unsqueeze(1).expand(N, M, 1, H, W)
     edges_Y_exp = edges_Y.unsqueeze(0).expand(N, M, 1, H, W)
 
-    # Pairwise L1 similarity metric mapped to [0, 1] bounds roughly
     edge_diff = torch.mean(torch.abs(edges_X_exp - edges_Y_exp), dim=[2, 3, 4])
-    return 1.0 / (1.0 + edge_diff) # Return similarity score matrix (N, M)
+    return 1.0 / (1.0 + edge_diff)
 
 
-def batch_lpips_distance(X: torch.Tensor, Y: torch.Tensor, lpips_model, intra) -> torch.Tensor:
+def batch_lpips_distance(X: torch.Tensor, Y: torch.Tensor, lpips_model, intra: bool, one_to_one: bool = False, chunk_size: int = 32) -> torch.Tensor:
     """
     Computes pairwise LPIPS distances between batch X (N, C, H, W) 
-    and batch Y (M, C, H, W) cleanly on the GPU.
-    
-    Returns a matrix of shape (N, M).
+    and batch Y (M, C, H, W) cleanly on the GPU in chunks.
     """
     N, C, H, W = X.shape
     M = Y.shape[0]
 
-    # 1. Scale inputs from [0, 1] to LPIPS expected [-1, 1] range
     X_scaled = X * 2.0 - 1.0
     Y_scaled = Y * 2.0 - 1.0
 
-    # 2. Expand tensors to compute all N x M cross-combinations
-    # Shapes become: (N * M, C, H, W)
+    if one_to_one:
+        min_len = min(N, M)
+        X_sub = X_scaled[:min_len]
+        Y_sub = Y_scaled[:min_len]
+
+        distances_list = []
+        with torch.no_grad():
+            for i in range(0, min_len, chunk_size):
+                x_chunk = X_sub[i:i + chunk_size]
+                y_chunk = Y_sub[i:i + chunk_size]
+                dist = lpips_model(x_chunk, y_chunk)
+                distances_list.append(dist.flatten().cpu())
+
+        return torch.cat(distances_list).numpy()
+
     X_exp = X_scaled.unsqueeze(1).expand(N, M, C, H, W).reshape(N * M, C, H, W)
     Y_exp = Y_scaled.unsqueeze(0).expand(N, M, C, H, W).reshape(N * M, C, H, W)
 
-    # 3. Stream through the pre-loaded model
-    # LPIPS returns a distance tensor of shape (N * M, 1, 1, 1)
+    distances_list = []
     with torch.no_grad():
-        distances = lpips_model(X_exp, Y_exp)
-        
-    # 4. Flatten and reshape back to a beautiful (N, M) coordinate matrix
-    grid_np = distances.reshape(N, M).cpu().numpy()
-    # 5. Convert to an object array to insert `None` seamlessly for self-comparisons
+        for i in range(0, N * M, chunk_size):
+            x_chunk = X_exp[i:i + chunk_size]
+            y_chunk = Y_exp[i:i + chunk_size]
+            dist = lpips_model(x_chunk, y_chunk)
+            distances_list.append(dist.flatten().cpu())
+
+    grid_np = torch.cat(distances_list).numpy().reshape(N, M)
     grid_obj = grid_np.astype(object)
-    
+
     if intra:
         for i in range(min(N, M)):
             grid_obj[i, i] = None
-            
+
     return grid_obj
 
-def batch_edge_similarity(batch_A, batch_B, model, method='ldc'):
+
+def batch_edge_similarity(batch_A: torch.Tensor, batch_B: torch.Tensor, model, method='ldc', one_to_one: bool = False) -> torch.Tensor:
     """
     Computes pairwise SSIM similarity between edge maps of two batches.
     """
@@ -1228,66 +1234,36 @@ def batch_edge_similarity(batch_A, batch_B, model, method='ldc'):
 
     def get_batch_edges(batch):
         if method == 'ldc':
-            # LDC Preprocessing: Scale to 255 and subtract mean
             mean = torch.tensor([103.939, 116.779, 123.68]).view(1, 3, 1, 1).to(device)
             inputs = (batch * 255.0) - mean
             outputs = model(inputs)
-            edges = torch.sigmoid(outputs[-1]) # Use fused output
+            edges = torch.sigmoid(outputs[-1])
         elif method == 'hed':
             edges = model(batch)
-        
-        # Normalize each edge map in the batch to [0, 1]
-        # Reshape to (B, -1) to find max per image
+
         b_size = edges.shape[0]
         max_vals = edges.view(b_size, -1).max(dim=1)[0].view(b_size, 1, 1, 1)
         return edges / (max_vals + 1e-7)
 
-    # 1. Get edge maps for both batches once
-    edges_A = get_batch_edges(batch_A) # (N, 1, H, W)
-    edges_B = get_batch_edges(batch_B) # (M, 1, H, W)
+    edges_A = get_batch_edges(batch_A)
+    edges_B = get_batch_edges(batch_B)
 
-    # 2. Compute Pairwise SSIM (Requires CPU/Numpy for skimage)
-    # Note: For massive batches, you can use a PyTorch SSIM implementation 
-    # to stay on GPU, but here we follow your skimage preference.
     eA_np = edges_A.squeeze(1).cpu().numpy()
     eB_np = edges_B.squeeze(1).cpu().numpy()
-    
+
+    if one_to_one:
+        min_len = min(N, M)
+        results = np.zeros(min_len)
+        for i in range(min_len):
+            results[i] = ssim(eA_np[i], eB_np[i], data_range=1.0)
+        return torch.from_numpy(results)
+
     results = np.zeros((N, M))
     for i in range(N):
         for j in range(M):
             results[i, j] = ssim(eA_np[i], eB_np[j], data_range=1.0)
-            
+
     return torch.from_numpy(results)
- ####################################################################################################################
- #  Model Analysis
- # ##################################################################################################################   
-
-def _pairwise_dists_chunked(feats_A, feats_B, dists_model, chunk_size=16):
-    """Computes pairwise DISTS between two sets of 3-channel maps in chunks."""
-    N, M = feats_A.shape[0], feats_B.shape[0]
-    out = np.zeros((N, M), dtype=np.float32)
-
-    for i_start in range(0, N, chunk_size):
-        i_end = min(i_start + chunk_size, N)
-        chunk_A = feats_A[i_start:i_end]
-        ci = chunk_A.shape[0]
-
-        for j_start in range(0, M, chunk_size):
-            j_end = min(j_start + chunk_size, M)
-            chunk_B = feats_B[j_start:j_end]
-            cj = chunk_B.shape[0]
-
-            a_exp = chunk_A.repeat_interleave(cj, dim=0)
-            b_exp = chunk_B.repeat(ci, 1, 1, 1)
-
-            with torch.no_grad():
-                scores = dists_model(a_exp, b_exp)
-
-            out[i_start:i_end, j_start:j_end] = scores.view(ci, cj).cpu().numpy()
-            del a_exp, b_exp, scores
-            
-    return out
-
 
 def _build_dataset_cache(dataset, groups, common_classes, extract_fn, device):
     """
@@ -1416,10 +1392,16 @@ def calculate_depths_metrics(set_A, set_B, common_classes, model_name, groups_A,
     return model_results_per_class
 
 
-def calculate_edge_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra):
+import numpy as np
+import torch
+from scipy.ndimage import distance_transform_edt
+from scipy.spatial.distance import cdist
+from skimage.metrics import structural_similarity as ssim
+
+
+def calculate_edge_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra, one_to_one=False):
     edge_model = _get_ldc_model().to(device) if model_name == "ldc" else _get_hed_model().to(device).eval()
 
-    # 1. Single pass extraction using our generic cacher
     extract_fn = lambda b: _extract_edges(b, edge_model, method=model_name, mini_batch_size=8)
     cache_A = _build_dataset_cache(set_A, groups_A, common_classes, extract_fn, device)
     cache_B = cache_A if intra else _build_dataset_cache(set_B, groups_B, common_classes, extract_fn, device)
@@ -1438,43 +1420,97 @@ def calculate_edge_metrics(set_A, set_B, common_classes, model_name, groups_A, g
         eB = cache_B[cls].to(device)
         N, M = eA.shape[0], eB.shape[0]
 
-        dists_grid = _pairwise_dists_chunked(eA.repeat(1, 3, 1, 1), eB.repeat(1, 3, 1, 1), dists_model, chunk_size=4)
-        eA_np, eB_np = eA.squeeze(1).cpu().numpy(), eB.squeeze(1).cpu().numpy()
-        del eA, eB; torch.cuda.empty_cache()
+        if one_to_one:
+            min_len = min(N, M)
+            eA_sub, eB_sub = eA[:min_len], eB[:min_len]
 
-        ssim_arr, fom, haus = np.full((N, M), None), np.full((N, M), None), np.full((N, M), None)
-        dists_obj = dists_grid.astype(object)
+            dists_arr = _pairwise_dists_chunked(
+                eA_sub.repeat(1, 3, 1, 1), 
+                eB_sub.repeat(1, 3, 1, 1), 
+                dists_model, 
+                chunk_size=4, 
+                one_to_one=True
+            )
 
-        for i in range(N):
-            bin_A = eA_np[i] > 0.1
-            pts_A = np.argwhere(bin_A)
-            if not np.any(bin_A): continue
-            
-            pts_A_sub = pts_A[np.random.choice(len(pts_A), min(len(pts_A), MAX_PTS), replace=False)]
-            dist_trans_A = distance_transform_edt(~bin_A)
+            eA_np, eB_np = eA_sub.squeeze(1).cpu().numpy(), eB_sub.squeeze(1).cpu().numpy()
+            del eA, eB, eA_sub, eB_sub; torch.cuda.empty_cache()
 
-            for j in range(M):
-                if intra and i == j:
-                    dists_obj[i, j] = None
+            ssim_arr, fom, haus = np.full(min_len, None), np.full(min_len, None), np.full(min_len, None)
+
+            for i in range(min_len):
+                ssim_arr[i] = float(ssim(eA_np[i], eB_np[i], data_range=1.0))
+
+                bin_A = eA_np[i] > 0.1
+                bin_B = eB_np[i] > 0.1
+
+                if not np.any(bin_A):
                     continue
 
-                ssim_arr[i, j] = float(ssim(eA_np[i], eB_np[j], data_range=1.0))
-                bin_B = eB_np[j] > 0.1
-                pts_B = np.argwhere(bin_B)
+                dist_trans_A = distance_transform_edt(~bin_A)
 
                 if np.any(bin_B):
                     d_i = dist_trans_A[bin_B]
-                    fom[i, j] = float(np.sum(1.0 / (1.0 + (1.0/9.0) * (d_i**2))) / max(np.sum(bin_A), np.sum(bin_B)))
-                    pts_B_sub = pts_B[np.random.choice(len(pts_B), min(len(pts_B), MAX_PTS), replace=False)]
-                    D = cdist(pts_A_sub, pts_B_sub)
-                    haus[i, j] = float(max(D.min(axis=1).max(), D.min(axis=0).max()))
-                else:
-                    haus[i, j] = 1000.0
+                    fom[i] = float(np.sum(1.0 / (1.0 + (1.0 / 9.0) * (d_i**2))) / max(np.sum(bin_A), np.sum(bin_B)))
 
-        model_results_per_class[cls] = {
-            f"{model_name}_ssim": ssim_arr.flatten(), f"{model_name}_dists": dists_obj.flatten(),
-            f"{model_name}_fom": fom.flatten(), f"{model_name}_haus": haus.flatten(),
-        }
+                    pts_A = np.argwhere(bin_A)
+                    pts_B = np.argwhere(bin_B)
+                    pts_A_sub = pts_A[np.random.choice(len(pts_A), min(len(pts_A), MAX_PTS), replace=False)]
+                    pts_B_sub = pts_B[np.random.choice(len(pts_B), min(len(pts_B), MAX_PTS), replace=False)]
+
+                    D = cdist(pts_A_sub, pts_B_sub)
+                    haus[i] = float(max(D.min(axis=1).max(), D.min(axis=0).max()))
+                else:
+                    haus[i] = 1000.0
+
+            model_results_per_class[cls] = {
+                f"{model_name}_ssim": ssim_arr, f"{model_name}_dists": dists_arr,
+                f"{model_name}_fom": fom, f"{model_name}_haus": haus,
+            }
+
+        else:
+            dists_grid = _pairwise_dists_chunked(
+                eA.repeat(1, 3, 1, 1), 
+                eB.repeat(1, 3, 1, 1), 
+                dists_model, 
+                chunk_size=4, 
+                one_to_one=False
+            )
+            eA_np, eB_np = eA.squeeze(1).cpu().numpy(), eB.squeeze(1).cpu().numpy()
+            del eA, eB; torch.cuda.empty_cache()
+
+            ssim_arr, fom, haus = np.full((N, M), None), np.full((N, M), None), np.full((N, M), None)
+            dists_obj = dists_grid.astype(object)
+
+            for i in range(N):
+                bin_A = eA_np[i] > 0.1
+                pts_A = np.argwhere(bin_A)
+                if not np.any(bin_A): continue
+
+                pts_A_sub = pts_A[np.random.choice(len(pts_A), min(len(pts_A), MAX_PTS), replace=False)]
+                dist_trans_A = distance_transform_edt(~bin_A)
+
+                for j in range(M):
+                    if intra and i == j:
+                        dists_obj[i, j] = None
+                        continue
+
+                    ssim_arr[i, j] = float(ssim(eA_np[i], eB_np[j], data_range=1.0))
+                    bin_B = eB_np[j] > 0.1
+                    pts_B = np.argwhere(bin_B)
+
+                    if np.any(bin_B):
+                        d_i = dist_trans_A[bin_B]
+                        fom[i, j] = float(np.sum(1.0 / (1.0 + (1.0 / 9.0) * (d_i**2))) / max(np.sum(bin_A), np.sum(bin_B)))
+                        pts_B_sub = pts_B[np.random.choice(len(pts_B), min(len(pts_B), MAX_PTS), replace=False)]
+                        D = cdist(pts_A_sub, pts_B_sub)
+                        haus[i, j] = float(max(D.min(axis=1).max(), D.min(axis=0).max()))
+                    else:
+                        haus[i, j] = 1000.0
+
+            model_results_per_class[cls] = {
+                f"{model_name}_ssim": ssim_arr.flatten(), f"{model_name}_dists": dists_obj.flatten(),
+                f"{model_name}_fom": fom.flatten(), f"{model_name}_haus": haus.flatten(),
+            }
 
     del dists_model; torch.cuda.empty_cache()
     for cls in list(cache_A.keys()):
@@ -1488,6 +1524,47 @@ def calculate_edge_metrics(set_A, set_B, common_classes, model_name, groups_A, g
     return model_results_per_class
 
 
+def _pairwise_dists_chunked(feats_A, feats_B, dists_model, chunk_size=16, one_to_one=False):
+    N, M = feats_A.shape[0], feats_B.shape[0]
+
+    if one_to_one:
+        min_len = min(N, M)
+        out = np.zeros(min_len, dtype=np.float32)
+
+        for i in range(0, min_len, chunk_size):
+            chunk_A = feats_A[i:i + chunk_size]
+            chunk_B = feats_B[i:i + chunk_size]
+
+            with torch.no_grad():
+                scores = dists_model(chunk_A, chunk_B)
+
+            out[i:i + chunk_size] = scores.view(-1).cpu().numpy()
+            del chunk_A, chunk_B, scores
+
+        return out
+
+    out = np.zeros((N, M), dtype=np.float32)
+
+    for i_start in range(0, N, chunk_size):
+        i_end = min(i_start + chunk_size, N)
+        chunk_A = feats_A[i_start:i_end]
+        ci = chunk_A.shape[0]
+
+        for j_start in range(0, M, chunk_size):
+            j_end = min(j_start + chunk_size, M)
+            chunk_B = feats_B[j_start:j_end]
+            cj = chunk_B.shape[0]
+
+            a_exp = chunk_A.repeat_interleave(cj, dim=0)
+            b_exp = chunk_B.repeat(ci, 1, 1, 1)
+
+            with torch.no_grad():
+                scores = dists_model(a_exp, b_exp)
+
+            out[i_start:i_end, j_start:j_end] = scores.view(ci, cj).cpu().numpy()
+            del a_exp, b_exp, scores
+
+    return out
 
 
 def calculate_lpips_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra, one_to_one=False, chunk_size=32):

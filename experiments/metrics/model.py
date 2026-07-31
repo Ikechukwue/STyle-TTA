@@ -43,7 +43,7 @@ def model_run(set_A, set_B, common_classes, model_name, groups_A, groups_B, devi
     torch.cuda.empty_cache()
     return model_results_per_class
 
-def pixel_model_analysis(set_A, set_B, common_classes, groups_A, groups_B, models, intra):
+def pixel_model_analysis(set_A, set_B, common_classes, groups_A, groups_B, models, intra, one_to_one=False):
     metrics_report = {}
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -52,19 +52,20 @@ def pixel_model_analysis(set_A, set_B, common_classes, groups_A, groups_B, model
 
         torch.cuda.empty_cache()
         with torch.no_grad():
-            #if model_name in ['depthpro', 'depthanything_v2_large', 'dpt_large']:
-            #    model_results=calculate_depths_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra)
-
-            if model_name=="lpips":
-                model_results=calculate_lpips_metrics(set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra)
-        
+            if model_name == "lpips":
+                model_results = calculate_lpips_metrics(
+                    set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra, one_to_one=one_to_one
+                )
             else:
-                model_results=calculate_edge_metrics(set_A, set_B, common_classes, model_name,groups_A, groups_B, device, intra)
+                model_results = calculate_edge_metrics(
+                    set_A, set_B, common_classes, model_name, groups_A, groups_B, device, intra, one_to_one=one_to_one
+                )
 
         for cls, metric_dict in model_results.items():
             if cls not in metrics_report:
                 metrics_report[cls] = {}
             metrics_report[cls].update(metric_dict)
+
     clear_global_models()
     return metrics_report
 

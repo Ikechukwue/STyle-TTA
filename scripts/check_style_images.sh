@@ -57,7 +57,7 @@ for i in {1..15}; do
             --tta_method geometric --eval_strategy "$EVAL_STRATEGY" \
             --style_id "$i" \
             --seed "$SEED" \
-            --output_path "$OUTPUT_PATH/style_check/$name_id"
+            --output_path "$OUTPUT_PATH/style_check/adain/$name_id"
         #done
     done
 done

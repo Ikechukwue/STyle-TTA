@@ -147,7 +147,7 @@ def generate_hybrid_views(
                 tta_method="geometric", 
                 n_views=per_view + 1, 
                 input_size=input_size, 
-                dataset=dataset
+                dataset=dataset,
             )
             
             if geo_views.shape[0] > 1:

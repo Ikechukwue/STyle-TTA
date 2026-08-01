@@ -19,7 +19,7 @@ Accelerate.
 from __future__ import annotations
 
 import random as _random
-from typing import List
+from typing import List, Optional
 
 import torch
 import torch.nn.functional as F
@@ -197,6 +197,8 @@ def augment_views(
     tta_method: str,
     n_views: int,
     *,
+    start_idx:Optional[int], 
+    end_idx:Optional[int],
     retriever=None,
     n_refs: int = 5,
     color_transfer_fn=None,
@@ -239,18 +241,18 @@ def augment_views(
         )
 
     ref_indices, _ = retriever.retrieve(image, k=n_refs)
-
+    target_refs = ref_indices[start_idx:end_idx]
     # Chunked mode: keep completed views on CPU to save VRAM
     chunked = (
         style_batch_size is not None
         and style_batch_size > 0
     )
     store_device = torch.device("cpu") if chunked else device
-    views = [image.squeeze(0).to(store_device)]
+    views = [image.squeeze(0).to(store_device)] if start_idx == 0 else []
 
-    chunk_sz = style_batch_size if chunked else len(ref_indices)
-    for chunk_start in range(0, len(ref_indices), chunk_sz):
-        chunk_indices = ref_indices[chunk_start:chunk_start + chunk_sz]
+    chunk_sz = style_batch_size if chunked else len(target_refs)
+    for chunk_start in range(0, len(target_refs), chunk_sz):
+        chunk_indices = target_refs[chunk_start:chunk_start + chunk_sz]
         B = len(chunk_indices)
 
         # -- True batch path for diffusion-based methods -------------------

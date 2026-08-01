@@ -67,6 +67,7 @@ class CustomDataset(VisionDataset):
 
         elif dataset_name.lower() == "midog":
             # Create the root directory to the data if it does not exist
+            
             self.dataset = Midog2022(
                 root_dir=data_path,
                 transform=transform, target_transform=target_transform,split=split,
@@ -84,7 +85,7 @@ class CustomDataset(VisionDataset):
             )
         elif dataset_name.lower() == "camelyon17wilds":
             # Create the root directory to the data if it does not exist
-            root_dir = create_dataset_directory(data_path, dataset_name)
+            root_dir = os.path.join(data_path, dataset_name)
             # Load the data with the default dataset splits
             self.dataset = Camelyon17WILDS(root_dir=root_dir, split=split,
                                            transform=transform,
@@ -95,7 +96,7 @@ class CustomDataset(VisionDataset):
 
         elif dataset_name.lower() == "epistr":
             # Create the root directory to the data if it does not exist
-            root_dir = create_dataset_directory(data_path, dataset_name)
+            root_dir = os.path.join(data_path, dataset_name)
 
             # Load the data with dataset splits across datasets (NKI, VGH, IHC)
             # Train: NKI / Val: VGH / Test: IHC

@@ -32,7 +32,7 @@ ALL_SEEDS=(71397589 133560673 265017005)
 CNN_CLASSIFIERS=("resnet18" "densenet121")
 VIT_CLASSIFIERS=("vit_base_patch16_224" "swin_base_patch4_window7_224")
 VLM_CLASSIFIERS=("ViT-B-16")
-FM_CLASSIFIERS=("dinov2_vitb14" "vit_base_patch16_dinov3_lvd1689m")
+FM_CLASSIFIERS=("dinov2_vitb14")
 ALL_CLASSIFIERS=("${CNN_CLASSIFIERS[@]}" "${VIT_CLASSIFIERS[@]}" "${VLM_CLASSIFIERS[@]}" "${FM_CLASSIFIERS[@]}")
 PRETRAINED_CLASSIFIERS=("ViT-B-16" "dinov2_vitb14" "vit_base_patch16_dinov3_lvd1689m")
 

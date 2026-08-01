@@ -833,7 +833,7 @@ def evaluate_classifier(
         if (dataset == "imagenet" and ("@" in split or split in ["test_r", "test_abl", "test_r_c26"])) or (dataset == "eurosat" and "ucmerced" in split):
             accelerator.print(f"  Applying class subset masking for split: {split}")
             active_model = MaskedClassifier(model, split=split)
-            split_num_classes = int(active_model.mask.sum().item()) if not split == "ucmerced" else active_model.satellite_matrix.shape[1]
+            split_num_classes = int(active_model.mask.sum().item()) if not "ucmerced" in split else active_model.satellite_matrix.shape[1]
         else:
             active_model = model
             split_num_classes = num_classes

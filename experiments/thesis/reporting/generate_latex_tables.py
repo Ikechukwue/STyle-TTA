@@ -125,7 +125,7 @@ def generate_style_transfer_table(results_dir: Path, output_dir: Path):
 # =========================================================================
 def generate_geometric_tta_table(results_dir: Path, output_dir: Path):
     """Generate LaTeX table for geometric TTA baselines across classifiers."""
-    geo_dir = results_dir / "thesis" / "geometric_tta"
+    geo_dir = results_dir / "geometric_tta"
     if not geo_dir.exists():
         geo_dir = results_dir / "geometric_tta"
     files = _find_json_files(geo_dir, "*_results.json")

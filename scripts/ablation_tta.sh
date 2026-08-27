@@ -24,11 +24,10 @@ source "$SCRIPT_DIR/common.sh"
 CLASSIFIER="vit_base_patch16_dinov3_lvd1689m"
 EVAL_STRATEGY="vanilla"
 RETRIEVAL_STRATEGY="dino"
-ALL_N_REFS=(2 4 8 16)
+ALL_N_REFS=(2 4)
 SEED=$DEFAULT_SEED
 
-DATASET="imagenet"
-SPLIT="test_r"
+DATASET=("camelyon17wilds")
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -43,28 +42,35 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-for CL in "${ALL_CLASSIFIERS[@]}"; do
-WEIGHTS_PATH="pretrained"
-if is_pretrained "$CL"; then
-    WEIGHTS_PATH="${MODEL_DIR}/${DATASET}-${CL}-random_flip-random_resized_crop-seed42.pth"
-fi
+for DT in "${DATASET}"; do
+    for CL in "${ALL_CLASSIFIERS[@]}"; do
+        AUGMENTATION="random_flip-random_resized_crop"
+        SPLIT="test"
+        #WEIGHTS_PATH="pretrained"
+        #if is_pretrained "$CL"; then
+        if [[ $DT == "eurosat" ]]; then
+            AUGMENTATION="random_flip-random_resized_crop"
+            SPLIT="ucmerced"
+        fi
+            WEIGHTS_PATH="${MODEL_DIR}/${DT}/${DT}-${CL}-${AUGMENTATION}-seed42.pth"
+        #fi
 
-for N_REFS in "${ALL_N_REFS[@]}"; do
-#for EV in "${EVAL_STRATEGIES[@]}"; do
-echo "Ablation: $CL | retr=$RETRIEVAL_STRATEGY | eval=$EV | n_refs=$N_REFS"
-echo $WEIGHTS_PATH
-python -m experiments.tta.run_inference \
-    --dataset "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
-    --classifier "$CL" --weights_path "$WEIGHTS_PATH" \
-    --tta_method retristyle --eval_strategy "$EVAL_STRATEGY" \
-    --retrieval_strategy "$RETRIEVAL_STRATEGY" \
-    --n_refs "$N_REFS" --n_views $N_REFS \
-    --style_batch_size $STYLE_BATCH_SIZE \
-    --embedding_model "$EMBEDDING_MODEL" \
-    --embedding_dir "$EMBEDDING_DIR" \
-    --seed "$SEED" \
-    --augmented_cache "$AUG_DIR" \
-    --output_path "$OUTPUT_PATH/ablation/retristyle"
-#done
-done
+        for N_REFS in "${ALL_N_REFS[@]}"; do
+            #for EV in "${EVAL_STRATEGIES[@]}"; do
+            echo "Ablation: $CL | retr=$RETRIEVAL_STRATEGY | eval=$EV | n_refs=$N_REFS"
+            echo $WEIGHTS_PATH
+            python -m experiments.tta.run_inference \
+                --dataset "$DT" --data_path "$DATA_PATH" --split "$SPLIT" \
+                --classifier "$CL" --weights_path "$WEIGHTS_PATH" \
+                --tta_method retristyle --eval_strategy "$EVAL_STRATEGY" \
+                --retrieval_strategy "$RETRIEVAL_STRATEGY" \
+                --n_refs "$N_REFS" --n_views $N_REFS \
+                --style_batch_size $STYLE_BATCH_SIZE \
+                --embedding_model "$EMBEDDING_MODEL" \
+                --embedding_dir "$EMBEDDING_DIR" \
+                --seed "$SEED" \
+                --augmented_cache "$AUG_DIR" \
+                --output_path "$OUTPUT_PATH/ablation/retristyle"
+        done
+    done
 done

@@ -26,38 +26,46 @@ EVAL_STRATEGY="vanilla"
 RETRIEVAL_STRATEGY="dino"
 SEED=$DEFAULT_SEED
 
-DATASET="imagenet"
-SPLIT="test_r"
+DATASETS=("camelyon17wilds" "epistr" "eurosat")
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --classifier) CLASSIFIER="$2"; shift 2 ;;
-        --eval_strategy) EVAL_STRATEGY="$2"; shift 2 ;;
-        --retrieval_strategy) RETRIEVAL_STRATEGY="$2"; shift 2 ;;
-        --n_refs) N_REFS="$2"; shift 2 ;;
-        --seed) SEED="$2"; shift 2 ;;
-        --dataset) DATASET="$2"; shift 2 ;;
-        --split) SPLIT="$2"; shift 2 ;;
-        *) echo "Unknown: $1"; exit 1 ;;
-    esac
-done
-for i in {1..15}; do
-    name_id=$(printf "view_%03d.png" "$i")
-    for CL in "${ALL_CLASSIFIERS[@]}"; do
-        WEIGHTS_PATH="pretrained"
-        if is_pretrained "$CL"; then
-            WEIGHTS_PATH="${MODEL_DIR}/${DATASET}-${CL}-random_flip-random_resized_crop-seed42.pth"
-        fi
+for DT in "${DATASETS[@]}"; do
+    SPLIT="test"
+    AUGMENTATION="random_flip-random_resized_crop"
 
-        echo "Test: $CL | retr=$RETRIEVAL_STRATEGY | eval=$EV | Style Image=$i"
-        echo $WEIGHTS_PATH
-        python -m experiments.tta.run_inference \
-            --dataset "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
-            --classifier "$CL" --weights_path "$WEIGHTS_PATH" \
-            --tta_method geometric --eval_strategy "$EVAL_STRATEGY" \
-            --style_id "$i" \
-            --seed "$SEED" \
-            --output_path "$OUTPUT_PATH/style_check/adain/$name_id"
-        #done
+    if [[ $DT == "eurosat" ]]; then
+        SPLIT="ucmerced"
+    elif [[ $DT == "midog" ]]; then
+        AUGMENTATION="none"
+    fi
+
+    for i in {1..4}; do
+        name_id=$(printf "view_%03d" "$i")
+        for CL in "${ALL_CLASSIFIERS[@]}"; do
+
+            WEIGHTS_PATH="${MODEL_DIR}/${DT}/${DT}-${CL}-${AUGMENTATION}-seed42.pth"
+
+            if [[ $DT == "imagenet" ]]; then
+                is_pretrained=0
+                for p_cls in "${PRETRAINED_CLASSIFIERS[@]}"; do
+                    if [[ "$p_cls" == "$CL" ]]; then
+                        is_pretrained=1
+                        break
+                    fi
+                done
+                if [[ $is_pretrained -eq 0 ]]; then
+                    WEIGHTS_PATH="pretrained"
+                fi
+            fi
+
+            echo "Test: $CL | Dataset: $DT | retr=$RETRIEVAL_STRATEGY | eval=$EVAL_STRATEGY | Style Image=$i"
+            echo "$WEIGHTS_PATH"
+            python -m experiments.tta.run_inference \
+                --dataset "$DT" --data_path "$DATA_PATH" --split "$SPLIT" \
+                --classifier "$CL" --weights_path "$WEIGHTS_PATH" \
+                --tta_method geometric --eval_strategy "$EVAL_STRATEGY" \
+                --style_id "$i" \
+                --seed "$SEED" \
+                --output_path "$OUTPUT_PATH/style_check/styleid/$name_id"
+        done
     done
 done

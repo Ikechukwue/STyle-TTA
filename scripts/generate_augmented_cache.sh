@@ -14,7 +14,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-DATASET="midog"
+DATASET="camelyon17wilds"
 SPLIT="test"
 RETRIEVAL_STRATEGY="${BEST_RETRIEVAL:-dino}"
 N_REFS=5 #always original + refs you want + 1 Bsp: for 3 style images -> 4

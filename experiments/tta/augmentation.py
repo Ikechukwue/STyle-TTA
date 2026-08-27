@@ -197,8 +197,8 @@ def augment_views(
     tta_method: str,
     n_views: int,
     *,
-    start_idx:Optional[int], 
-    end_idx:Optional[int],
+    start_idx:Optional[int] = 0, 
+    end_idx:Optional[int] = 1,
     retriever=None,
     n_refs: int = 5,
     color_transfer_fn=None,
@@ -207,7 +207,7 @@ def augment_views(
     classifier_size: int = 224,
     input_size: int = 224,
     dataset: str | None = None,
-    style_batch_size: int | None = None,
+    style_batch_size: int = 8,
 ) -> torch.Tensor:
     """Return ``(V, 3, H, W)`` augmented views in [0, 1].
 
@@ -251,6 +251,7 @@ def augment_views(
     views = [image.squeeze(0).to(store_device)] if start_idx == 0 else []
 
     chunk_sz = style_batch_size if chunked else len(target_refs)
+    
     for chunk_start in range(0, len(target_refs), chunk_sz):
         chunk_indices = target_refs[chunk_start:chunk_start + chunk_sz]
         B = len(chunk_indices)
@@ -261,7 +262,7 @@ def augment_views(
         # forward pass (one content inversion + one batched style
         # inversion + one batched sampling).
         if (
-            tta_method in ("retristyle")
+            tta_method in ["retristyle", "adain_tta"]
             and chunked
             and B > 1
         ):

@@ -72,7 +72,12 @@ def build_parser() -> argparse.ArgumentParser:
 def _normalize_manifest(manifest: Dict, total_samples: int) -> Dict:
     """Migrate legacy manifest using completed_indices to completed_counts."""
     if "completed_counts" in manifest:
-        return manifest
+        if len(manifest["completed_counts"]) == total_samples:
+            return manifest
+        else:
+            manifest["completed_counts"] = [0] * total_samples
+            return manifest
+
 
     old_n_refs = manifest.get("config", {}).get("n_refs", 0)
     completed_set = set(manifest.get("completed_indices", []))

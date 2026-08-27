@@ -8,55 +8,124 @@ source "$SCRIPT_DIR/common.sh"
 
 EVAL_STRATEGY="${BEST_EVAL:-vanilla}"
 RETRIEVAL_STRATEGY="${BEST_RETRIEVAL:-dino}"
-N_VIEWS_LIST=(3 7 15 31 63)
-N_REFS_LIST=(1)
+
 SEED=$DEFAULT_SEED
-DATASET="imagenet"
+DATASET=("imagenet") #"midog" "camelyon17wilds" "epistr" "eurosat")
 SPLIT="test_r"
+N_VIEWS_LIST=(3 7 15 31 63)
+N_REFS_LIST=(1 2 3)
+CLASSIFIER="dinov2_vitb14"
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --eval_strategy) EVAL_STRATEGY="$2"; shift 2 ;;
-        --retrieval_strategy) RETRIEVAL_STRATEGY="$2"; shift 2 ;;
-        --seed) SEED="$2"; shift 2 ;;
-        --dataset) DATASET="$2"; shift 2 ;;
-        --split) SPLIT="$2"; shift 2 ;;
-        *) echo "Unknown: $1"; exit 1 ;;
-    esac
-done
+for DT in "${DATASET[@]}"; do
+    for CLASSIFIER in "${ALL_CLASSIFIERS[@]}"; do
 
-# Outer loop: Classifiers
-for CLASSIFIER in "${ALL_CLASSIFIERS[@]}"; do
+        AUGMENTATION="random_flip-random_resized_crop"
+        SPLIT="test"
 
-    #WEIGHTS_PATH="pretrained"
-    #if is_pretrained "$CLASSIFIER"; then
-    WEIGHTS_PATH="${MODEL_DIR}/${DATASET}-${CLASSIFIER}-random_flip-random_resized_crop-seed42.pth"
-    #fi
+        if [[ $DT == "eurosat" ]]; then
+            SPLIT="ucmerced"
+        fi
 
-    for N_VIEWS in "${N_VIEWS_LIST[@]}"; do
-        for N_REFS in "${N_REFS_LIST[@]}"; do
-            
-            # Skip configurations where stylized references exceed the total requested views
-            if [ "$N_REFS" -gt "$N_VIEWS" ]; then
-                continue
+        if [[ $DT == "midog" ]]; then
+            AUGMENTATION="none"
+        fi
+        
+        WEIGHTS_PATH="${MODEL_DIR}/${DT}/${DT}-${CLASSIFIER}-${AUGMENTATION}-seed42.pth"
+
+        if [[ $DT == "imagenet" ]]; then
+            SPLIT="test_r"
+            is_pretrained=0
+            for p_cls in "${PRETRAINED_CLASSIFIERS[@]}"; do
+                if [[ "$p_cls" == "$CLASSIFIER" ]]; then
+                    is_pretrained=1
+                    break
+                fi
+            done
+            if [[ $is_pretrained -eq 0 ]]; then
+                WEIGHTS_PATH="pretrained"
             fi
+        fi
+        
+        for N_VIEWS in "${N_VIEWS_LIST[@]}"; do
+            for N_REFS in "${N_REFS_LIST[@]}"; do
 
-            N_GEO=$((N_VIEWS - N_REFS))
+                # --------------------------------------------------------
+                # Common quantities
+                # --------------------------------------------------------
+                N_GEO=$((N_VIEWS - N_REFS))
 
-            echo "--------------------------------------------------------"
-            echo "Hybrid TTA: $CLASSIFIER | views=$N_VIEWS | geo=$N_GEO | sty=$N_REFS | eval=${EVAL_STRATEGY}"
-            echo "--------------------------------------------------------"
+                if [ "$N_REFS" -gt "$N_VIEWS" ]; then
+                    continue
+                fi
 
-            python -m experiments.tta.hybrid \
-                --dataset "$DATASET" --split "$SPLIT" --data_path "$DATA_PATH" \
-                --classifier "$CLASSIFIER" --weights_path "$WEIGHTS_PATH" \
-                --n_views "$N_VIEWS" --n_refs "$N_REFS" \
-                --augmented_cache "./data/augmented_cache" \
-                --eval_strategy "$EVAL_STRATEGY" \
-                --retrieval_strategy "$RETRIEVAL_STRATEGY" \
-                --embedding_dir "$EMBEDDING_DIR" --embedding_model "$EMBEDDING_MODEL" \
-                --seed "$SEED" \
-                --output_path "$OUTPUT_PATH/hybrid_tta/tta_inference"
+                # ========================================================
+                # RUN 1:
+                # Style references + original + remaining geometric
+                # views ALL generated from original
+                # ========================================================
+
+                echo "--------------------------------------------------------"
+                echo "Hybrid TTA [ORIGINAL GEO]"
+                echo "Classifier : $CLASSIFIER"
+                echo "Views      : $N_VIEWS"
+                echo "Style refs : $N_REFS"
+                echo "Geo views  : $N_GEO"
+                echo "Geo refs   : original only"
+                echo "--------------------------------------------------------"
+
+                python -m experiments.tta.hybrid \
+                    --dataset "$DT" \
+                    --split "$SPLIT" \
+                    --data_path "$DATA_PATH" \
+                    --classifier "$CLASSIFIER" \
+                    --weights_path "$WEIGHTS_PATH" \
+                    --n_views "$N_VIEWS" \
+                    --n_refs "$N_REFS" \
+                    --augmented_cache "./data/augmented_cache" \
+                    --eval_strategy "$EVAL_STRATEGY" \
+                    --retrieval_strategy "$RETRIEVAL_STRATEGY" \
+                    --embedding_dir "$EMBEDDING_DIR" \
+                    --embedding_model "$EMBEDDING_MODEL" \
+                    --seed "$SEED" \
+                    --use_n_refs 1 \
+                    --output_path "$OUTPUT_PATH/hybrid_tta/tta_inference"
+
+
+                # ========================================================
+                # RUN 2:
+                # Style references + original, with geometric views
+                # distributed across all references
+                # ========================================================
+
+                USE_N_REFS=$((N_REFS + 1))
+
+                echo "--------------------------------------------------------"
+                echo "Hybrid TTA [ALL REFS GEO]"
+                echo "Classifier : $CLASSIFIER"
+                echo "Views      : $N_VIEWS"
+                echo "Style refs : $N_REFS"
+                echo "Geo views  : $N_GEO"
+                echo "Geo refs   : original + $N_REFS style refs"
+                echo "--------------------------------------------------------"
+
+                python -m experiments.tta.hybrid \
+                    --dataset "$DT" \
+                    --split "$SPLIT" \
+                    --data_path "$DATA_PATH" \
+                    --classifier "$CLASSIFIER" \
+                    --weights_path "$WEIGHTS_PATH" \
+                    --n_views "$N_VIEWS" \
+                    --n_refs "$N_REFS" \
+                    --augmented_cache "./data/augmented_cache" \
+                    --eval_strategy "$EVAL_STRATEGY" \
+                    --retrieval_strategy "$RETRIEVAL_STRATEGY" \
+                    --embedding_dir "$EMBEDDING_DIR" \
+                    --embedding_model "$EMBEDDING_MODEL" \
+                    --seed "$SEED" \
+                    --use_n_refs "$USE_N_REFS" \
+                    --output_path "$OUTPUT_PATH/hybrid_tta/tta_inference"
+
+            done
         done
     done
 done

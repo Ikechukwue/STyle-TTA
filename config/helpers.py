@@ -112,6 +112,15 @@ def get_classifier_name(cls: str) -> tuple[str, str]:
     }
     return mapping.get(cls, (cls, "Unknown"))
 
+# Formulas matching the pattern:
+# sty = split
+# geo = (nr - 1) - sty
+
+def get_hybrid_filename(dataset, model, eval_strat, split, nr, seed):
+    sty = split
+    geo = (nr - 1) - sty
+    
+    return f"{dataset}_{model}_hybrid_geo{geo:02d}_sty{sty:02d}_{eval_strat}_split{split}_nr{nr}_seed{seed}_results.json"
 
 def get_names(split: str = "test_r",
               subset_json: str = "./data/imagenet/imagenet_subsets.json",
@@ -133,8 +142,8 @@ def get_y_true(dataset: str, split: str) -> list:
     return []
 
 
-def get_baseline_results(file_name: str, predictions: bool = True, split: str = 'test_r', 
-                         baseline_dir: str = "./results/baseline/tta_inference") -> Path:
+def get_baseline_results(file_name: str, predictions: bool = True, split: str = 'test_r', dataset="imagenet",
+                         baseline_dir: str = "./results/geometric_tta/tta_inference") -> Path:
     classifier = None 
     seed = 71397589
     eval_strat = None 
@@ -152,7 +161,7 @@ def get_baseline_results(file_name: str, predictions: bool = True, split: str = 
     output = "predictions" if predictions else "results"
     output_dir = Path(baseline_dir) / output
     
-    return output_dir / "imagenet" / split / f"{classifier}_geometric_{eval_strat}_nviews1_seed{seed}.json"
+    return output_dir / dataset / split / f"{classifier}_geometric_{eval_strat}_nviews1_seed{seed}.json"
 
 
 # ==========================================
@@ -405,29 +414,77 @@ def setup_style():
 # ==========================================
 # 7. PYTORCH DATASET MANIPULATION
 # ==========================================
+import os
+from torch.utils.data import Dataset, ConcatDataset, Subset
+from torchvision.datasets import ImageFolder
 
-def get_base_image_folder(dataset: Dataset) -> ImageFolder:
+
+def get_base_image_folder(dataset: Dataset):
+    """
+    Recursively collects all base datasets (ImageFolder or Camelyon17WILDS)
+    unwrapping Subsets and ConcatDatasets.
+    """
     current_ds = dataset
-    while hasattr(current_ds, 'dataset'):
-        current_ds = current_ds.dataset
-    if not isinstance(current_ds, ImageFolder):
-        raise TypeError(f"Expected base dataset to be ImageFolder, but found {type(current_ds)}")
-    return current_ds
-
-
-def inject_stylized_images_inplace(wrapped_dataset, new_base_dir_path: str = "/home/stud/nemmler/retristyle/data/augmented_cache/adain_dino_imagenet_test_r_s71397589", view_name: str = "view_001.png"):    
-    base_ds = get_base_image_folder(wrapped_dataset)
     
-    new_samples = []
-    for i, (old_path, class_idx) in enumerate(base_ds.samples):
-        folder_name = f"{i:05d}" 
-        new_path = os.path.join(new_base_dir_path, folder_name, view_name)
-        
-        if i == 0 or i == len(base_ds.samples) - 1:
-            if not os.path.exists(new_path):
-                raise FileNotFoundError(f"Missing view path: {new_path}")
+    # Handle PyTorch Subset unwrapping
+    while isinstance(current_ds, Subset):
+        current_ds = current_ds.dataset
+
+    if current_ds.__class__.__name__ == 'Camelyon17WILDS' or isinstance(current_ds, ImageFolder):
+        return [current_ds]
+
+    # Handle ConcatDataset unwrapping
+    if isinstance(current_ds, ConcatDataset):
+        base_datasets = []
+        for ds in current_ds.datasets:
+            base_datasets.extend(get_base_image_folder(ds))
+        return base_datasets
+
+    # Generic single-dataset wrapper fallback
+    if hasattr(current_ds, 'dataset'):
+        return get_base_image_folder(current_ds.dataset)
+
+    raise TypeError(
+        f"Expected dataset to wrap ImageFolder or Camelyon17WILDS, but found {type(current_ds)}"
+    )
+
+
+def inject_stylized_images_inplace(
+    wrapped_dataset: Dataset, 
+    new_base_dir_path: str = "/home/stud/nemmler/retristyle/data/augmented_cache/adain_dino_imagenet_test_r_s71397589", 
+    view_name: str = "view_001.png"
+):     
+    base_datasets = get_base_image_folder(wrapped_dataset)
+    
+    global_idx = 0
+    for base_ds in base_datasets:
+        # 1. Standard PyTorch ImageFolder
+        if isinstance(base_ds, ImageFolder):
+            new_samples = []
+            for _, class_idx in base_ds.samples:
+                folder_name = f"{global_idx:05d}" 
+                new_path = os.path.join(new_base_dir_path, folder_name, view_name)
                 
-        new_samples.append((new_path, class_idx))
-        
-    base_ds.samples = new_samples
-    base_ds.imgs = new_samples
+                if global_idx == 0:
+                    if not os.path.exists(new_path):
+                        raise FileNotFoundError(f"Missing view path: {new_path}")
+                        
+                new_samples.append((new_path, class_idx))
+                global_idx += 1
+                
+            # Verify the very last path of the full concatenated dataset
+            if len(new_samples) > 0:
+                last_path = new_samples[-1][0]
+                if not os.path.exists(last_path):
+                    raise FileNotFoundError(f"Missing view path: {last_path}")
+
+            base_ds.samples = new_samples
+            base_ds.imgs = new_samples
+
+        # 2. Camelyon17WILDS Custom Dataset
+        elif base_ds.__class__.__name__ == 'Camelyon17WILDS':
+            base_ds.inject_stylized_images(
+                new_base_dir_path=new_base_dir_path,
+                view_name=view_name
+            )
+            global_idx += len(base_ds)

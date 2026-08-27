@@ -1,5 +1,5 @@
-from config.helpers import load_json, get_names, get_top_k, calc_top_k
-from config.constants import ALL_CLASSIFIERS, TTA_STRATEGIES, DEFAULT_SEED
+from config.helpers import load_json, get_names, get_top_k, calc_top_k, get_classifier_name
+from config.constants import ALL_CLASSIFIERS, DOMAIN_METRICS,TTA_STRATEGIES, DEFAULT_SEED
 from pathlib import Path
 import scipy.stats as stats
 import numpy as np 
@@ -165,14 +165,14 @@ def get_domain_gap_class(domain_path=Path("./results/domain_gap/feature_space/te
                     o_mean = class_data["domain_gap"]["per_class"][n].get(metric)
                     
                     if None not in (b_mean, o_mean) and b_mean != 0:
-                        increase = ((o_mean - b_mean) / b_mean) * 100
+                        increase = o_mean - b_mean
                         results[n][cls][metric] = increase
             else:
                 b_mean = class_data["baseline_gap"]["per_class"][n].get(cls)
                 o_mean = class_data["domain_gap"]["per_class"][n].get(cls)
                 
                 if None not in (b_mean, o_mean) and b_mean != 0:
-                    increase = ((o_mean - b_mean) / b_mean) * 100
+                    increase = o_mean - b_mean
                     results[n][cls] = increase
 
     return results
@@ -281,12 +281,73 @@ def print_correlation_report(correlations: dict):
         print("-" * 115)
     print("(*) Indicates statistical significance at p < 0.05\n")
 
+import matplotlib.pyplot as plt
+from pathlib import Path
 
+def plot_class_metric_variance(class_metrics, output_dir="figures/domain_comparison"):
+    metrics = ["mmd", "wasserstein", "kl_symmetric"]
+    
+    # Identify classifiers present in class_metrics
+    sample_class = next(iter(class_metrics.values()))
+    classifiers = [cls for cls in sample_class if isinstance(sample_class[cls], dict)]
+
+    for cls in classifiers:
+        fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharex=True)
+        fig.suptitle(f"Per-Class Metric Variance: {get_classifier_name(cls)[0]}", fontsize=14)
+
+        classes = []
+        metric_values = {m: [] for m in metrics}
+
+        # Extract values per class
+        for class_id, cls_data in class_metrics.items():
+            if cls in cls_data:
+                classes.append(int(class_id))
+                for m in metrics:
+                    metric_values[m].append(cls_data[cls].get(m, None))
+
+        # Plot each metric subplot
+        for idx, metric in enumerate(metrics):
+            ax = axes[idx]
+
+            mean_val = np.nanmean(metric_values[metric],)
+            std_val = np.nanstd(metric_values[metric],)
+
+            # Center line and variance span
+            ax.axhline(mean_val, color="red", linestyle="--", linewidth=1.5, label="Mean")
+            ax.axhspan(mean_val - std_val, mean_val + std_val, color="red", alpha=0.15, label=r"$\pm 1\sigma$ Range")
+            cv = std_val / mean_val if mean_val != 0 else 0
+            textstr = f"$\sigma$: {std_val:.2f}\n$CV$: {cv:.2f}\nRange: {np.nanmax(metric_values[metric],) - np.nanmin(metric_values[metric],):.1f}%"
+
+            # Sort y-values to show steep variance curve across classes
+            sorted_indices = np.argsort(metric_values[metric],)
+            sorted_classes = np.array(classes)[sorted_indices]
+            sorted_y = np.array(metric_values[metric])[sorted_indices]
+
+            # Place text box in upper left
+            ax.text(0.05, 0.92, textstr, transform=ax.transAxes, fontsize=10,
+                    verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            ax.scatter(range(len(sorted_y)), sorted_y, alpha=0.7, s=25, c="tab:blue")
+            ax.set_title(DOMAIN_METRICS[metric])
+            ax.set_xlabel("Classes (Sorted Low to High)")
+            ax.set_ylabel("Domain Gap Increase")
+            ax.grid(True, linestyle="--", alpha=0.5)
+
+        plt.tight_layout()
+        
+        if output_dir:
+            out_path = Path(output_dir)
+            out_path.mkdir(parents=True, exist_ok=True)
+            plt.savefig(out_path / f"{cls}_variance_scatter.png", dpi=300)
+            plt.close()
+        else:
+            plt.show()
 
 if __name__ == "__main__":
     domain_path = Path("/home/stud/nemmler/retristyle/results/domain_gap/feature_space/test_r")
 
     #print_domain_gap(domain_path)
     #print_domain_gap_class(domain_path)
-    corr = accuracy_metric_correlation(domain_path)
-    print_correlation_report(corr)
+    #corr = accuracy_metric_correlation(domain_path)
+    #print_correlation_report(corr)
+    domain_dict = get_domain_gap_class(domain_path)
+    domain_dict = plot_class_metric_variance(domain_dict)

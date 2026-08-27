@@ -12,6 +12,29 @@ ALL_SEEDS = [
     265017005,
 ]
 
+ALL_DATASETS = {
+    "midog": "MIDOG",
+    "eurosat": "EuroSAT",
+    "camelyon17wilds": "Camelyon17-WILDS",
+    "epistr": "EPiStr",
+    "imagenet": "ImageNet",
+}
+
+ALL_SPLITS = {
+    "midog": "MIDOG(Val)",
+    "eurosat": "UCMerced",
+    "camelyon17wilds": "Camelyon17-WILDS(Val)",
+    "epistr": "EPiStr(Val)",
+    "imagenet": "ImageNet-R",
+}
+
+TRUE_SPLITS = {
+    "MIDOG(Val)": "test",
+    "UCMerced": "ucmerced",
+    "Camelyon17-WILDS(Val)": "test",
+    "EpiStr(Val)": "test",
+    "ImageNet-R": "test_r",
+}
 # ============================================================================
 # Classifiers
 # ============================================================================
@@ -64,6 +87,10 @@ EVAL_STRATEGIES = [
     "tpt",
 ]
 
+DOMAIN_METRICS={"mmd": "Mean Centroid Distance", 
+                "wasserstein": "Wasserstein",
+                "kl_symmetric": "Symmetric-KL"}
+                
 N_REFS_VALUES = [1, 2, 4, 8, 16, 32]
 
 DEFAULT_N_VIEWS = 16
@@ -77,8 +104,8 @@ STYLE_BATCH_SIZE = 8
 TTA_STRATEGIES = {
         "ablation/adain_tta": {"template": "{cl}_adain_tta_{eval}_{retr}_nrefs{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16, 32, 64], "color": "tab:red","color_shade": "Reds", "label": "AdaIN"},
         "ablation/retristyle": {"template": "{cl}_retristyle_{eval}_dino_nrefs{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16], "color": "tab:green","color_shade": "Greens", "label": "StyleID"},
-        "geometric_tta": {"template": "{cl}_geometric_{eval}_nviews{rfs}_seed{seed}.json{retr}", "axis": [2, 4, 8, 16, 32, 64], "color": "tab:blue", "color_shade": "Blues","label": "Geometric(Crop/Flip)"},
-        "hybrid_tta": {"template": "imagenet_{cl}_hybrid_geo{geo}_vanilla_nr{rfs}_seed{seed}_results.json", "axis": [(4,0.67), (8, 0.86), (16,0.93), (32,0.97), (64,0.98)], "color": "tab:purple", "color_shade": "Purples","label": "Hybrid(Style/Geo)"},
+        "geometric_tta": {"template": "{cl}_geometric_{eval}_nviews{rfs}_seed{seed}.json{retr}", "axis": [2, 4, 8, 16, 32, 64], "color": "tab:blue", "color_shade": "Blues","label": "Geometric"},
+        "hybrid_tta": {"template": "{ds}_{cl}_hybrid_geo{geo}_sty{sty}_{eval}_split{use_n}_nr{rfs}_seed{seed}_results.json", "axis": [4, 8, 16, 32, 64], "color": "tab:purple", "color_shade": "Purples","label": "Hybrid(Style/Geo)"},
     }
 GEO_FRACS = [
     1.0,

@@ -312,13 +312,15 @@ def compute_metrics(
         y_pred_labels = np.argmax(y_pred, axis=1)
         accuracy = accuracy_score(y_true_squeezed, y_pred_labels)
         balanced_acc = balanced_accuracy_score(y_true_squeezed, y_pred_labels)
-        
-        k = min(5, num_classes)
-        top_k_indices = np.argpartition(y_pred, -k, axis=1)[:, -k:]
-        
-        match_mask = top_k_indices == y_true_squeezed[:, None]
-        top_5_accuracy = np.any(match_mask, axis=1).mean()
 
+        k = min(5, num_classes)
+        if k > 5: 
+            top_k_indices = np.argpartition(y_pred, -k, axis=1)[:, -k:]
+            
+            match_mask = top_k_indices == y_true_squeezed[:, None]
+            top_5_accuracy = np.any(match_mask, axis=1).mean()
+        else: 
+            top_5_accuracy = 100.0
         try:
             if len(y_true_squeezed) > 30000:
                 print(f"  [Note] Dataset large ({len(y_true_squeezed)} samples). Stratifying 30k items for AUC...")

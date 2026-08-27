@@ -20,13 +20,13 @@ MODELS=(
 
 # Define splits to evaluate all at once
 
-DATASET=("eurosat")
+DATASET=("camelyon17wilds")
 
 SEED=$DEFAULT_SEED
 
 for DS in "${DATASET[@]}"; do
     for MDL in "${MODELS[@]}"; do
-        AUGMENTATION="none"
+        AUGMENTATION="random_flip-random_resized_crop"
         SPLITS=("train" "val" "test")
         if [[ "$DS" == "eurosat" ]]; then
             AUGMENTATION="random_flip-random_resized_crop"

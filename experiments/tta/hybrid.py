@@ -139,17 +139,24 @@ def generate_hybrid_views(
 
     if n_geo > 0:
         current_refs = torch.stack(views_list[:use_n_refs], dim=0)
-        per_view = int(n_geo // use_n_refs)
+        base = n_geo // use_n_refs
+        remainder = n_geo % use_n_refs
 
-        for ref_img in current_refs:
+        for i, ref_img in enumerate(current_refs):
+            # Put any remainder on the original image (i == 0)
+            n_this_ref = base + (remainder if i == 0 else 0)
+
+            if n_this_ref == 0:
+                continue
+
             geo_views = augment_views(
-                ref_img.unsqueeze(0), 
-                tta_method="geometric", 
-                n_views=per_view + 1, 
-                input_size=input_size, 
+                ref_img.unsqueeze(0),
+                tta_method="geometric",
+                n_views=n_this_ref + 1,
+                input_size=input_size,
                 dataset=dataset,
             )
-            
+
             if geo_views.shape[0] > 1:
                 views_list.extend([v.to(device) for v in geo_views[1:]])
 
@@ -184,7 +191,8 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
         num_classes=num_classes,
         device=device,
     )
-    model = MaskedClassifier(model, args.split)
+    if not args.split in ["train", "val"] and (args.dataset == "imagenet" or args.dataset == "eurosat"):
+        model = MaskedClassifier(model, args.split)
     model.to(device)
     model.eval()
     normalize_fn = _build_normalize_fn(args.dataset)

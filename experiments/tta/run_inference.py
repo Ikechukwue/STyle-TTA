@@ -256,7 +256,8 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
 
     if args.style_id:
         style_image_id = f"view_{args.style_id:03}.png"
-        inject_stylized_images_inplace(wrapped_dataset=test_set, view_name=style_image_id)
+        new_dir = f"/home/stud/nemmler/retristyle/data/augmented_cache/dino_{args.dataset}_{args.split}_s71397589"
+        inject_stylized_images_inplace(wrapped_dataset=test_set, new_base_dir_path=new_dir,view_name=style_image_id)
     test_loader = DataLoader(
         test_set, batch_size=1, shuffle=False,
         num_workers=args.num_workers, worker_init_fn=worker_seed, generator=g,
@@ -264,7 +265,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
 
     if args.dataset == "eurosat":
         if args.split == "ucmerced":
-            num_classes = 5
+            num_classes = 4
     elif args.dataset == "imagenet":
         if "test_r" in args.split:
             num_classes == 200

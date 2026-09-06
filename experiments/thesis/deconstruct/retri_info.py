@@ -60,15 +60,17 @@ def export_retrieval_mapping(
     print(f"Saved retrieval mapping to {output_path}")
     return mapping
 
-def create_retieval_json(method:str = "dino",
+def create_retieval_json(ds, split, method:str = "dino",
                          seed:int = 71397589, 
                          output_path:str = "results"):
+    output_dir = Path(output_path).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
     transform = v2.Compose([
         v2.ToImage(),
         v2.ToDtype(torch.float32, scale=True),
         ResizeWhileRetainAspectRatio(size=224),
     ])
-    dataset = create_dataset("imagenet", "./data", "test_r", transform)
+    dataset = create_dataset(ds, "./data", split, transform)
     
     # Removed the nested dataloader, generator, and worker_init_fn
     data = DataLoader(
@@ -79,11 +81,11 @@ def create_retieval_json(method:str = "dino",
     )
 
     ref_db = build_reference_db(
-        dataset="imagenet",
+        dataset=ds,
         data_path="./data",
         input_size=224,
         seed=seed,
-        split="test_r"
+        split=split
     )
     
     print("Fetching Retriever...")
@@ -94,9 +96,9 @@ def create_retieval_json(method:str = "dino",
         metric_type="ssim",
         embedding_model="vit_base_patch16_dinov3.lvd1689m",
         embedding_dir="./data/embeddings",
-        dataset="imagenet",
+        dataset=ds,
         device="cuda",
-        eval_split="test_r"
+        eval_split=split
     )
     
     export_retrieval_mapping(
@@ -320,6 +322,8 @@ def analyze_neighborhood_dynamics(retrieval_json, y_true, k_list=[2, 4, 8, 16, 3
     print("="*70 + "\n")
 
 
+from scipy.stats import pointbiserialr
+
 def compute_sample_correlations(
     retrieval_json, y_true, base_preds_json, tta_preds_json
 ):
@@ -327,11 +331,10 @@ def compute_sample_correlations(
     base_data = load_json(base_preds_json)
     tta_data = load_json(tta_preds_json)
 
-    presences = []
     proportions = []
-    dino_scores = []
-    delta_accuracies = []
-    delta_confidences = []
+    has_majority = []
+    base_corrects = []
+    tta_corrects = []
 
     for content_idx_str, retrieved_items in retrieval_data.items():
         content_idx = int(content_idx_str)
@@ -343,50 +346,130 @@ def compute_sample_correlations(
         neighbor_classes = [item[1] for item in retrieved_items]
         k = len(retrieved_items)
 
-        presence = 1 if true_class in neighbor_classes else 0
-        proportion = neighbor_classes.count(true_class) / k if k > 0 else 0
+        true_count = neighbor_classes.count(true_class)
+        prop = true_count / k if k > 0 else 0.0
+        
+        # Strict majority (>50%)
+        is_maj = 1 if prop > 0.5 else 0
 
-        scores = [
-            item[2] if len(item) > 2 else 0.0 for item in retrieved_items
-        ]
-        avg_dino_score = np.mean(scores) if scores else 0.0
+        base_logits = base_data["predictions"][content_idx]["y_pred"]
+        tta_logits = tta_data["predictions"][content_idx]["y_pred"]
 
-        base_sample = base_data["predictions"][content_idx]
-        tta_sample = tta_data["predictions"][content_idx]
+        base_correct = 1 if int(np.argmax(base_logits)) == true_class else 0
+        tta_correct = 1 if int(np.argmax(tta_logits)) == true_class else 0
 
-        base_pred = base_sample["y_pred"]
-        tta_pred = tta_sample["y_pred"]
+        proportions.append(prop)
+        has_majority.append(is_maj)
+        base_corrects.append(base_correct)
+        tta_corrects.append(tta_correct)
 
-        base_correct = 1 if int(np.argmax(base_pred)) == true_class else 0
-        tta_correct = 1 if int(np.argmax(tta_pred)) == true_class else 0
-        delta_acc = tta_correct - base_correct
+    has_majority = np.array(has_majority)
+    proportions = np.array(proportions)
+    base_corrects = np.array(base_corrects)
+    tta_corrects = np.array(tta_corrects)
 
-        base_conf = np.max(base_pred)
-        tta_conf = np.max(tta_pred)
-        delta_conf = tta_conf - base_conf
+    def safe_pointbiserial(x, y):
+        # Return 0 correlation if standard deviation of x or y is zero
+        if np.std(x) == 0 or np.std(y) == 0:
+            return 0.0, 1.0
+        return pointbiserialr(x, y)
 
-        presences.append(presence)
-        proportions.append(proportion)
-        dino_scores.append(avg_dino_score)
-        delta_accuracies.append(delta_acc)
-        delta_confidences.append(delta_conf)
+    # Correlation using continuous proportion (works even for random retrieval)
+    r_prop_tta, p_prop_tta = safe_pointbiserial(proportions, tta_corrects)
+    
+    # Strict majority correlation (will safely return 0.0 for random instead of NaN)
+    r_maj_tta, p_maj_tta = safe_pointbiserial(has_majority, tta_corrects)
 
-    results = {
-        "presence_vs_delta_acc": np.corrcoef(presences, delta_accuracies)[0, 1],
-        "proportion_vs_delta_acc": np.corrcoef(proportions, delta_accuracies)[
-            0, 1
-        ],
-        "dino_vs_delta_acc": np.corrcoef(dino_scores, delta_accuracies)[0, 1],
-        "presence_vs_delta_conf": np.corrcoef(presences, delta_confidences)[
-            0, 1
-        ],
-        "proportion_vs_delta_conf": np.corrcoef(proportions, delta_confidences)[
-            0, 1
-        ],
-        "dino_vs_delta_conf": np.corrcoef(dino_scores, delta_confidences)[0, 1],
+    wrong_mask = base_corrects == 0
+    if np.sum(wrong_mask) > 0:
+        r_recovery, p_recovery = safe_pointbiserial(
+            has_majority[wrong_mask], tta_corrects[wrong_mask]
+        )
+        r_prop_recovery, p_prop_recovery = safe_pointbiserial(
+            proportions[wrong_mask], tta_corrects[wrong_mask]
+        )
+    else:
+        r_recovery, p_recovery = 0.0, 1.0
+        r_prop_recovery, p_prop_recovery = 0.0, 1.0
+
+    return {
+        "corr_majority_vs_tta_acc": r_maj_tta,
+        "p_val_majority": p_maj_tta,
+        "corr_proportion_vs_tta_acc": r_prop_tta,
+        "corr_majority_vs_recovery": r_recovery,
+        "p_val_recovery": p_recovery,
+        "corr_proportion_vs_recovery": r_prop_recovery
     }
+import numpy as np
+import matplotlib.pyplot as plt
+from tabulate import tabulate
 
-    return results
+def print_correlation_summary(all_correlations):
+    """
+    Prints a formatted table summarizing overall TTA accuracy correlation
+    and baseline recovery correlation across classifiers and strategies.
+    """
+    print("\n" + "=" * 85)
+    print("      SAMPLE-LEVEL RETRIEVAL MAJORITY vs. ACCURACY CORRELATION ANALYSIS")
+    print("=" * 85)
+
+    headers = [
+        "Classifier", 
+        "Strategy", 
+        "r(Majority, TTA Acc)", 
+        "p-val", 
+        "r(Majority, Recovery)", 
+        "p-val"
+    ]
+    
+    table_data = []
+    for (cl, method), res in all_correlations.items():
+        table_data.append([
+            cl,
+            method,
+            f"{res['corr_majority_vs_tta_acc']:.4f}",
+            f"{res['p_val_majority']:.2e}",
+            f"{res['corr_majority_vs_recovery']:.4f}",
+            f"{res['p_val_recovery']:.2e}"
+        ])
+
+    print(tabulate(table_data, headers=headers, tablefmt="grid"))
+    print("=" * 85 + "\n")
+
+
+def plot_correlation_comparison(all_correlations, output_path="./results/retrieval_mapping"):
+    """
+    Plots a bar chart comparing the recovery correlation across strategies.
+    """
+    classifiers = list(dict.fromkeys([k[0] for k in all_correlations.keys()]))
+    strategies = list(dict.fromkeys([k[1] for k in all_correlations.keys()]))
+
+    x = np.arange(len(classifiers))
+    width = 0.25
+
+    plt.figure(figsize=(12, 6))
+
+    for i, strategy in enumerate(strategies):
+        recovery_corrs = [
+            all_correlations.get((cl, strategy), {}).get("corr_majority_vs_recovery", 0.0)
+            for cl in classifiers
+        ]
+        plt.bar(x + i * width, recovery_corrs, width, label=f"Strategy: {strategy}")
+
+    plt.xlabel("Classifier Backbones", fontweight="bold")
+    plt.ylabel("Point-Biserial Correlation (r)", fontweight="bold")
+    plt.title("Correlation Between True-Class Majority Retrieval and Baseline Failure Recovery")
+    plt.xticks(x + width, classifiers, rotation=15)
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.tight_layout()
+    
+    out_file = f"{output_path}/majority_recovery_correlation.png"
+    plt.savefig(out_file, dpi=300)
+    plt.close()
+    print(f"Saved correlation plot to {out_file}")
+
+
 
 
 def plot_class_dominance_ranking(
@@ -436,16 +519,26 @@ def plot_class_dominance_ranking(
 
 if __name__ == "__main__":
     json_paths = {}
-    for method in ["dino"]:
-        print(f"----Analysis for {method}----")
-        path = f"/home/stud/nemmler/retristyle/results/retrieval_mapping/retrieval_mapping_{method}_test_r_s71397589.json"
+    all_correlations = {}
+
+    for method in ["dino", "random", "balanced_random"]:
+        print(f"---- Analysis for {method} ----")
+        path = f"/home/stud/nemmler/retristyle/results/retrieval_mapping/imagenet/retrieval_mapping_{method}_test_r_s71397589.json"
         y_true = get_y_true("imagenet", "test_r")
-        analyze_neighborhood_dynamics(path,y_true)
+        
+        analyze_neighborhood_dynamics(path, y_true)
         json_paths[method] = path
 
         for cl in ALL_CLASSIFIERS:
             base_path = f"./results/geometric_tta/tta_inference/predictions/imagenet/test_r/{cl}_geometric_zero_nviews1_seed71397589.json"
             ood_path = f"./results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/{cl}_adain_tta_zero_{method}_nrefs32_seed71397589.json"
-            compute_sample_correlations(path, y_true, base_path, ood_path)
-    plot_class_dominance_ranking(json_paths, y_true)
+            
+            res = compute_sample_correlations(path, y_true, base_path, ood_path)
+            all_correlations[(cl, method)] = res
 
+    # Print organized report
+    print_correlation_summary(all_correlations)
+
+    # Plot graphs
+    plot_class_dominance_ranking(json_paths, y_true)
+    plot_correlation_comparison(all_correlations)

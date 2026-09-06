@@ -6,12 +6,13 @@ from typing import Dict, List, Tuple
 from scipy.stats import spearmanr
 from nltk.corpus import wordnet as wn
 from config.constants import ALL_CLASSIFIERS
+from collections import Counter
 # ==========================================
 # File Paths & Config
 # ==========================================
-PATH_BASE_PREDS = "/home/stud/nemmler/retristyle/results/baseline/tta_inference/predictions/imagenet/test_r/{cl}_geometric_vanilla_nviews1_seed71397589.json"
-PATH_TTA_PREDS = "/home/stud/nemmler/retristyle/results/ablation/retristyle/tta_inference/predictions/imagenet/test_r/{cl}_retristyle_vanilla_dino_nrefs2_seed71397589.json"
-PATH_RETRIEVAL = "/home/stud/nemmler/retristyle/results/retrieval_mapping/retrieval_mapping_dino_test_r_s71397589.json"
+PATH_BASE_PREDS = "/home/stud/nemmler/retristyle/results/geometric_tta/tta_inference/predictions/imagenet/test_r/{cl}_geometric_vanilla_nviews1_seed71397589.json"
+PATH_TTA_PREDS = "/home/stud/nemmler/retristyle/results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/{cl}_adain_tta_zero_dino_nrefs64_seed71397589.json"
+PATH_RETRIEVAL = "/home/stud/nemmler/retristyle/results/retrieval_mapping/imagenet/retrieval_mapping_dino_test_r_s71397589.json"
 PATH_CLASS_INDEX = "/home/stud/nemmler/retristyle/data/imagenet/imagenetr/imagenet_class_index.json"
 PATH_DOMAIN_GAP = "/home/stud/nemmler/retristyle/results/domain_gap/feature_space/aggregated/results_flat.csv"
 
@@ -81,9 +82,23 @@ def process_sample_level_data(cl: str, id_to_synset: Dict, retrieval_data: Dict)
         t_correct = int(np.argmax(t_sample["y_pred"]) == y_true)
         acc_gain = (t_correct - b_correct) * 100.0
 
-        # Retrieve top-1 reference class
+        # Variance across output prediction probabilities
+        b_var = float(np.var(b_sample["y_pred"]))
+        t_var = float(np.var(t_sample["y_pred"]))
+
+        # Sample-level accuracy variance (if predictions contain multiple views/runs per sample)
+        if isinstance(t_sample["y_pred"], list) and len(t_sample["y_pred"]) > 1:
+            sample_accs = [int(np.argmax(p) == y_true) * 100.0 for p in t_sample["y_pred"]]
+            acc_var = float(np.var(sample_accs))
+        else:
+            acc_var = 0.0
+
         if sample_key in retrieval_data and retrieval_data[sample_key]:
-            retrieved_class = retrieval_data[sample_key][0][1]
+            # Dominant class
+            retrieved_classes = [item[1] for item in retrieval_data[sample_key]]
+            retrieved_class = Counter(retrieved_classes).most_common(1)[0][0]
+            # Retrieve top-1 reference class
+            #retrieved_class = retrieval_data[sample_key][0][1]
         else:
             retrieved_class = -1
 
@@ -107,7 +122,10 @@ def process_sample_level_data(cl: str, id_to_synset: Dict, retrieval_data: Dict)
             "sim_bin": sim_bin,
             "base_acc": b_correct * 100.0,
             "tta_acc": t_correct * 100.0,
-            "acc_gain": acc_gain
+            "acc_gain": acc_gain,
+            "base_var": b_var,
+            "tta_var": t_var,
+            "acc_gain_var": acc_var
         })
 
     return pd.DataFrame(records)
@@ -138,7 +156,6 @@ def main():
         return
 
     full_df = pd.concat(all_samples, ignore_index=True)
-
     # ---------------------------------------------------------
     # Analysis 1: Correct-class vs. Incorrect-class Retrieval (with 6 Bins)
     # ---------------------------------------------------------
@@ -150,9 +167,13 @@ def main():
     same_diff_summary = full_df.groupby(["classifier", "is_same_class"]).agg(
         sample_count=("sample_idx", "count"),
         mean_base_acc=("base_acc", "mean"),
+        var_base_acc=("base_acc", "var"),
         mean_tta_acc=("tta_acc", "mean"),
+        var_tta_acc=("tta_acc", "var"),
         mean_gain=("acc_gain", "mean"),
-        mean_wup_sim=("wup_sim", "mean")
+        var_gain=("acc_gain", "var"),
+        mean_wup_sim=("wup_sim", "mean"),
+        var_wup_sim=("wup_sim", "var")
     ).reset_index()
 
     same_diff_summary["is_same_class"] = same_diff_summary["is_same_class"].map({1: "Same Class", 0: "Different Class"})
@@ -163,8 +184,11 @@ def main():
     bin_summary = full_df.groupby(["classifier", "sim_bin"], observed=False).agg(
         sample_count=("sample_idx", "count"),
         mean_base_acc=("base_acc", "mean"),
+        var_base_acc=("base_acc", "var"),
         mean_tta_acc=("tta_acc", "mean"),
-        mean_gain=("acc_gain", "mean")
+        var_tta_acc=("tta_acc", "var"),
+        mean_gain=("acc_gain", "mean"),
+        var_gain=("acc_gain", "var")
     ).reset_index()
 
     print("\n--- Breakdown across 6 Taxonomic Similarity Bins ---")
@@ -182,10 +206,12 @@ def main():
         # Sample-level Spearman rank correlation
         rho_sample, p_sample = spearmanr(group["wup_sim"], group["acc_gain"])
 
-        # Class-level aggregated correlation
+        # Class-level aggregated correlation (including variance metrics)
         cls_group = group.groupby("class_id").agg(
             mean_wup=("wup_sim", "mean"),
-            mean_gain=("acc_gain", "mean")
+            var_wup=("wup_sim", "var"),
+            mean_gain=("acc_gain", "mean"),
+            var_gain=("acc_gain", "var")
         ).reset_index()
 
         # Merge class-level domain gap if available

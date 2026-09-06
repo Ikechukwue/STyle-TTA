@@ -268,7 +268,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
             num_classes = 4
     elif args.dataset == "imagenet":
         if "test_r" in args.split:
-            num_classes == 200
+            num_classes = 200
     # ---- embedding extraction (dino retrieval only) -------------------------
     embedding_dir = getattr(args, "embedding_dir", None)
     embedding_model = getattr(args, "embedding_model", None) or "vit_base_patch16_dinov3.lvd1689m"

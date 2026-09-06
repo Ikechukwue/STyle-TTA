@@ -1,9 +1,9 @@
 """
 Dataset Statistics Extractor for Thesis
 ----------------------------------------
-Iterates across ImageNet, EuroSAT, MIDOG, Camelyon17, and EPIStress splits,
-computes sample counts, class distributions, imbalance ratios, and image/patch metadata
-by sampling across multiple items per split.
+Iterates across ImageNet, EuroSAT, MIDOG, Camelyon17, EpiStr, and UCMerced splits,
+computes sample counts, class distributions, imbalance ratios, Shannon's Equitability,
+and image/patch metadata by sampling across multiple items per split.
 
 Run:
     python -m experiments.extract_thesis_stats
@@ -11,6 +11,7 @@ Run:
 """
 
 import json
+import math
 import argparse
 from pathlib import Path
 from collections import Counter
@@ -22,38 +23,57 @@ from experiments.data import create_dataset
 
 ROOT_DIR = "./data"
 
-DATASET_CONFIGS = {
-    "imagenet": [
-        "train",
-        "val",
-        "train@test_r",
-        "val@test_r",
-        "test_r",
-    ],
-    "eurosat": [
-        "train",
-        "val",
-        "test",
-        "ucmerced",
-        "train@ucmerced",
-        "val@ucmerced",
-        "test@ucmerced",
-    ],
-    "midog": [
-        "train",
-        "val",
-        "test",
-    ],
-    "camelyon17wilds": [
-        "train",
-        "val",
-        "test",
-    ],
-    "epistr": [
-        "train",
-        "val",
-        "test",
-    ],
+LOGICAL_DATASETS = {
+    "ImageNet": {
+        "dname": "imagenet",
+        "modality": "Natural Images",
+        "splits": {"train": "train", "val": "val", "test": None},
+    },
+    "ImageNet (Subset)": {
+        "dname": "imagenet",
+        "modality": "Natural Images",
+        "splits": {"train": "train@test_r", "val": "val@test_r", "test": None},
+    },
+    "ImageNet-R": {
+        "dname": "imagenet",
+        "modality": "Natural Images",
+        "splits": {"train": None, "val": None, "test": "test_r"},
+    },
+    "UCMerced": {
+        "dname": "ucmerced",
+        "modality": "Remote Sensing",
+        "splits": {"train": None, "val": None, "test": "test"},
+    },
+    "UCMerced (subset)": {
+        "dname": "eurosat",
+        "modality": "Remote Sensing",
+        "splits": {"train": None, "val": None, "test": "ucmerced"},
+    },
+    "EuroSAT": {
+        "dname": "eurosat",
+        "modality": "Remote Sensing",
+        "splits": {"train": "train", "val": "val", "test": None},
+    },
+    "EuroSat (subset)": {
+        "dname": "eurosat",
+        "modality": "Remote Sensing",
+        "splits": {"train": "train@ucmerced", "val": "val@ucmerced", "test": None},
+    },
+    "MIDOG": {
+        "dname": "midog",
+        "modality": "Histopathology",
+        "splits": {"train": "train", "val": "val", "test": "test"},
+    },
+    "Camelyon17": {
+        "dname": "camelyon17wilds",
+        "modality": "Histopathology",
+        "splits": {"train": "train", "val": "val", "test": "test"},
+    },
+    "EpiStr": {
+        "dname": "epistr",
+        "modality": "Histopathology",
+        "splits": {"train": "train", "val": "val", "test": "test"},
+    },
 }
 
 
@@ -172,8 +192,29 @@ def extract_image_metadata(ds: Dataset, num_checks: int = 50):
     }
 
 
+def compute_shannon_equitability(counts: Counter) -> float:
+    """
+    Computes Shannon's Equitability Index (E_H) from class counts.
+    E_H = H / ln(K), where H is Shannon entropy and K is the number of classes.
+    """
+    total_samples = sum(counts.values())
+    if total_samples == 0:
+        return 0.0
+
+    probabilities = [c / total_samples for c in counts.values() if c > 0]
+    num_classes = len(probabilities)
+
+    if num_classes <= 1:
+        return 1.0
+
+    shannon_index = -sum(p * math.log(p) for p in probabilities)
+    max_entropy = math.log(num_classes)
+
+    return shannon_index / max_entropy
+
+
 def compute_split_metrics(ds: Dataset, dataset_name: str, split: str):
-    """Computes sample counts, class distributions, imbalance ratios, and patch metadata."""
+    """Computes sample counts, class distributions, imbalance ratios, equitability, and patch metadata."""
     total_samples = len(ds)
     img_meta = extract_image_metadata(ds)
 
@@ -185,6 +226,7 @@ def compute_split_metrics(ds: Dataset, dataset_name: str, split: str):
             "num_classes": 0,
             "class_counts": {},
             "imbalance_ratio": None,
+            "shannon_equitability": 0.0,
             **img_meta,
         }
 
@@ -204,6 +246,8 @@ def compute_split_metrics(ds: Dataset, dataset_name: str, split: str):
     max_c = max(counts.values()) if counts else 0
     imbalance_ratio = (max_c / min_c) if min_c > 0 else float("inf")
 
+    equitability = compute_shannon_equitability(counts)
+
     return {
         "dataset": dataset_name,
         "split": split,
@@ -214,67 +258,123 @@ def compute_split_metrics(ds: Dataset, dataset_name: str, split: str):
         "max_per_class": max_c,
         "mean_per_class": float(np.mean(list(counts.values()))) if counts else 0.0,
         "imbalance_ratio": round(imbalance_ratio, 2) if min_c > 0 else None,
+        "shannon_equitability": round(equitability, 4),
         **img_meta,
     }
 
 
-def format_latex_row(stats: dict) -> str:
-    """Formats a dictionary of stats into a LaTeX table row."""
-    d_name = stats["dataset"]
-    split = stats["split"].replace("_", r"\_")
-    n_samples = f"{stats['total_samples']:,}"
-    n_classes = stats["num_classes"]
-    ir = stats["imbalance_ratio"]
-    ir_str = f"{ir:.2f}" if ir is not None else "N/A"
-    res = stats["spatial_resolution"]
-    channels = stats["channels"]
+def generate_latex_table(all_results: dict) -> str:
+    """Generates LaTeX table grouping datasets by modality with multirow cells."""
+    lines = [
+        r"\begin{table}[h]",
+        r"\centering",
+        r"\begin{tabular}{l l c c c c}",
+        r"\hline",
+        r"\textbf{Modality} & \textbf{Dataset} & \textbf{\# Classes} & \textbf{Train / Val / Test} & \textbf{Eq} & \textbf{IR} \\",
+        r"\hline",
+    ]
 
-    return (
-        f"{d_name} & \\texttt{{{split}}} & {n_classes} & {n_samples} & "
-        f"{res} & {channels} & {ir_str} \\\\"
-    )
+    modality_groups = {}
+    for logical_name, config in LOGICAL_DATASETS.items():
+        mod = config["modality"]
+        if mod not in modality_groups:
+            modality_groups[mod] = []
+        modality_groups[mod].append((logical_name, config))
+
+    total_modalities = len(modality_groups)
+
+    for mod_idx, (modality, items) in enumerate(modality_groups.items()):
+        group_size = len(items)
+
+        for i, (logical_name, config) in enumerate(items):
+            split_map = config["splits"]
+
+            sample_counts = []
+            eq_list = []
+            ir_list = []
+            max_classes = 0
+
+            for split_type in ["train", "val", "test"]:
+                actual_split = split_map[split_type]
+                if actual_split and logical_name in all_results and actual_split in all_results[logical_name]:
+                    stats = all_results[logical_name][actual_split]
+                    sample_counts.append(f"{stats['total_samples']:,}")
+                    max_classes = max(max_classes, stats["num_classes"])
+
+                    eq_val = stats["shannon_equitability"]
+                    eq_list.append(f"{eq_val:.4f}" if eq_val is not None else "N/A")
+
+                    ir_val = stats["imbalance_ratio"]
+                    ir_list.append(f"{ir_val:.2f}" if ir_val is not None else "N/A")
+                else:
+                    sample_counts.append("-")
+
+            counts_str = " / ".join(sample_counts)
+            eq_str = " / ".join(eq_list) if eq_list else "N/A"
+            ir_str = " / ".join(ir_list) if ir_list else "N/A"
+
+            modality_cell = f"\\multirow{{{group_size}}}{{*}}{{{modality}}}" if i == 0 else ""
+
+            row = (
+                f"{modality_cell} & {logical_name} & {max_classes} & "
+                f"{counts_str} & {eq_str} & {ir_str} \\\\"
+            )
+            lines.append(row)
+
+        if mod_idx < total_modalities - 1:
+            lines.append(r"\cline{1-6}")
+
+    lines.extend([
+        r"\hline",
+        r"\end{tabular}",
+        r"\end{table}",
+    ])
+
+    return "\n".join(lines)
 
 
 def run_extraction(out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     all_results = {}
-    latex_rows = []
 
     print("==========================================================================================")
-    print("                             EXTRACTING THESIS DATASET STATISTICS                         ")
+    print("                              EXTRACTING THESIS DATASET STATISTICS                        ")
     print("==========================================================================================")
 
-    for dname, splits in DATASET_CONFIGS.items():
-        all_results[dname] = {}
-        print(f"\n---> Dataset: {dname.upper()}")
+    for logical_name, config in LOGICAL_DATASETS.items():
+        dname = config["dname"]
+        all_results[logical_name] = {}
 
-        for split in splits:
+        print(f"\n---> Dataset: {logical_name.upper()}")
+
+        for split_type, actual_split in config["splits"].items():
+            if not actual_split:
+                continue
+
             try:
-                ds = create_dataset(dname, ROOT_DIR, split)
-                stats = compute_split_metrics(ds, dname, split)
-                all_results[dname][split] = stats
-
-                row = format_latex_row(stats)
-                latex_rows.append(row)
+                ds = create_dataset(dname, ROOT_DIR, actual_split)
+                stats = compute_split_metrics(ds, logical_name, actual_split)
+                all_results[logical_name][actual_split] = stats
 
                 print(
-                    f"  Split: {split:<18} | Samples: {stats['total_samples']:<8} | "
+                    f"  Split: {actual_split:<18} | Samples: {stats['total_samples']:<8} | "
                     f"Classes: {stats['num_classes']:<4} | Res: {stats['spatial_resolution']:<15} | "
-                    f"Ch: {stats['channels']:<2} | IR: {stats['imbalance_ratio']}"
+                    f"Ch: {stats['channels']:<2} | IR: {stats['imbalance_ratio']} | Eq: {stats['shannon_equitability']}"
                 )
 
             except Exception as e:
-                print(f"  [ERROR] Failed loading {dname} split '{split}': {e}")
+                print(f"  [ERROR] Failed loading {logical_name} split '{actual_split}': {e}")
 
     json_path = out_dir / "thesis_dataset_stats.json"
     with open(json_path, "w") as f:
         json.dump(all_results, f, indent=2)
     print(f"\n[Saved JSON Summary]: {json_path}")
 
+    latex_table_str = generate_latex_table(all_results)
     tex_path = out_dir / "dataset_summary_rows.tex"
     with open(tex_path, "w") as f:
-        f.write("\n".join(latex_rows))
-    print(f"[Saved LaTeX Table Rows]: {tex_path}\n")
+        f.write(latex_table_str)
+    print(f"[Saved LaTeX Table]: {tex_path}\n")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,37 @@ import json
 from tqdm import tqdm 
 import numpy as np
 from scipy.stats import chi2
+from config.constants import ALL_CLASSIFIERS, TTA_STRATEGIES, DEFAULT_SEED, ALL_DATASETS, RETRIEVAL_STRATEGIES, ALL_SEEDS
+from config.helpers import baseline_results
+
+def get_prediction_filename(s_key, cfg, ds, cl, ev, retr, rfs, seed, sty=1, use_n=1):
+    target_cfg = TTA_STRATEGIES.get(s_key, cfg)
+    
+    if s_key == "hybrid_tta":
+        geo = (rfs - 1) - sty
+        return "{ds}_{cl}_hybrid_geo{geo}_sty{sty}_{eval}_split{use_n}_nr{rfs}_seed{seed}_predictions.json".format(
+            ds=ds,
+            cl=cl,
+            geo=f"{geo:02d}",
+            sty=f"{sty:02d}",
+            eval=ev,
+            use_n=use_n,
+            rfs=rfs,
+            seed=seed,
+        )
+
+    fmt_kwargs = {
+        "ds": ds,
+        "cl": cl, 
+        "eval": ev if ev else target_cfg.get("default_eval", "vanilla"), 
+        "rfs": rfs,
+        "seed": seed, 
+        "retr": retr if retr is not None else target_cfg.get("default_retr", ""), 
+    }              
+    try:
+        return target_cfg["template"].format(**fmt_kwargs)
+    except KeyError:
+        return target_cfg["template"].format(cl=cl, rfs=rfs, seed=seed)
 
 
 def get_predictions(results: dict):
@@ -33,10 +64,13 @@ def get_predictions(results: dict):
     return y_true, y_pred
 
 
-def balanced_accuracy_score_np(y_true, y_pred):
+def balanced_accuracy_score_np(y_true, y_pred, normal=False):
     """
     Balanced accuracy = mean recall over classes.
     """
+    if normal:
+        return float(np.mean(y_true == y_pred))
+    
     classes = np.unique(y_true)
 
     recalls = []
@@ -56,6 +90,7 @@ def stratified_bootstrap_difference(
     y_true,
     pred_baseline,
     pred_tta,
+    normal=False,
     n_bootstrap=10_000,
     confidence_level=0.95,
     seed=42,
@@ -107,11 +142,13 @@ def stratified_bootstrap_difference(
         baseline_bal_acc = balanced_accuracy_score_np(
             y_true_b,
             baseline_b,
+            normal
         )
 
         tta_bal_acc = balanced_accuracy_score_np(
             y_true_b,
             tta_b,
+            normal
         )
 
         bootstrap_differences[b] = (
@@ -134,11 +171,13 @@ def stratified_bootstrap_difference(
     baseline_bal_acc = balanced_accuracy_score_np(
         y_true,
         pred_baseline,
+        normal
     )
 
     tta_bal_acc = balanced_accuracy_score_np(
         y_true,
         pred_tta,
+        normal
     )
 
     observed_difference = tta_bal_acc - baseline_bal_acc
@@ -212,6 +251,7 @@ def calculate_statistical_comparison(
     baseline_path: Path,
     tta_path: Path,
     output_path: Path,
+    normal=False,
     n_bootstrap=10_000,
     confidence_level=0.95,
     seed=42,
@@ -237,10 +277,9 @@ def calculate_statistical_comparison(
         tta_results
     )
 
-
     if len(y_true_baseline) != len(y_true_tta):
         raise ValueError(
-            "Baseline and TTA contain different numbers of predictions."
+            f"Baseline {len(y_true_baseline)} and TTA {len(y_true_tta)} contain different numbers of predictions."
         )
 
     if not np.array_equal(y_true_baseline, y_true_tta):
@@ -254,6 +293,7 @@ def calculate_statistical_comparison(
         y_true=y_true,
         pred_baseline=pred_baseline,
         pred_tta=pred_tta,
+        normal=normal,
         n_bootstrap=n_bootstrap,
         confidence_level=confidence_level,
         seed=seed,
@@ -292,11 +332,166 @@ def calculate_statistical_comparison(
 
     return result
 
+def set_against_path(against, cfg, ds, cl , seed, results_dir, split, s_key, rfs=1, sty=3, use_n=4):
+    if against == "baseline":
+        base_fname = get_prediction_filename("geometric_tta", cfg, ds, cl, "vanilla", "", rfs=1, seed=seed)
+        # Baselines are stored at top-level split directory or without split subfolder depending on setup
+        base_pred_path = results_dir / f"geometric_tta/tta_inference/predictions/{ds}/{split}" / base_fname
+        
+        if not base_pred_path.exists():
+            base_pred_path = results_dir / s_key / f"tta_inference/predictions/{ds}" / base_fname
+            if not base_pred_path.exists():
+                return None
+    else:
+        eval = "zero" if against == "adain_tta" else "vanilla"
+        retr = "" if against == "geometric_tta" else "dino"
+        base_fname = get_prediction_filename(against, cfg, ds, cl, eval, retr, rfs, seed=seed, sty=sty, use_n=use_n)
+        base_pred_path = results_dir / against / f"tta_inference/predictions/{ds}/{split}" / base_fname
+    
+    return base_pred_path
+
+def run_all_statistical_comparisons(
+    results_dir: Path,
+    output_dir: Path,
+    datasets: list,
+    against: str = "baseline",
+    normal: bool = False, 
+    n_bootstrap: int = 10_000,
+):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    all_summary_stats = {}
+  
+    for ds in datasets:
+        all_summary_stats[ds] = {}
+        split = "test"
+        if ds == "eurosat":
+            split = "ucmerced"
+        elif ds == "imagenet":
+            split = "test_r"
+
+        for s_key, cfg in TTA_STRATEGIES.items():
+            if s_key == against:
+                continue
+            ev = cfg.get("default_eval", "vanilla")
+            retr = cfg.get("default_retr", "")
+            all_summary_stats[ds][s_key] = {}
+            for cl in ALL_CLASSIFIERS:
+                all_summary_stats[ds][s_key][cl] = {}
+                for seed in ALL_SEEDS:
+                    
+                    # 2. Loop through TTA step settings in axis
+                    for rfs in cfg["axis"]:
+                        if s_key == "hybrid_tta":
+                            for sty_val in [1, 2, 3]:
+                                for use_n in [1, sty_val + 1]:
+                                    tta_fname = get_prediction_filename(
+                                        s_key, cfg, ds, cl, ev, retr, rfs=rfs, seed=seed, sty=sty_val, use_n=use_n
+                                    )
+                                    tta_pred_path = results_dir / s_key / f"tta_inference/predictions/{ds}/{split}" / tta_fname
+
+                                    base_pred_path = set_against_path(against, cfg, ds, cl, seed, results_dir, split, s_key,rfs, sty_val, use_n)
+                                    if not base_pred_path.exists():
+                                        continue
+                                    if tta_pred_path.exists():
+                                        out_json = output_dir / against / ds / s_key / cl / f"stats_nr{rfs}_sty{sty_val}_split{use_n}_seed{seed}.json"
+                                        stats_res = calculate_statistical_comparison(
+                                            baseline_path=base_pred_path,
+                                            tta_path=tta_pred_path,
+                                            output_path=out_json,
+                                            normal=normal,
+                                            n_bootstrap=n_bootstrap,
+                                            seed=seed,
+                                        )
+                                        all_summary_stats[ds][s_key][cl][f"nr_{rfs}_sty_{sty_val}_split_{use_n}_seed_{seed}"] = stats_res
+                        else:
+                            tta_fname = get_prediction_filename(s_key, cfg, ds, cl, ev, retr, rfs=rfs, seed=seed)
+                            tta_pred_path = results_dir / s_key / f"tta_inference/predictions/{ds}/{split}" / tta_fname
+                            base_pred_path = set_against_path(against, cfg, ds, cl, seed, results_dir, split, s_key, rfs)
+                            if not base_pred_path.exists():
+                                continue                            
+                            if tta_pred_path.exists():
+                                out_json = output_dir / against / ds / s_key / cl / f"stats_rfs{rfs}_seed{seed}.json"
+                                stats_res = calculate_statistical_comparison(
+                                    baseline_path=base_pred_path,
+                                    tta_path=tta_pred_path,
+                                    output_path=out_json,
+                                    normal=normal,
+                                    n_bootstrap=n_bootstrap,
+                                    seed=seed,
+                                )
+                                all_summary_stats[ds][s_key][cl][f"rfs_{rfs}_seed_{seed}"] = stats_res
+
+    # Save aggregated execution metadata
+    #with open(output_dir / "aggregated_summary.json", "w") as f:
+    #    json.dump(all_summary_stats, f, indent=2)
+
+
+import re
+
+def run_list_comparisons(
+    prediction_paths: str,
+    results_dir: Path,
+    output_dir: Path,
+    dataset:str, 
+    split: str, 
+    n_bootstrap: int = 10_000,
+):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    all_summary_stats = {}
+
+    for cls in ALL_CLASSIFIERS:
+        for retr in RETRIEVAL_STRATEGIES:
+            tta_pred_path = preds.format(cl=cls, retr=retr)
+
+
+
+            filename = Path(tta_pred_path)
+            if not filename.exists():
+                print(f"Skipping non-existent path: {tta_pred_path}")
+                continue
+            classifier = cls
+
+            # Locate baseline matching dataset/split setup
+            base_fname = f"{classifier}_vanilla.json"
+            base_pred_path = Path(baseline_results(dataset=dataset, split=split, cls=cls, prediction=True))
+           
+            if not base_pred_path.exists():
+                base_pred_path = results_dir / f"geometric_tta/tta_inference/predictions/{dataset}" / base_fname
+                if not base_pred_path.exists():
+                    print(f"Baseline not found for {tta_pred_path}, skipping.")
+                    continue
+
+            # Define structured output location
+            stem = filename.stem
+            out_json = output_dir / dataset / classifier / f"stats_{stem}.json"
+
+            stats_res = calculate_statistical_comparison(
+                baseline_path=base_pred_path,
+                tta_path=filename,
+                output_path=out_json,
+                n_bootstrap=n_bootstrap,
+            )
+
+            all_summary_stats[stem] = stats_res
+
+    with open(output_dir / "aggregated_summary.json", "w") as f:
+        json.dump(all_summary_stats, f, indent=2)
+
 if __name__ == "__main__":
-    baseline_path = "/home/stud/nemmler/retristyle/results/geometric_tta/tta_inference/predictions/imagenet/test_r/densenet121_geometric_vanilla_nviews1_seed71397589.json"
-    tta_path= "/home/stud/nemmler/retristyle/results/geometric_tta/tta_inference/predictions/imagenet/test_r/densenet121_geometric_vanilla_nviews64_seed71397589.json"
-    calculate_statistical_comparison(
-    baseline_path=Path(baseline_path),
-    tta_path=Path(tta_path),
-    output_path=Path("./results/statistics/styleid_vs_baseline.json"),
-)
+    """
+    preds = "/home/stud/nemmler/retristyle/results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/{cl}_adain_tta_zero_{retr}_nrefs32_seed71397589.json"
+    run_list_comparisons(preds, 
+                        Path("./results"),
+                        Path("./results/statistics"),
+                        dataset="imagenet", 
+                        split="test_r")
+    """
+    for ag in ["baseline", "geometric_tta"]:
+        run_all_statistical_comparisons(
+            results_dir=Path("./results"),
+            output_dir=Path("./results/statistics/acc"),
+            datasets=["eurosat", "imagenet", "midog","camelyon17wilds", "epistr"],
+            against=ag,
+            normal=True
+        )
+   

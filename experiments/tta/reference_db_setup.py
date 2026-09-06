@@ -38,17 +38,28 @@ def build_reference_db(
     data_path: str,
     input_size: int,
     seed: int = DEFAULT_SEED,
-    split: str = None
+    split: str = None,
+    show=False,
 ) -> ReferenceDatabase:
     """Create a :class:`ReferenceDatabase` from the training split.
 
     Only labels are extracted at init time — images are loaded lazily.
     """
-    transform = v2.Compose([
+    if not show:
+        transform = v2.Compose([
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            ResizeWhileRetainAspectRatio(size=input_size),
+        ])
+    else:
+        transform = v2.Compose(
+    [
         v2.ToImage(),
         v2.ToDtype(torch.float32, scale=True),
-        ResizeWhileRetainAspectRatio(size=input_size),
-    ])
+        v2.Resize(224, antialias=True),
+        v2.CenterCrop((224, 224)),
+    ]
+)
     if split is not None and split not in ["train", "val", "test"]:
         current_split = f"train@{split}"
     else:

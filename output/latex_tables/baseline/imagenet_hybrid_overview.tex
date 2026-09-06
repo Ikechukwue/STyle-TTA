@@ -1,0 +1,19 @@
+\begin{table}[htbp]
+\centering
+\caption{Sample-level transitions (Baseline $\rightarrow$ TTA), ImageNet $\rightarrow$ ImageNet-R.}
+\label{tab:ImageNet_transitions}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Backbone} & \textbf{Baseline} & \textbf{Geo-TTA ($N=32$)} & \textbf{StyleID only (best $N$)} & \textbf{Hybrid S1 ($N=32$)} & \textbf{Hybrid S2 ($N=32$)} & \textbf{$\Delta$ S2 vs Geo} \\
+\midrule
+ResNet-18 & 35.44 & 39.46 & \textbf{46.80} & 40.28 & 46.39 & +6.92 \\
+DenseNet-121 & 40.60 & 44.07 & 50.32 & 44.91 & \textbf{50.75} & +6.69 \\
+ViT-B/16 (224) & 47.89 & 52.80 & 57.82 & 53.51 & \textbf{58.04} & +5.23 \\
+Swin-B (224) & 60.41 & 62.45 & 63.88 & 63.43 & \textbf{64.21} & +1.76 \\
+CLIP ViT-B/16 & 64.23 & \textbf{65.64} & 62.78 & 65.50 & 64.07 & -1.57 \\
+DINOv2 ViT-B/14 & 69.04 & 70.58 & 67.23 & \textbf{70.62} & 68.86 & -1.72 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}

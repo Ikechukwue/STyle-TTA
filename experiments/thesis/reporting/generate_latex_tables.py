@@ -12,8 +12,6 @@ Supported table types:
     4. **Ablation: Aggregation Strategy** — accuracy by eval strategy
     5. **Ablation: n_refs Sweep** — accuracy vs number of references
     6. **Hybrid TTA** — geo/style mixing ratios performance
-    7. **Cross-Dataset Extension** — performance across ImageNet variants
-    8. **Domain Shift Summary** — texture/shape shift characterization
 
 Usage::
 

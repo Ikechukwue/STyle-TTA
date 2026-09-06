@@ -62,6 +62,16 @@ def find_json(directory: Path, pattern: str = "*.json") -> List[Path]:
 
 
 def parse_filename_metadata(filepath: str) -> dict:
+    """Extract metadata key-value pairs parsed from an experiment prediction filename.
+
+    Returns:
+        dict: Extracted metadata with keys (all optional depending on filename matches):
+            - 'seed' (int): Random seed value.
+            - 'n_refs' (int): Number of reference views/images.
+            - 'classifier' (str): Name of the matched classifier.
+            - 'eval_strategy' (str): Evaluation strategy matched from EVAL_STRATEGIES.
+            - 'tta_method' (str): Method identifier ('geometric_tta', 'retristyle', or 'adain_tta').
+    """
     basename = Path(filepath).stem 
     metadata = {}
 
@@ -93,6 +103,63 @@ def parse_filename_metadata(filepath: str) -> dict:
         metadata['tta_method'] = 'adain_tta'
 
     return metadata
+
+
+def get_prediction_filename(s_key, cfg, ds, cl, ev, retr, rfs, seed, sty=1, use_n=1):
+    target_cfg = TTA_STRATEGIES.get(s_key, cfg)
+    
+    if s_key == "hybrid_tta":
+        geo = (rfs - 1) - sty
+        return "{ds}_{cl}_hybrid_geo{geo}_sty{sty}_{eval}_split{use_n}_nr{rfs}_seed{seed}_predictions.json".format(
+            ds=ds,
+            cl=cl,
+            geo=f"{geo:02d}",
+            sty=f"{sty:02d}",
+            eval=ev,
+            use_n=use_n,
+            rfs=rfs,
+            seed=seed,
+        )
+
+    fmt_kwargs = {
+        "ds": ds,
+        "cl": cl, 
+        "eval": ev if ev else target_cfg.get("default_eval", "vanilla"), 
+        "rfs": rfs,
+        "seed": seed, 
+        "retr": retr if retr is not None else target_cfg.get("default_retr", ""), 
+    }              
+    try:
+        return target_cfg["template"].format(**fmt_kwargs)
+    except KeyError:
+        return target_cfg["template"].format(cl=cl, rfs=rfs, seed=seed)
+
+
+def get_predictions(results: dict):
+    """
+    Extract true labels and predicted classes from a results JSON.
+
+    Assumes:
+        results["predictions"] = [
+            {"y_true": ..., "y_pred": [...]},
+            ...
+        ]
+
+    Returns:
+        y_true: shape (N,)
+        y_pred: shape (N,)
+    """
+    y_true = np.array(
+        [sample["y_true"] for sample in results["predictions"]]
+    )
+
+    y_pred_matrix = np.array(
+        [sample["y_pred"] for sample in results["predictions"]]
+    )
+
+    y_pred = np.argmax(y_pred_matrix, axis=1)
+
+    return y_true, y_pred
 
 
 # ==========================================
@@ -133,6 +200,15 @@ def get_names(split: str = "test_r",
 
     return [name_dict[id] for id in split_ids]
 
+def get_class_name(
+    class_idx: int,
+    class_names: List[str],
+) -> str:
+    """Convert a class index into a human-readable ImageNet class name."""
+    if class_idx < 0 or class_idx >= len(class_names):
+        return f"class {class_idx}"
+
+    return class_names[class_idx]
 
 def get_y_true(dataset: str, split: str) -> list:
     if dataset == "imagenet":
@@ -163,7 +239,9 @@ def get_baseline_results(file_name: str, predictions: bool = True, split: str = 
     
     return output_dir / dataset / split / f"{classifier}_geometric_{eval_strat}_nviews1_seed{seed}.json"
 
-
+def baseline_results(cls, dataset, split, prediction=False):
+    results = "results" if not prediction else "predictions"
+    return "/home/stud/nemmler/retristyle/results/geometric_tta/tta_inference/{results}/{dataset}/{split}/{cls}_geometric_vanilla_nviews1_seed71397589.json".format(dataset=dataset, split=split, results=results, cls=cls)
 # ==========================================
 # 3. METRICS & TOP-K EVALUATION
 # ==========================================
@@ -196,6 +274,33 @@ def extract_class_metrics(pred_path):
         for c, v in class_data.items()
     }
 
+def get_geometric_mean(pred_path):
+    path_data = parse_filename_metadata(pred_path)
+    pred_path_obj = Path(pred_path)
+    parent_dir = pred_path_obj.parent
+    
+    seed_matrices = []
+    for sd in ALL_SEEDS:
+        filename = TTA_STRATEGIES["geometric_tta"]["template"].format(
+            cl=path_data["classifier"], 
+            eval=path_data["eval_strategy"], 
+            rfs=path_data["n_refs"], 
+            seed=sd,
+            retr=""
+        )
+        file_path = parent_dir / filename
+        if not file_path.exists():
+            continue
+            
+        data = load_json(file_path)
+        y_pred_matrix = np.array([sample["y_pred"] for sample in data["predictions"]])
+        seed_matrices.append(y_pred_matrix)
+    
+    if not seed_matrices:
+        raise FileNotFoundError("No seed prediction files were found.")
+        
+    mean_geo = np.mean(seed_matrices, axis=0)
+    return mean_geo
 
 def get_top_k(results: dict, k: int = 5) -> Tuple[np.ndarray, np.ndarray]:
     y_pred_matrix = np.array([sample["y_pred"] for sample in results["predictions"]])
@@ -240,6 +345,25 @@ def calc_top_k(pred_path: Path, k: int = 5) -> Optional[float]:
 # ==========================================
 # 4. NORMALIZATION UTILITIES
 # ==========================================
+def latex_escape(text):
+        """Escape characters that have special meaning in LaTeX."""
+        text = str(text)
+
+        replacements = {
+            "\\": r"\textbackslash{}",
+            "&": r"\&",
+            "%": r"\%",
+            "$": r"\$",
+            "#": r"\#",
+            "_": r"\_",
+            "{": r"\{",
+            "}": r"\}",
+        }
+
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+
+        return text
 
 def normalize_values_intra(data: dict) -> dict:
     global_summary = data.get("global_summary", {})

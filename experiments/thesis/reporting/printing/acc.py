@@ -260,4 +260,4 @@ if __name__ == "__main__":
         elif ds == "imagenet":
             split = "test_r"
 
-        print_ablation_nrefs_multi(Path("./results"), ["geometric_tta"], ds, split)
+        print_ablation_nrefs_multi(Path("./results"), ["ablation/retristyle", "ablation/adain_tta", "hybrid_tta","geometric_tta"], ds, split)

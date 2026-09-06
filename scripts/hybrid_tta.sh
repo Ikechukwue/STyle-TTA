@@ -10,11 +10,11 @@ EVAL_STRATEGY="${BEST_EVAL:-vanilla}"
 RETRIEVAL_STRATEGY="${BEST_RETRIEVAL:-dino}"
 
 SEED=$DEFAULT_SEED
-DATASET=("imagenet") #"midog" "camelyon17wilds" "epistr" "eurosat")
-SPLIT="test_r"
+DATASET=("eurosat") #"midog" "camelyon17wilds" "epistr" "eurosat")
+SPLIT="ucmerced"
 N_VIEWS_LIST=(3 7 15 31 63)
 N_REFS_LIST=(1 2 3)
-CLASSIFIER="dinov2_vitb14"
+
 
 for DT in "${DATASET[@]}"; do
     for CLASSIFIER in "${ALL_CLASSIFIERS[@]}"; do

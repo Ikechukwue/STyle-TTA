@@ -18,25 +18,35 @@ VIT_CLASSIFIERS=("vit_base_patch16_224" "swin_base_patch4_window7_224")
 FM_CLASSIFIERS=("dinov2_vitb14" "ViT-B-16")
 MODELS=("${CNN_CLASSIFIERS[@]}" "${VIT_CLASSIFIERS[@]}" "${FM_CLASSIFIERS[@]}")
 EVAL_STRATEGY=("vanilla")
-SEED=(71397589)
-VIEWS=(2 4 8 16 32)
+
+VIEWS=(1 2 4 8 16 32 64)
 DATASET=("camelyon17wilds")
-SPLIT="test"
+
 for DT in "${DATASET[@]}"; do
     for MDL in "${MODELS[@]}"; do
         for VW in "${VIEWS[@]}"; do
             for SD in "${ALL_SEEDS[@]}"; do
                 for EV in "${EVAL_STRATEGY[@]}"; do
-                    AUGMENTATION="random_flip-random_resized_crop"
-                    if [[ "$DT" == "midog" ]]; then
-                        AUGMENTATION="none"
-                    fi 
-                    #WEIGHTS_PATH="pretrained"
-                    
-                    #if is_pretrained "$MDL"; then
-                    WEIGHTS_PATH="$MODEL_DIR/$DT/$DT-$MDL-$AUGMENTATION-seed42.pth"
-                    #fi
 
+                    SPLIT="test"
+                    AUGMENTATION="random_flip-random_resized_crop"
+
+                    if [[ $DT == "eurosat" ]]; then
+                        SPLIT="ucmerced"
+
+                    elif [[ $DT == "midog" ]]; then
+                        AUGMENTATION="none"
+                    fi
+
+                    WEIGHTS_PATH="$MODEL_DIR/$DT/$DT-$MDL-$AUGMENTATION-seed42.pth"
+
+                    if [[ $DT == "imagenet" ]]; then
+                        SPLIT="test_r"
+                        WEIGHTS_PATH="pretrained"
+                        if is_pretrained "$MDL"; then
+                            WEIGHTS_PATH="$MODEL_DIR/$DT/$DT-$MDL-$AUGMENTATION-seed42.pth"
+                        fi
+                    fi
                     # 1. FIXED: Now logging the actual loop variable ($MDL) 
                     echo "Geometric TTA: $MDL | $EVAL_STRATEGY | seed=$SD"
 

@@ -27,7 +27,7 @@ RETRIEVAL_STRATEGY="dino"
 ALL_N_REFS=(2 4)
 SEED=$DEFAULT_SEED
 
-DATASET=("camelyon17wilds")
+DATASET=("eurosat")
 
 while [[ $# -gt 0 ]]; do
     case $1 in

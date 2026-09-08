@@ -1,6 +1,6 @@
 from pathlib import Path
 import numpy as np
-from config.helpers import load_json, get_classifier_name, latex_escape
+from config.helpers import load_json, get_classifier_name, latex_escape, baseline_results
 from config.constants import (
     ALL_CLASSIFIERS,
     ALL_DATASETS,
@@ -9,10 +9,27 @@ from config.constants import (
     DEFAULT_SEED,
     TTA_STRATEGIES,
     TRUE_SPLITS,
+    CLEAN_CLASSIFIERS
 )
 
 import re
 
+TARGET_CLASSIFIERS = [
+    "densenet121",
+    "swin_base_patch4_window7_224",
+    "dinov2_vitb14",
+    
+]
+
+CLASSIFIER_SHORT_NAMES = {
+    "densenet121": "CNN",
+    "dinov2_vitb14": "ViT",
+    "swin_base_patch4_window7_224": "FM",
+}
+def short_classifier_name(cl):
+    """Return mapped short name if present, otherwise fallback to default helper."""
+
+    return CLASSIFIER_SHORT_NAMES[cl]
 
 def latex_escape(text):
     """Escape characters that have special meaning in LaTeX."""
@@ -69,7 +86,7 @@ def build_benchmarks_table(
         )
         lines.append(r"\midrule")
 
-        for cl_idx, cl in enumerate(ALL_CLASSIFIERS):
+        for cl_idx, cl in enumerate(TARGET_CLASSIFIERS):
             cl_name = latex_escape(latex_classifier_name(cl))
 
             valid_accs = [
@@ -215,6 +232,7 @@ def load_transition_stats(results_dir, dataset, strategy_key, cl, rfs, seed=None
         )
 
         if not f.exists():
+            print(f)
             return None
 
         data = load_json(f)
@@ -250,6 +268,7 @@ def load_transition_stats(results_dir, dataset, strategy_key, cl, rfs, seed=None
         )
 
         if not f.exists():
+            print(f)
             return None
 
         data = load_json(f)
@@ -277,6 +296,10 @@ def load_transition_stats(results_dir, dataset, strategy_key, cl, rfs, seed=None
             "metrics": metrics,
         }
 
+def get_baseline_results(cl, dataset, split):
+    base_path = baseline_results(cl, dataset, split)
+    data = load_json(base_path)
+    return data["metrics"]
 
 def generate_transition_table(
     results_dir,
@@ -359,24 +382,36 @@ def generate_transition_table(
     elif "hybrid" in table_mode:
         pass 
 
-    elif table_mode == "benchmarks":
-        del ALL_SPLITS["imagenet"]
-        del ALL_SPLITS["eurosat"]
-        for cl in ALL_CLASSIFIERS:
+    elif "compact" ==  table_mode:
+        if dataset != "imagenet":
+            del strategy_keys[0]
+        for cl in TARGET_CLASSIFIERS:
             data[cl] = {}
-            for ds, n_split in ALL_SPLITS.items():
-                spli = TRUE_SPLITS[n_split]
              
-                data[cl][ds] = {}
-                for strategy_key in strategy_keys:
-                    if strategy_key == "ablation/adain_tta":
-                        continue
-                    rfs = rfs_values.get(strategy_key)
-                    if ds == "imagenet":
-                        rfs = 16
-                    data[cl][ds][strategy_key] = load_transition_stats(
-                        results_dir, ds, strategy_key, cl, rfs, seed=seed, against=against
-                    )
+            data[cl] = {}
+            for strategy_key in strategy_keys:
+                rfs = rfs_values.get(strategy_key)
+                if dataset == "imagenet":
+                    rfs = 16
+                data[cl][strategy_key] = load_transition_stats(
+                    results_dir, dataset, strategy_key, cl, rfs, seed=seed, against=against
+                )
+
+    elif "calibration" == table_mode:
+        if dataset != "imagenet":
+            del strategy_keys[0]
+        for cl in TARGET_CLASSIFIERS:
+            data[cl] = {}
+             
+            data[cl] = {}
+            for strategy_key in strategy_keys:
+                rfs = rfs_values.get(strategy_key)
+                if dataset == "imagenet":
+                    rfs = 16
+                data[cl][strategy_key] = load_transition_stats(
+                    results_dir, dataset, strategy_key, cl, rfs, seed=seed, against=against
+                )
+            data[cl]["baseline"] = get_baseline_results(cl, dataset, split)
 
     else:
         for cl in ALL_CLASSIFIERS:
@@ -408,7 +443,7 @@ def generate_transition_table(
         lines.append(
             r"\textbf{Backbone} & \textbf{Baseline (\%)} & \textbf{Strategy} & "
             r"\textbf{TTA (\%$\uparrow$)} & "
-            r"\textbf{$\Delta$ (95\% CI)} & \textbf{$p$} & \textbf{ECE $\downarrow$} & \textbf{AUC $\uparrow$} \\"
+            r"\textbf{$\Delta$ (95\% CI)} & \textbf{$p$}\\"
         )
         lines.append(r"\midrule")
         # Determine maximum tta_acc for the current classifier across strategies
@@ -487,7 +522,7 @@ def generate_transition_table(
         )
         lines.append(r"\midrule")
 
-        for cl_idx, cl in enumerate(ALL_CLASSIFIERS):
+        for cl_idx, cl in enumerate(TARGET_CLASSIFIERS):
             cl_name = latex_escape(latex_classifier_name(cl))
 
             printable_rows = []
@@ -565,7 +600,7 @@ def generate_transition_table(
                 if ds_idx < len(valid_ds_keys) - 1:
                     lines.append(r"\cmidrule{2-7}")
 
-            if cl_idx < len(ALL_CLASSIFIERS) - 1:
+            if cl_idx < len(TARGET_CLASSIFIERS) - 1:
                 lines.append(r"\midrule")
 
         lines.append(r"\bottomrule")
@@ -1013,54 +1048,73 @@ def generate_transition_table(
         lines.append(r"\end{tabular}")
     elif table_mode == "compact":  # comprehensive
 
-        lines.append(r"\small")
-        lines.append(r"\begin{tabular}{ll" + "c" * 5 + "}")
+        strategy_key = strategy_keys[0]
+        rfs = rfs_values[strategy_key]
+
+        lines.append(r"\begin{tabular}{llcccccc}")
         lines.append(r"\toprule")
         lines.append(
-            r"\textbf{Classifier} & \textbf{Baseline(\%)} & \textbf{Strategy} & "
-            r"\textbf{$\Delta$ (95\% CI)} & \textbf{Saved (\%)} & \textbf{Corrupted (\%)} & "
-            r"\textbf{Rescue} & \textbf{$p$} \\"
+            r"\textbf{Backbone} & \textbf{Baseline (\%)} & \textbf{Strategy} & "
+            r"\textbf{TTA (\%$\uparrow$)} & "
+            r"\textbf{$\Delta$ (95\% CI)} & \textbf{$p$}\\"
         )
         lines.append(r"\midrule")
-
-        for cl_idx, cl in enumerate(ALL_CLASSIFIERS):
+        # Determine maximum tta_acc for the current classifier across strategies
+        valid_accs = [
+            data[cl][k]['tta_acc'] 
+            for k in strategy_keys 
+            if data[cl].get(k) is not None
+        ]
+        max_acc = max(valid_accs) if valid_accs else None
+        for cl_idx, cl in enumerate(TARGET_CLASSIFIERS):
             cl_name = latex_classifier_name(cl)
 
+            # Find the maximum tta_acc for the current classifier
+            valid_accs = [
+                data[cl][sk]["tta_acc"]
+                for sk in strategy_keys
+                if data[cl].get(sk) is not None
+            ]
+            max_acc = max(valid_accs) if valid_accs else None
+
             for s_idx, strategy_key in enumerate(strategy_keys):
-                r = data[cl][strategy_key]
+                r = data[cl].get(strategy_key, None)
+                if r is None:
+                    continue
+                auc = f"{r["metrics"]["auc"]:.2f}"
+                ece = f"{r["metrics"]["ece"]:.2f}"
+                if r is None:
+                    lines.append(
+                        " & ".join([latex_classifier_name(cl)] + ["--"] * 8) + r" \\"
+                    )
+                    continue
+
                 classifier_cell = (
                     f"\\multirow{{{len(strategy_keys)}}}{{*}}{{{cl_name}}}"
                     if s_idx == 0
                     else ""
                 )
-
                 baseline_cell = (
                     f"\\multirow{{{len(strategy_keys)}}}{{*}}{{{r['baseline_acc']:.2f}}}"
                     if s_idx == 0
                     else ""
                 )
-                if r is None:
-                    row = [classifier_cell, strategy_label(strategy_key)] + ["--"] * 4
-                else:
-                    delta_ci = (f"+{r['delta_pp']:.2f} [{r['ci_lower']:.2f}, {r['ci_upper']:.2f}]")
-                    saved_cell = f"{r['saved']} ({r['saved_pct']:.1f}\\%)"
-                    corrupted_cell = f"{r['corrupted']} ({r['corrupted_pct']:.1f}\\%)"
-                    rescue_cell = (
-                        f"{r['rescue_ratio']:.1f}:1"
-                        if not np.isnan(r["rescue_ratio"])
-                        else "--"
-                    )
-                    row = [
-                        classifier_cell,
-                        baseline_cell,
-                        strategy_label(strategy_key),
-                        delta_ci,
-                        saved_cell,
-                        corrupted_cell,
-                        rescue_cell,
-                        format_pvalue(r["p_value"]),
-                    ]
+                delta_prefix = "+" if r["delta_pp"] >= 0 else ""
+                delta_ci = f"{delta_prefix}{r['delta_pp']:.2f} [{r['ci_lower']:.2f}, {r['ci_upper']:.2f}]"
 
+                # Format and apply \textbf if value matches the maximum
+                acc_str = f"{r['tta_acc']:.2f}"
+                if max_acc is not None and r["tta_acc"] == max_acc:
+                    acc_str = f"\\textbf{{{acc_str}}}"
+
+                row = [
+                    classifier_cell,
+                    baseline_cell,
+                    strategy_label(strategy_key),
+                    acc_str,
+                    delta_ci,
+                    format_pvalue(r["p_value"]),
+                ]
                 lines.append(" & ".join(row) + r" \\")
 
             if cl_idx < len(ALL_CLASSIFIERS) - 1:
@@ -1069,6 +1123,83 @@ def generate_transition_table(
         lines.append(r"\bottomrule")
         lines.append(r"\end{tabular}")
 
+    elif table_mode == "calibration": 
+
+        lines.append(r"\begin{tabular}{llcccc}")
+        lines.append(r"\toprule")
+        lines.append(
+            r"\textbf{Backbone} & \textbf{Method} & \textbf{Baseline ECE} & "
+            r"\textbf{Baseline AUC} & \textbf{ECE $\downarrow$} & \textbf{AUC $\uparrow$} \\"
+        )
+        lines.append(r"\midrule")
+
+        for cl_idx, cl in enumerate(TARGET_CLASSIFIERS):
+            cl_name = latex_classifier_name(cl)
+
+            # Compute optimal metrics per classifier for bolding
+            valid_ece = [
+                data[cl][sk]["metrics"]["ece"]
+                for sk in strategy_keys
+                if data[cl].get(sk) is not None
+            ]
+            valid_auc = [
+                data[cl][sk]["metrics"]["auc"]
+                for sk in strategy_keys
+                if data[cl].get(sk) is not None
+            ]
+            
+            min_ece = min(valid_ece) if valid_ece else None
+            max_auc = max(valid_auc) if valid_auc else None
+
+            num_strategies = len(strategy_keys)
+
+            for s_idx, strategy_key in enumerate(strategy_keys):
+                r = data[cl].get(strategy_key, None)
+                if r is None:
+                    continue
+
+                ece_val = r["metrics"]["ece"]
+                auc_val = r["metrics"]["auc"]
+
+                ece_str = f"{ece_val:.2f}"
+                auc_str = f"{auc_val:.2f}"
+
+                if min_ece is not None and ece_val == min_ece:
+                    ece_str = f"\\textbf{{{ece_str}}}"
+                if max_auc is not None and auc_val == max_auc:
+                    auc_str = f"\\textbf{{{auc_str}}}"
+
+                classifier_cell = (
+                    f"\\multirow{{{num_strategies}}}{{*}}{{{cl_name}}}"
+                    if s_idx == 0
+                    else ""
+                )
+                baseline_ece_cell = (
+                    f"\\multirow{{{num_strategies}}}{{*}}{{{data[cl]['baseline']['ece']:.2f}}}"
+                    if s_idx == 0
+                    else ""
+                )
+                baseline_auc_cell = (
+                    f"\\multirow{{{num_strategies}}}{{*}}{{{data[cl]['baseline']['auc']:.2f}}}"
+                    if s_idx == 0
+                    else ""
+                )
+
+                row = [
+                    classifier_cell,
+                    strategy_label(strategy_key),
+                    baseline_ece_cell,
+                    baseline_auc_cell,
+                    ece_str,
+                    auc_str,
+                ]
+                lines.append(" & ".join(row) + r" \\")
+
+            if cl_idx < len(TARGET_CLASSIFIERS) - 1:
+                lines.append(r"\midrule")
+
+    lines.append(r"\bottomrule")
+    lines.append(r"\end{tabular}")
     lines.append(r"}")
     lines.append(r"\end{table}")
 
@@ -1092,20 +1223,22 @@ def generate_transition_table(
 if __name__ == "__main__":
     results_dir = Path("./results")
     output_dir = Path("./output")
-    against = "geometric_tta"
-    ds = "imagenet"
+    against = "baseline"
+    table_mode = "calibration"
+    for ds in ["imagenet", "eurosat", "midog", "camelyon17wilds", "epistr"]:
     # 5.3.3 ImageNet-R — comprehensive, all style-transfer strategies
-    generate_transition_table(
-        results_dir=results_dir,
-        dataset=ds,
-        split="test_r",
-        strategy_keys=["ablation/adain_tta", "ablation/retristyle", "geometric_tta"],
-        rfs_values={
-            "ablation/adain_tta": 64,
-            "ablation/retristyle": 4,
-            "geometric_tta": 64,
-        },
-        table_mode="hybrid_calibration",
-        output_dir = output_dir / "latex_tables" / against,
-        against=against
-    )
+        generate_transition_table(
+            results_dir=results_dir,
+            dataset=ds,
+            split=TRUE_SPLITS[ALL_SPLITS[ds]],
+            strategy_keys=["ablation/adain_tta", "ablation/retristyle", "geometric_tta"],
+            rfs_values={
+                "ablation/adain_tta": 64,
+                "ablation/retristyle": 4,
+                "geometric_tta": 64,
+            },
+            table_mode=table_mode,
+            output_dir = output_dir / "latex_tables" / against / table_mode,
+            against=against,
+            caption=f"Evaluation of baseline {ALL_SPLITS[ds]} and TTA methods across CNN, Vision Transformer, and Foundation Model backbones. Bold indicates the best performance per metric."
+        )

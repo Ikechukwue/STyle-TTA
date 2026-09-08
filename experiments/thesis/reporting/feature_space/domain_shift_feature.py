@@ -230,7 +230,7 @@ def plot_umap(
     embs_B: np.ndarray, labels_B: np.ndarray, name_B: str,
     backbone: str,
     output_path: Path,
-    max_points: int = 2500,
+    max_points: int = 1500,
     seed: int = 42,
     limit_cls: Optional[int] = None,
 ):
@@ -434,7 +434,7 @@ def analyse():
     parser.add_argument("--backbones", nargs="+", default=[
         "resnet18"])
     
-    parser.add_argument("--k_style", default=None, type=int)
+    parser.add_argument("--k_style", default=None)
 
     parser.add_argument("--no_umap", action="store_true",
                         help="Skip UMAP plots")
@@ -443,7 +443,7 @@ def analyse():
     args = parser.parse_args()
 
     split_domain = args.split_domain #if args.limit_cls != 26 else "test_r_c26"
-    if args.k_style:
+    if not args.k_style is None:
         split_domain += f"_k{args.k_style}"
     output_dir = Path(args.output_dir) / f"{split_domain}"
     if args.limit_cls:
@@ -509,12 +509,11 @@ if __name__ == "__main__":
     analyse()
 
 """
-python -m experiments.thesis.domain_shift_feature \\
-    --embedding_dir ./embeddings \\
-    --dataset imagenet \\
-    --split_domain test_r \\
-    --split_train train@test_r \\
-    --split_val val@test_r \\
-    --k_style 1\\
-    --backbones resnet18 densenet121 vit_base_patch16_224 swin_base_patch4_window7_224 dinov2_vitb14 ViT-B-16
+python -m experiments.thesis.domain_shift_feature \
+    --embedding_dir ./embeddings \
+    --dataset imagenet \
+    --split_domain test_r --no_umap\
+    --split_train train@test_r \
+    --split_val val@test_r \
+    --backbones densenet121 dinov2_vitb14
 """

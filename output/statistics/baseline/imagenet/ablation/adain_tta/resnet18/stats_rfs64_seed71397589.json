@@ -1,0 +1,46 @@
+{
+  "baseline_file": "results/geometric_tta/tta_inference/predictions/imagenet/test_r/resnet18_geometric_vanilla_nviews1_seed71397589.json",
+  "tta_file": "results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/resnet18_adain_tta_zero_dino_nrefs64_seed71397589.json",
+  "n_samples": 30000,
+  "n_classes": 200,
+  "mcnemar": {
+    "baseline_correct_tta_wrong": 1572,
+    "baseline_wrong_tta_correct": 3140,
+    "discordant_pairs": 4712,
+    "p_value": 1.5860374870941071e-117
+  },
+  "metrics": {
+    "accuracy": {
+      "baseline": 0.3362,
+      "tta": 0.3884666666666667,
+      "difference": 0.052266666666666683,
+      "ci_lower": 0.04786666666666667,
+      "ci_upper": 0.056599999999999984,
+      "bootstrap_p_value": 0.4968
+    },
+    "balanced_accuracy": {
+      "baseline": 0.35438858109361526,
+      "tta": 0.39461104919250645,
+      "difference": 0.040222468098891184,
+      "ci_lower": 0.035297176643699385,
+      "ci_upper": 0.04516399569485582,
+      "bootstrap_p_value": 0.4941
+    },
+    "auc": {
+      "baseline": 0.902024404000058,
+      "tta": 0.7793443951601671,
+      "difference": -0.12268000883989094,
+      "ci_lower": -0.12526512360326847,
+      "ci_upper": -0.1201819973412402,
+      "bootstrap_p_value": 0.4957
+    },
+    "ece": {
+      "baseline": 0.13571005325472602,
+      "tta": 0.2918631600936254,
+      "difference": 0.15615310683889938,
+      "ci_lower": 0.15133573570912082,
+      "ci_upper": 0.1609271211947066,
+      "bootstrap_p_value": 0.5022
+    }
+  }
+}

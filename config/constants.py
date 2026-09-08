@@ -47,7 +47,7 @@ CLEAN_CLASSIFIERS = {
         "densenet121": ("DenseNet-121", "CNN"),
         "vit_base_patch16_224": ("ViT-B/16 (224)", "Vision Transformer"),
         "swin_base_patch4_window7_224": ("Swin-B (224)", "Vision Transformer"),
-        "ViT-B-16": ("CLIP ViT-B/16", "Vision-Language Model"),
+        "ViT-B-16": ("CLIP ViT-B/16", "Foundation Model"),
         "ViT-B-16@Zero": ("CLIP ViT-B/16 (Zero-Shot)", "Vision-Language Model"),
         "dinov2_vitb14": ("DINOv2 ViT-B/14", "Foundation Model"),
         "vit_base_patch16_dinov3_lvd1689m": ("DINOv3 ViT-B/16", "Foundation Model"),

@@ -1,0 +1,22 @@
+\begin{table}[htbp]
+\centering
+\caption{Comparison of baseline EuroSAT to TTA-enhanced UCMerced. Reported are balanced accuracy of the baseline, STyle-TTA and geometric TTA with 95\% CI, and significance based on a paired bootstrap test. Results are shown separately for CNN, foundation model, and vision transformer backbones.}
+\label{tab:EuroSAT_transitions}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{Backbone} & \textbf{Baseline (\%)} & \textbf{Strategy} & \textbf{TTA (\%$\uparrow$)} & \textbf{$\Delta$ (95\% CI)} & \textbf{$p$}\\
+\midrule
+\multirow{2}{*}{CNN} & \multirow{2}{*}{33.83} & StyleID & \textbf{52.67} & +18.83 [14.75, 22.83] & $<$0.001 \\
+ &  & Geometric & 27.25 & -6.58 [-9.50, -3.58] & $<$0.001 \\
+\midrule
+\multirow{2}{*}{Vision Transformer} & \multirow{2}{*}{68.58} & StyleID & 68.92 & +0.33 [-2.92, 3.58] & 0.002 \\
+ &  & Geometric & \textbf{72.08} & +3.50 [0.42, 6.75] & 0.320 \\
+\midrule
+\multirow{2}{*}{Foundation Model} & \multirow{2}{*}{72.92} & StyleID & 69.75 & -3.17 [-6.08, -0.08] & $<$0.001 \\
+ &  & Geometric & \textbf{72.17} & -0.75 [-3.33, 1.92] & 0.034 \\
+\midrule
+\bottomrule
+\end{tabular}
+}
+\end{table}

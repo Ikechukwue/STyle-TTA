@@ -1,0 +1,46 @@
+{
+  "baseline_file": "results/geometric_tta/tta_inference/predictions/eurosat/ucmerced/vit_base_patch16_224_geometric_vanilla_nviews1_seed71397589.json",
+  "tta_file": "results/hybrid_tta/tta_inference/predictions/eurosat/ucmerced/eurosat_vit_base_patch16_224_hybrid_geo02_sty01_vanilla_split2_nr4_seed71397589_predictions.json",
+  "n_samples": 600,
+  "n_classes": 4,
+  "mcnemar": {
+    "baseline_correct_tta_wrong": 19,
+    "baseline_wrong_tta_correct": 41,
+    "discordant_pairs": 60,
+    "p_value": 0.0062176026593266705
+  },
+  "metrics": {
+    "accuracy": {
+      "baseline": 0.4066666666666667,
+      "tta": 0.44333333333333336,
+      "difference": 0.03666666666666668,
+      "ci_lower": 0.011666666666666659,
+      "ci_upper": 0.06166666666666665,
+      "bootstrap_p_value": 0.5218
+    },
+    "balanced_accuracy": {
+      "baseline": 0.5900000000000001,
+      "tta": 0.6416666666666666,
+      "difference": 0.05166666666666653,
+      "ci_lower": 0.019979166666666655,
+      "ci_upper": 0.08416666666666672,
+      "bootstrap_p_value": 0.5056
+    },
+    "auc": {
+      "baseline": 0.7874883333333333,
+      "tta": 0.7875066666666666,
+      "difference": 1.8333333333231394e-05,
+      "ci_lower": -0.017615361111111148,
+      "ci_upper": 0.0177757500000002,
+      "bootstrap_p_value": 0.9942
+    },
+    "ece": {
+      "baseline": 0.304682943324248,
+      "tta": 0.20012219856182736,
+      "difference": -0.10456074476242064,
+      "ci_lower": -0.133422034908086,
+      "ci_upper": -0.071334980426977,
+      "bootstrap_p_value": 0.5015
+    }
+  }
+}

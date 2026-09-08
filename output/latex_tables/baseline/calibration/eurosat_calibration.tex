@@ -1,0 +1,21 @@
+\begin{table}[htbp]
+\centering
+\caption{Evaluation of baseline eurosat and TTA methods across CNN, Vision Transformer, and Foundation Model backbones. Bold indicates the best performance per metric.}
+\label{tab:EuroSAT_transitions}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Backbone} & \textbf{Method} & \textbf{Baseline ECE} & \textbf{Baseline AUC} & \textbf{ECE $\downarrow$} & \textbf{AUC $\uparrow$} \\
+\midrule
+\multirow{2}{*}{CNN} & StyleID & \multirow{2}{*}{0.29} & \multirow{2}{*}{0.63} & \textbf{0.04} & \textbf{0.83} \\
+ & Geometric &  &  & 0.37 & 0.67 \\
+\midrule
+\multirow{2}{*}{Vision Transformer} & StyleID & \multirow{2}{*}{0.28} & \multirow{2}{*}{0.90} & 0.34 & 0.89 \\
+ & Geometric &  &  & \textbf{0.17} & \textbf{0.93} \\
+\midrule
+\multirow{2}{*}{Foundation Model} & StyleID & \multirow{2}{*}{0.26} & \multirow{2}{*}{0.93} & 0.27 & 0.91 \\
+ & Geometric &  &  & \textbf{0.22} & \textbf{0.92} \\
+\bottomrule
+\end{tabular}
+}
+\end{table}

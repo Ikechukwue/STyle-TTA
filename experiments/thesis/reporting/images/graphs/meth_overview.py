@@ -1,5 +1,5 @@
 """
-Generate a draw.io (.drawio / mxGraph XML) version of the STyl-TTA
+Generate a draw.io (.drawio / mxGraph XML) version of the STyle-TTA
 framework diagram, mirroring the layout of styl_tta_horizontal.svg.
 
 Output:
@@ -141,7 +141,7 @@ def add_edge(points, stroke=BORDER, width=2):
 # Title
 # ============================================================
 
-add_text(900, 20, 600, 40, "Style-Based Test-Time Augmentation (STyl-TTA)",
+add_text(900, 20, 600, 40, "Style-Based Test-Time Augmentation (STyle-TTA)",
           size=26, bold=True)
 add_text(750, 60, 900, 30,
           "Style retrieval \u2192 style transfer \u2192 frozen classification \u2192 probability aggregation",
@@ -316,7 +316,7 @@ add_edge([(1950, 820), (2020, 820)])                   # Soft agg -> Final decis
 body = "\n".join(cells)
 
 xml = f'''<mxfile host="app.diagrams.net" agent="python-generator" version="24.0.0">
-  <diagram name="STyl-TTA" id="styl-tta-diagram">
+  <diagram name="STyle-TTA" id="STyle-TTA-diagram">
     <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1"
         connect="1" arrows="1" fold="1" page="1" pageScale="1"
         pageWidth="2400" pageHeight="1050" math="0" shadow="0">

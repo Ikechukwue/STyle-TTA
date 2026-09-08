@@ -51,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
         ],
     )
     p.add_argument("--color_method", type=str, default=None)
-    p.add_argument("--retrieval_strategy", type=str, default="dino")
+    p.add_argument("--retrieval_strategy", type=str, default=None)
     p.add_argument("--n_refs", type=int, default=16)
     p.add_argument("--embedding_dir", type=str, default=None)
     p.add_argument(
@@ -109,7 +109,7 @@ def main():
     args = build_parser().parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    cache_name = f"dino_{args.dataset}_{args.split}_s{args.seed}"
+    cache_name = f"{args.retrieval_strategy}_{args.dataset}_{args.split}_s{args.seed}"
     cache_dir = Path(args.cache_root) / cache_name
     cache_dir.mkdir(parents=True, exist_ok=True)
 

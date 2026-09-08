@@ -1,0 +1,22 @@
+\begin{table}[htbp]
+\centering
+\caption{Comparison of baseline MIDOG to TTA-enhanced MIDOG(Val). Reported are balanced accuracy of the baseline, STyle-TTA and geometric TTA with 95\% CI, and significance based on a paired bootstrap test. Results are shown separately for CNN, foundation model, and vision transformer backbones.}
+\label{tab:MIDOG_transitions}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{Backbone} & \textbf{Baseline (\%)} & \textbf{Strategy} & \textbf{TTA (\%$\uparrow$)} & \textbf{$\Delta$ (95\% CI)} & \textbf{$p$}\\
+\midrule
+\multirow{2}{*}{CNN} & \multirow{2}{*}{48.98} & StyleID & \textbf{50.03} & +1.05 [-1.00, 3.15] & $<$0.001 \\
+ &  & Geometric & 49.97 & +0.99 [-0.35, 2.39] & $<$0.001 \\
+\midrule
+\multirow{2}{*}{Vision Transformer} & \multirow{2}{*}{51.80} & StyleID & 49.33 & -2.47 [-4.60, -0.37] & $<$0.001 \\
+ &  & Geometric & \textbf{50.31} & -1.49 [-3.13, 0.17] & $<$0.001 \\
+\midrule
+\multirow{2}{*}{Foundation Model} & \multirow{2}{*}{50.28} & StyleID & \textbf{51.05} & +0.77 [-1.22, 2.77] & $<$0.001 \\
+ &  & Geometric & 49.50 & -0.78 [-2.42, 0.87] & 0.014 \\
+\midrule
+\bottomrule
+\end{tabular}
+}
+\end{table}

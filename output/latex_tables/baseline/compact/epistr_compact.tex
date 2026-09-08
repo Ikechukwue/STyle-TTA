@@ -1,0 +1,22 @@
+\begin{table}[htbp]
+\centering
+\caption{Comparison of baseline EpiStr to TTA-enhanced EpiStr(Val). Reported are balanced accuracy of the baseline, STyle-TTA and geometric TTA with 95\% CI, and significance based on a paired bootstrap test. Results are shown separately for CNN, foundation model, and vision transformer backbones.}
+\label{tab:EpiStr_transitions}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{Backbone} & \textbf{Baseline (\%)} & \textbf{Strategy} & \textbf{TTA (\%$\uparrow$)} & \textbf{$\Delta$ (95\% CI)} & \textbf{$p$}\\
+\midrule
+\multirow{2}{*}{CNN} & \multirow{2}{*}{50.12} & StyleID & 67.36 & +17.24 [15.10, 19.33] & $<$0.001 \\
+ &  & Geometric & \textbf{76.94} & +26.82 [24.49, 29.09] & $<$0.001 \\
+\midrule
+\multirow{2}{*}{Vision Transformer} & \multirow{2}{*}{69.87} & StyleID & \textbf{70.41} & +0.54 [-1.85, 2.90] & 0.624 \\
+ &  & Geometric & 67.48 & -2.39 [-4.08, -0.67] & 0.010 \\
+\midrule
+\multirow{2}{*}{Foundation Model} & \multirow{2}{*}{65.70} & StyleID & 66.45 & +0.75 [-1.27, 2.75] & 0.932 \\
+ &  & Geometric & \textbf{74.35} & +8.65 [6.93, 10.34] & $<$0.001 \\
+\midrule
+\bottomrule
+\end{tabular}
+}
+\end{table}

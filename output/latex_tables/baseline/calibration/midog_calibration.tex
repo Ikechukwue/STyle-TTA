@@ -1,0 +1,21 @@
+\begin{table}[htbp]
+\centering
+\caption{Evaluation of baseline midog and TTA methods across CNN, Vision Transformer, and Foundation Model backbones. Bold indicates the best performance per metric.}
+\label{tab:MIDOG_transitions}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Backbone} & \textbf{Method} & \textbf{Baseline ECE} & \textbf{Baseline AUC} & \textbf{ECE $\downarrow$} & \textbf{AUC $\uparrow$} \\
+\midrule
+\multirow{2}{*}{CNN} & StyleID & \multirow{2}{*}{0.21} & \multirow{2}{*}{0.49} & \textbf{0.15} & \textbf{0.52} \\
+ & Geometric &  &  & 0.23 & 0.48 \\
+\midrule
+\multirow{2}{*}{Vision Transformer} & StyleID & \multirow{2}{*}{0.12} & \multirow{2}{*}{0.52} & 0.23 & 0.49 \\
+ & Geometric &  &  & \textbf{0.17} & \textbf{0.51} \\
+\midrule
+\multirow{2}{*}{Foundation Model} & StyleID & \multirow{2}{*}{0.14} & \multirow{2}{*}{0.50} & \textbf{0.11} & \textbf{0.52} \\
+ & Geometric &  &  & 0.14 & 0.49 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}

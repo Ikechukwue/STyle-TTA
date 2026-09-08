@@ -1,0 +1,25 @@
+\begin{table}[htbp]
+\centering
+\caption{Comparison of baseline ImageNet to TTA-enhanced ImageNet-R. Reported are balanced accuracy of the baseline, STyle-TTA and geometric TTA with 95\% CI, and significance based on a paired bootstrap test. Results are shown separately for CNN, foundation model, and vision transformer backbones.}
+\label{tab:ImageNet_transitions}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{Backbone} & \textbf{Baseline (\%)} & \textbf{Strategy} & \textbf{TTA (\%$\uparrow$)} & \textbf{$\Delta$ (95\% CI)} & \textbf{$p$}\\
+\midrule
+\multirow{3}{*}{CNN} & \multirow{3}{*}{40.60} & AdaIN & 42.09 & +1.50 [1.02, 1.99] & $<$0.001 \\
+ &  & StyleID & \textbf{50.32} & +9.72 [9.21, 10.23] & $<$0.001 \\
+ &  & Geometric & 43.67 & +3.08 [2.68, 3.48] & $<$0.001 \\
+\midrule
+\multirow{3}{*}{Vision Transformer} & \multirow{3}{*}{60.41} & AdaIN & 59.28 & -1.13 [-1.61, -0.65] & 0.754 \\
+ &  & StyleID & \textbf{63.88} & +3.47 [2.99, 3.94] & $<$0.001 \\
+ &  & Geometric & 62.47 & +2.06 [1.68, 2.45] & $<$0.001 \\
+\midrule
+\multirow{3}{*}{Foundation Model} & \multirow{3}{*}{69.04} & AdaIN & 65.76 & -3.28 [-3.72, -2.84] & $<$0.001 \\
+ &  & StyleID & 67.23 & -1.80 [-2.23, -1.39] & $<$0.001 \\
+ &  & Geometric & \textbf{70.41} & +1.37 [1.05, 1.69] & $<$0.001 \\
+\midrule
+\bottomrule
+\end{tabular}
+}
+\end{table}

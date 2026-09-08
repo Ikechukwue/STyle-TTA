@@ -2,63 +2,42 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
 from matplotlib.colors import to_rgba
+import os
 
 # ============================================================
 # DATA
 # ============================================================
 
-classifiers = [
-    "ResNet-18",
-    "DenseNet-121",
-    "ViT-B/16 (224)",
-    "Swin-B (224)",
-    "CLIP ViT-B/16",
-    "DINOv2 ViT-B/14",
-]
+classifiers = ["CNN", "ViT", "FM"]
 
-# Baseline (N=1)
+# Representative baseline (N=1)
 baseline = {
-    "ResNet-18": 35.44,
-    "DenseNet-121": 40.60,
-    "ViT-B/16 (224)": 47.89,
-    "Swin-B (224)": 60.41,
-    "CLIP ViT-B/16": 64.23,
-    "DINOv2 ViT-B/14": 69.04,
+    "CNN": 40.60,
+    "ViT": 60.41,
+    "FM": 69.04,
 }
 
-# Number of views
+# Number of augmented views
 N_values = [2, 4, 8, 16, 32, 64]
 
-# Balanced accuracy values
+# Balanced accuracy (%)
 data = {
     "AdaIN": {
-        "ResNet-18":       [37.09, 38.27, 37.97, 39.01, 39.37, 39.46],
-        "DenseNet-121":    [41.60, 42.15, 40.96, 42.09, 42.48, 42.34],
-        "ViT-B/16 (224)":  [49.55, 50.50, 50.45, 51.84, 52.45, 52.95],
-        "Swin-B (224)":    [59.07, 58.89, 58.51, 59.28, 59.25, 59.31],
-        "CLIP ViT-B/16":   [64.91, 64.86, 61.69, 60.84, 60.47, 59.93],
-        "DINOv2 ViT-B/14": [69.10, 68.66, 66.78, 65.76, 65.32, 65.02],
+        "CNN": [41.60, 42.15, 40.96, 42.09, 42.48, 42.34],
+        "ViT": [59.07, 58.89, 58.51, 59.28, 59.25, 59.31],
+        "FM": [69.10, 68.66, 66.78, 65.76, 65.32, 65.02],
     },
-
     "StyleID": {
-        "ResNet-18":       [41.91, 44.93, 46.28, 46.80, None, None],
-        "DenseNet-121":    [46.31, 48.68, 49.84, 50.32, None, None],
-        "ViT-B/16 (224)":  [52.95, 55.40, 56.75, 57.82, None, None],
-        "Swin-B (224)":    [61.94, 62.97, 63.56, 63.88, None, None],
-        "CLIP ViT-B/16":   [65.27, 64.35, 63.52, 62.78, None, None],
-        "DINOv2 ViT-B/14": [69.18, 68.50, 67.73, 67.23, None, None],
+        "CNN": [46.31, 48.68, 49.84, 50.32, None, None],
+        "ViT": [61.94, 62.97, 63.56, 63.88, None, None],
+        "FM": [69.18, 68.50, 67.73, 67.23, None, None],
     },
-
     "Geometric": {
-        "ResNet-18":       [37.16, 38.01, 39.11, 39.26, 39.38, 39.46],
-        "DenseNet-121":    [41.69, 42.86, 43.38, 43.67, 43.74, 44.07],
-        "ViT-B/16 (224)":  [49.57, 51.07, 52.00, 52.43, 52.66, 52.80],
-        "Swin-B (224)":    [60.96, 61.33, 62.23, 62.47, 62.45, 62.45],
-        "CLIP ViT-B/16":   [64.65, 65.17, 65.44, 65.71, 65.72, 65.64],
-        "DINOv2 ViT-B/14": [69.00, 69.52, 70.25, 70.41, 70.44, 70.58],
+        "CNN": [41.69, 42.86, 43.38, 43.67, 43.74, 44.07],
+        "ViT": [60.96, 61.33, 62.23, 62.47, 62.45, 62.45],
+        "FM": [69.00, 69.52, 70.25, 70.41, 70.44, 70.58],
     },
 }
-
 
 # ============================================================
 # COLORS
@@ -70,71 +49,51 @@ method_colors = {
     "StyleID": "#2ca02c",     # green
 }
 
-
 # ============================================================
 # SHADE FUNCTION
 # ============================================================
 
 def shade_color(color, N):
-    """
-    Fewer views = lighter shade
-    More views = darker shade.
-    """
-    # Normalize N between 2 and 64
-    t = (np.log2(N) - np.log2(2)) / (
-        np.log2(64) - np.log2(2)
-    )
-
-    # Mix color with white
+    """Fewer views = lighter shade; more views = darker shade."""
+    t = (np.log2(N) - np.log2(2)) / (np.log2(64) - np.log2(2))
     rgba = np.array(to_rgba(color))
-
-    # 0.35 = fairly light
-    # 1.00 = full color
     strength = 0.35 + 0.65 * t
-
-    rgba[:3] = (
-        1 - strength
-    ) * np.ones(3) + strength * rgba[:3]
-
+    rgba[:3] = (1 - strength) * np.ones(3) + strength * rgba[:3]
     return rgba
 
-
 # ============================================================
-# FIGURE
-# ============================================================
-
-fig, ax = plt.subplots(figsize=(15, 8))
-
-
-# ============================================================
-# PLOT BASELINES
+# FIGURE — COMPACT LAYOUT
 # ============================================================
 
-x = np.arange(len(classifiers))
+fig, ax = plt.subplots(figsize=(9, 5.8))
+
+# Compact family positions
+x = np.array([0.0, 0.9, 1.8])
+
+# Small offsets to separate the three methods
+method_offsets = {
+    "AdaIN": -0.10,
+    "StyleID": 0.00,
+    "Geometric": 0.10,
+}
+
+# ============================================================
+# BASELINES
+# ============================================================
 
 ax.scatter(
     x,
     [baseline[c] for c in classifiers],
     marker="x",
-    s=90,
+    s=75,
     linewidths=2,
     color="black",
-    zorder=5,
+    zorder=6,
 )
 
-
 # ============================================================
-# PLOT METHODS
+# METHODS
 # ============================================================
-
-# Small horizontal offsets so the three methods
-# don't sit exactly on top of one another.
-method_offsets = {
-    "AdaIN": -0.13,
-    "StyleID": 0.00,
-    "Geometric": 0.13,
-}
-
 
 for method, method_data in data.items():
 
@@ -148,80 +107,60 @@ for method, method_data in data.items():
         valid_y = []
 
         for N, value in zip(N_values, values):
+            if value is not None:
+                xpos = x[classifier_idx] + method_offsets[method]
+                valid_x.append(xpos)
+                valid_y.append(value)
 
-            if value is None:
-                continue
-
-            valid_x.append(
-                classifier_idx + method_offsets[method]
-            )
-
-            valid_y.append(value)
-
-        # ----------------------------------------------------
-        # Connecting line
-        # ----------------------------------------------------
-
+        # Connect values across N
         ax.plot(
             valid_x,
             valid_y,
             color=base_color,
-            linewidth=1.5,
+            linewidth=1.4,
             alpha=0.55,
             zorder=2,
         )
 
-        # ----------------------------------------------------
-        # Individual points
-        # ----------------------------------------------------
-
+        # Individual N points
         for N, value in zip(N_values, values):
 
             if value is None:
                 continue
 
-            xpos = (
-                classifier_idx
-                + method_offsets[method]
-            )
+            xpos = x[classifier_idx] + method_offsets[method]
 
             ax.scatter(
                 xpos,
                 value,
-                s=65,
-                color=shade_color(
-                    base_color,
-                    N
-                ),
+                s=58,
+                color=shade_color(base_color, N),
                 edgecolor=base_color,
-                linewidth=1.2,
+                linewidth=1.0,
                 zorder=4,
             )
 
-
 # ============================================================
-# AXIS LABELS
+# AXES
 # ============================================================
 
 ax.set_xticks(x)
-
-ax.set_xticklabels(
-    classifiers,
-    fontsize=11,
-)
+ax.set_xticklabels(classifiers, fontsize=11)
 
 ax.set_xlabel(
-    "Classifier",
-    fontsize=13,
-    labelpad=12,
+    "Backbone Family",
+    fontsize=12,
+    labelpad=8,
 )
 
 ax.set_ylabel(
     "Balanced Accuracy (%)",
-    fontsize=13,
-    labelpad=12,
+    fontsize=12,
+    labelpad=8,
 )
 
+# Keep the compact x-range
+ax.set_xlim(-0.35, 2.15)
 
 # ============================================================
 # TITLE
@@ -229,11 +168,10 @@ ax.set_ylabel(
 
 ax.set_title(
     "Impact of Augmented View Count ($N$) on TTA Performance",
-    fontsize=17,
+    fontsize=15,
     fontweight="bold",
-    pad=18,
+    pad=12,
 )
-
 
 # ============================================================
 # GRID
@@ -242,12 +180,11 @@ ax.set_title(
 ax.grid(
     axis="y",
     linestyle="--",
-    linewidth=0.8,
+    linewidth=0.7,
     alpha=0.35,
 )
 
 ax.set_axisbelow(True)
-
 
 # ============================================================
 # Y LIMIT
@@ -258,8 +195,7 @@ all_values = []
 for method in data.values():
     for classifier_values in method.values():
         all_values.extend(
-            v for v in classifier_values
-            if v is not None
+            v for v in classifier_values if v is not None
         )
 
 all_values.extend(baseline.values())
@@ -267,11 +203,7 @@ all_values.extend(baseline.values())
 y_min = min(all_values)
 y_max = max(all_values)
 
-ax.set_ylim(
-    y_min - 2,
-    y_max + 2,
-)
-
+ax.set_ylim(y_min - 2, y_max + 2)
 
 # ============================================================
 # METHOD LEGEND
@@ -279,30 +211,28 @@ ax.set_ylim(
 
 method_handles = [
     Line2D(
-        [0],
-        [0],
+        [0], [0],
         marker="o",
         color=color,
         label=method,
         markerfacecolor=color,
-        markersize=8,
-        linewidth=2,
+        markeredgecolor=color,
+        markersize=7,
+        linewidth=1.8,
     )
     for method, color in method_colors.items()
 ]
 
 method_handles.append(
     Line2D(
-        [0],
-        [0],
+        [0], [0],
         marker="x",
         color="black",
         label="Baseline ($N=1$)",
-        markersize=9,
+        markersize=8,
         linewidth=0,
     )
 )
-
 
 # ============================================================
 # VIEW COUNT LEGEND
@@ -311,29 +241,23 @@ method_handles.append(
 view_handles = []
 
 for N in N_values:
-
-    # Use AdaIN red only as an example
-    # to communicate the shade scale.
     view_handles.append(
         Line2D(
-            [0],
-            [0],
+            [0], [0],
             marker="o",
             color=method_colors["AdaIN"],
             markerfacecolor=shade_color(
-                method_colors["AdaIN"],
-                N
+                method_colors["AdaIN"], N
             ),
             markeredgecolor=method_colors["AdaIN"],
-            markersize=8,
+            markersize=7,
             linewidth=0,
             label=f"$N={N}$",
         )
     )
 
-
 # ============================================================
-# LEGENDS
+# COMPACT TWO-PART LEGEND
 # ============================================================
 
 legend1 = ax.legend(
@@ -342,6 +266,8 @@ legend1 = ax.legend(
     loc="upper left",
     bbox_to_anchor=(1.01, 1.00),
     frameon=True,
+    fontsize=9,
+    title_fontsize=10,
 )
 
 ax.add_artist(legend1)
@@ -350,23 +276,27 @@ ax.legend(
     handles=view_handles,
     title="Number of Views",
     loc="upper left",
-    bbox_to_anchor=(1.01, 0.68),
+    bbox_to_anchor=(1.01, 0.58),
     frameon=True,
+    fontsize=9,
+    title_fontsize=10,
 )
 
+# ============================================================
+# CLEAN SPINES
+# ============================================================
+
+ax.spines["top"].set_visible(False)
+ax.spines["right"].set_visible(False)
 
 # ============================================================
-# LAYOUT
+# LAYOUT + SAVE
 # ============================================================
 
 plt.tight_layout()
 
-
-# ============================================================
-# SAVE
-# ============================================================
-
-output_path = "output/nviews_tta_point_graph.png"
+output_path = "output/nviews_tta_point_graph_compact.png"
+os.makedirs("output", exist_ok=True)
 
 plt.savefig(
     output_path,
@@ -376,9 +306,4 @@ plt.savefig(
 
 print(f"Saved to: {output_path}")
 
-
-# ============================================================
-# SHOW
-# ============================================================
-
-
+plt.show()

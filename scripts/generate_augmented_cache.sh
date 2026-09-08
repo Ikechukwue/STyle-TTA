@@ -14,10 +14,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-DATASET="eurosat"
-SPLIT="ucmerced"
-RETRIEVAL_STRATEGY="${BEST_RETRIEVAL:-dino}"
-N_REFS=4 #always original + refs you want + 1 Bsp: for 3 style images -> 4
+DATASET="imagenet"
+SPLIT="test_r"
+RETRIEVAL_STRATEGY="random"
+N_REFS=2 #always original + refs you want + 1 Bsp: for 3 style images -> 4
 N_VIEWS=$DEFAULT_N_VIEWS
 SEED=$DEFAULT_SEED
 

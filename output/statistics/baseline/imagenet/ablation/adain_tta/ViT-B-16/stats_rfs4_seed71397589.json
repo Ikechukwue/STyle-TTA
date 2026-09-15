@@ -1,0 +1,46 @@
+{
+  "baseline_file": "results/geometric_tta/tta_inference/predictions/imagenet/test_r/ViT-B-16_geometric_vanilla_nviews1_seed71397589.json",
+  "tta_file": "results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/ViT-B-16_adain_tta_zero_dino_nrefs4_seed71397589.json",
+  "n_samples": 30000,
+  "n_classes": 200,
+  "mcnemar": {
+    "baseline_correct_tta_wrong": 1262,
+    "baseline_wrong_tta_correct": 1499,
+    "discordant_pairs": 2761,
+    "p_value": 6.990566187556835e-06
+  },
+  "metrics": {
+    "accuracy": {
+      "baseline": 0.6442333333333333,
+      "tta": 0.6521333333333333,
+      "difference": 0.007900000000000018,
+      "ci_lower": 0.004566666666666719,
+      "ci_upper": 0.011333333333333306,
+      "bootstrap_p_value": 0.5008
+    },
+    "balanced_accuracy": {
+      "baseline": 0.6423313191938231,
+      "tta": 0.6486180862802824,
+      "difference": 0.006286767086459255,
+      "ci_lower": 0.002537744851140661,
+      "ci_upper": 0.010098986183087272,
+      "bootstrap_p_value": 0.4952
+    },
+    "auc": {
+      "baseline": 0.9860119778250004,
+      "tta": 0.8234351134101342,
+      "difference": -0.16257686441486618,
+      "ci_lower": -0.16523758095369764,
+      "ci_upper": -0.15991002673380728,
+      "bootstrap_p_value": 0.5004
+    },
+    "ece": {
+      "baseline": 0.11237071423952777,
+      "tta": 0.34786666666666666,
+      "difference": 0.2354959524271389,
+      "ci_lower": 0.2311598844730047,
+      "ci_upper": 0.23977074543851112,
+      "bootstrap_p_value": 0.4969
+    }
+  }
+}

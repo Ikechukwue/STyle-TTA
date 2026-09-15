@@ -1,0 +1,12 @@
+{
+  "ece_baseline_pooled": 0.11237071423952777,
+  "ece_tta_pooled": 0.04606486106092729,
+  "ece_baseline_seeds_mean": 0.11237071423952777,
+  "ece_tta_seeds_mean": 0.04606486106092729,
+  "seed_eces_baseline": {
+    "71397589": 0.11237071423952777
+  },
+  "seed_eces_tta": {
+    "71397589": 0.04606486106092729
+  }
+}

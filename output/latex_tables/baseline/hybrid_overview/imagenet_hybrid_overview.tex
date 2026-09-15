@@ -1,0 +1,21 @@
+\begin{table}[htbp]
+\centering
+\caption{Evaluation of baseline ImageNet-R and TTA methods across CNN, Vision Transformer, and Foundation Model backbones. Bold indicates the best performance per metric.}
+\label{tab:ImageNet_transitions}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Backbone} & \textbf{Baseline} & \textbf{Geo-TTA ($N=64$)} & \textbf{StyleID only ($N=16$)} & \textbf{Hybrid S1 ($N=64$)} & \textbf{Hybrid S2 ($N=64$)} & \textbf{$\Delta$ S2 vs Geo} \\
+\midrule
+ResNet-18 & 33.62 & 37.53 & 43.86 & 38.29 & \textbf{45.24} & +7.71 \\
+DenseNet-121 & 38.60 & 41.90 & 47.34 & 42.75 & \textbf{49.21} & +7.31 \\
+ViT-B/16 (224) & 46.71 & 51.44 & 54.51 & 52.16 & \textbf{56.73} & +5.28 \\
+Swin-B (224) & 58.79 & 60.93 & 62.11 & 61.89 & \textbf{63.06} & +2.13 \\
+CLIP ViT-B/16 & 64.42 & \textbf{66.15} & 64.56 & 66.00 & 64.47 & -1.69 \\
+DINOv2 ViT-B/14 & 67.47 & 69.03 & 67.24 & \textbf{69.18} & 67.63 & -1.41 \\
+\bottomrule
+\end{tabular}
+\bottomrule
+\end{tabular}
+}
+\end{table}

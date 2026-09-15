@@ -1,21 +1,23 @@
 \begin{table}[htbp]
 \centering
-\caption{Comparison of baseline Camelyon17-WILDS to TTA-enhanced Camelyon17-WILDS(Val). Reported are balanced accuracy of the baseline, STyle-TTA and geometric TTA with 95\% CI, and significance based on a paired bootstrap test. Results are shown separately for CNN, foundation model, and vision transformer backbones.}
+\caption{Evaluation of baseline Camelyon17-WILDS(Test) and TTA methods across CNN, Vision Transformer, and Foundation Model backbones. Bold indicates the best performance per metric.}
 \label{tab:Camelyon17-WILDS_transitions}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{llcccccc}
 \toprule
 \textbf{Backbone} & \textbf{Baseline (\%)} & \textbf{Strategy} & \textbf{TTA (\%$\uparrow$)} & \textbf{$\Delta$ (95\% CI)} & \textbf{$p$}\\
 \midrule
-\multirow{2}{*}{CNN} & \multirow{2}{*}{67.66} & StyleID & 80.22 & +12.56 [10.75, 14.37] & $<$0.001 \\
- &  & Geometric & \textbf{84.15} & +16.80 [16.54, 17.07] & $<$0.001 \\
+\multirow{2}{*}{CNN} & \multirow{2}{*}{67.95} & StyleID & 80.40 & +12.45 [10.65, 14.25] & $<$0.001 \\
+ &  & Geometric & \textbf{85.40} & +17.45 [15.65, 19.20] & $<$0.001 \\
 \midrule
-\multirow{2}{*}{Vision Transformer} & \multirow{2}{*}{92.76} & StyleID & \textbf{95.21} & +2.45 [1.49, 3.49] & $<$0.001 \\
- &  & Geometric & 92.82 & +0.55 [0.40, 0.71] & $<$0.001 \\
+\multirow{2}{*}{Vision Transformer} & \multirow{2}{*}{92.75} & StyleID & \textbf{95.25} & +2.50 [1.55, 3.55] & $<$0.001 \\
+ &  & Geometric & 92.65 & -0.10 [-1.05, 0.85] & 0.916 \\
 \midrule
-\multirow{2}{*}{Foundation Model} & \multirow{2}{*}{92.97} & StyleID & \textbf{94.98} & +2.01 [1.17, 2.86] & $<$0.001 \\
- &  & Geometric & 93.81 & +0.85 [-0.00, 1.70] & 0.068 \\
+\multirow{2}{*}{Foundation Model} & \multirow{2}{*}{93.00} & StyleID & \textbf{95.00} & +2.00 [1.15, 2.85] & $<$0.001 \\
+ &  & Geometric & 93.85 & +0.85 [0.00, 1.70] & 0.068 \\
 \midrule
+\bottomrule
+\end{tabular}
 \bottomrule
 \end{tabular}
 }

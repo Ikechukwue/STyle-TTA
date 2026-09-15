@@ -200,19 +200,7 @@ def get_metrics(path:str):
         return {}
     return res_data["metrics"]
 
-def load_transition_stats(results_dir, dataset, strategy_key, cl, rfs, seed=None, against="baseline",split= 1 , sty=1):
-    """
-    Load bootstrap + McNemar transition statistics for one
-    (dataset, strategy, classifier, rfs) combination.
-
-    Expects files at:
-        {results_dir}/statistics/{dataset}/{strategy_key}/{cl}/
-            stats_rfs{rfs}_seed{seed}.json
-
-    Returns a dict with baseline/tta accuracy, the CI, and the
-    saved/corrupted counts, or None if the file doesn't exist.
-    """
-
+def load_transition_stats(results_dir, dataset, strategy_key, cl, rfs, seed=None, against="baseline", split=1, sty=1, stat_type="acc"):
     if seed is None:
         seed = DEFAULT_SEED
     if strategy_key == "hybrid_tta":
@@ -220,7 +208,9 @@ def load_transition_stats(results_dir, dataset, strategy_key, cl, rfs, seed=None
     else:
         str_file_key = f"stats_rfs{rfs}_seed{seed}.json"
 
-    if strategy_key == against:
+    base_folder = "baseline" if stat_type == "balanced" else f"acc/{against}"
+
+    if strategy_key == against and stat_type != "balanced":
         f = (
             Path(results_dir)
             / "statistics"
@@ -230,72 +220,49 @@ def load_transition_stats(results_dir, dataset, strategy_key, cl, rfs, seed=None
             / cl
             / str_file_key
         )
-
-        if not f.exists():
-            print(f)
-            return None
-
-        data = load_json(f)
-        metrics = get_metrics(data["tta_file"])
-        bs = data.get("bootstrap", {})
-
-        return {
-            "n_samples": None,
-            "baseline_acc": bs.get("tta_balanced_accuracy", np.nan) * 100,
-            "tta_acc": bs.get("tta_balanced_accuracy", np.nan) * 100,
-            "delta_pp": None,
-            "ci_lower": None,
-            "ci_upper": None,
-            "saved": None,
-            "corrupted": None,
-            "saved_pct": None,
-            "corrupted_pct": None,
-            "rescue_ratio": None,
-            "p_value": None,
-            "metrics": metrics,
-        }
-    
-    else: 
-
+    else:
         f = (
             Path(results_dir)
             / "statistics"
-            / against
+            / base_folder
             / dataset
             / strategy_key
             / cl
             / str_file_key
         )
 
-        if not f.exists():
-            print(f)
-            return None
+    if not f.exists():
+        print(f)
+        return None
 
-        data = load_json(f)
-        bs = data.get("bootstrap", {})
-        mc = data.get("mcnemar", {})
+    data = load_json(f)
+    bs = data.get("bootstrap", {})
+    mc = data.get("mcnemar", {})
+    
+    tta_file = data.get("tta_file", "")
+    metrics = get_metrics(tta_file)
+    
+    top1_std = None
+    bal_std = None
+    if tta_file and Path(tta_file.replace("predictions", "results")).exists():
+        raw_res = load_json(tta_file.replace("predictions", "results"))
+        agg = raw_res.get("aggregated_metrics", {})
+        if "accuracy" in agg and "std" in agg["accuracy"]:
+            top1_std = agg["accuracy"]["std"] * 100
+        if "balanced_accuracy" in agg and "std" in agg["balanced_accuracy"]:
+            bal_std = agg["balanced_accuracy"]["std"] * 100
 
-        saved = mc.get("baseline_wrong_tta_correct")
-        corrupted = mc.get("baseline_correct_tta_wrong")
-        n_samples = data.get("n_samples")
-        metrics = get_metrics(data["tta_file"])
-
-        return {
-            "n_samples": n_samples,
-            "baseline_acc": bs.get("baseline_balanced_accuracy", np.nan) * 100,
-            "tta_acc": bs.get("tta_balanced_accuracy", np.nan) * 100,
-            "delta_pp": bs.get("difference_percentage_points", np.nan),
-            "ci_lower": bs.get("ci_lower_percentage_points", np.nan),
-            "ci_upper": bs.get("ci_upper_percentage_points", np.nan),
-            "saved": saved,
-            "corrupted": corrupted,
-            "saved_pct": (saved / n_samples * 100) if saved is not None and n_samples else np.nan,
-            "corrupted_pct": (corrupted / n_samples * 100) if corrupted is not None and n_samples else np.nan,
-            "rescue_ratio": (saved / corrupted) if corrupted else np.nan,
-            "p_value": mc.get("p_value", np.nan),
-            "metrics": metrics,
-        }
-
+    return {
+        "n_samples": data.get("n_samples"),
+        "baseline_acc": bs.get("baseline_balanced_accuracy", np.nan) * 100,
+        "tta_acc": bs.get("tta_balanced_accuracy", np.nan) * 100,
+        "delta_pp": bs.get("difference_percentage_points", np.nan),
+        "ci_lower": bs.get("ci_lower_percentage_points", np.nan),
+        "ci_upper": bs.get("ci_upper_percentage_points", np.nan),
+        "p_value": mc.get("p_value", np.nan),
+        "metrics": metrics,
+        "std": top1_std if stat_type == "acc" else bal_std
+    }
 def get_baseline_results(cl, dataset, split):
     base_path = baseline_results(cl, dataset, split)
     data = load_json(base_path)
@@ -359,7 +326,7 @@ def generate_transition_table(
         )
 
     def latex_classifier_name(cl):
-        return latex_escape(get_classifier_name(cl)[1])
+        return latex_escape(get_classifier_name(cl)[0])
 
     def strategy_label(strategy_key):
         return TTA_STRATEGIES[strategy_key]["label"]
@@ -382,6 +349,19 @@ def generate_transition_table(
     elif "hybrid" in table_mode:
         pass 
 
+    elif table_mode == "main_results":
+        for cl in ALL_CLASSIFIERS:
+            data[cl] = {}
+            for strategy_key in strategy_keys:
+                rfs = rfs_values.get(strategy_key, 16)
+                data[cl][strategy_key] = {
+                    "top1": load_transition_stats(
+                        results_dir, dataset, strategy_key, cl, rfs, seed=seed, against=against, stat_type="acc"
+                    ),
+                    "balanced": load_transition_stats(
+                        results_dir, dataset, strategy_key, cl, rfs, seed=seed, against=against, stat_type="balanced"
+                    ),
+                }
     elif "compact" ==  table_mode:
         if dataset != "imagenet":
             del strategy_keys[0]
@@ -433,178 +413,80 @@ def generate_transition_table(
     lines.append(f"\\label{{{label}}}")
     lines.append(r"\resizebox{\textwidth}{!}{")
 
-    if table_mode == "comprehensive":
-
-        strategy_key = strategy_keys[0]
-        rfs = rfs_values[strategy_key]
-
-        lines.append(r"\begin{tabular}{llcccccc}")
+    if table_mode == "main_results":
+        lines.append(r"\begin{tabular}{llccccc}")
         lines.append(r"\toprule")
         lines.append(
             r"\textbf{Backbone} & \textbf{Baseline (\%)} & \textbf{Strategy} & "
-            r"\textbf{TTA (\%$\uparrow$)} & "
-            r"\textbf{$\Delta$ (95\% CI)} & \textbf{$p$}\\"
+            r"\textbf{Top-1 Acc (\%$\uparrow$)} & \textbf{Balanced Acc (\%$\uparrow$)} & "
+            r"\textbf{$\Delta$ (95\% CI)} & \textbf{$p$} \\"
         )
         lines.append(r"\midrule")
-        # Determine maximum tta_acc for the current classifier across strategies
-        valid_accs = [
-            data[cl][k]['tta_acc'] 
-            for k in strategy_keys 
-            if data[cl].get(k) is not None
-        ]
-        max_acc = max(valid_accs) if valid_accs else None
+
         for cl_idx, cl in enumerate(ALL_CLASSIFIERS):
             cl_name = latex_classifier_name(cl)
 
-            # Find the maximum tta_acc for the current classifier
-            valid_accs = [
-                data[cl][sk]["tta_acc"]
+            valid_top1 = [
+                data[cl][sk]["top1"]["tta_acc"]
                 for sk in strategy_keys
-                if data[cl][sk] is not None
+                if data[cl].get(sk) and data[cl][sk]["top1"] is not None
             ]
-            max_acc = max(valid_accs) if valid_accs else None
+            max_top1 = max(valid_top1) if valid_top1 else None
+
+            valid_bal = [
+                data[cl][sk]["balanced"]["tta_acc"]
+                for sk in strategy_keys
+                if data[cl].get(sk) and data[cl][sk]["balanced"] is not None
+            ]
+            max_bal = max(valid_bal) if valid_bal else None
 
             for s_idx, strategy_key in enumerate(strategy_keys):
-                r = data[cl][strategy_key]
+                r_top1 = data[cl][strategy_key]["top1"]
+                r_bal = data[cl][strategy_key]["balanced"]
 
-                auc = f"{r["metrics"]["auc"]:.2f}"
-                ece = f"{r["metrics"]["ece"]:.2f}"
-                if r is None:
-                    lines.append(
-                        " & ".join([latex_classifier_name(cl)] + ["--"] * 8) + r" \\"
-                    )
+                if r_top1 is None or r_bal is None:
+                    lines.append(" & ".join([cl_name] + ["--"] * 6) + r" \\")
                     continue
 
+                num_strategies = len(strategy_keys)
                 classifier_cell = (
-                    f"\\multirow{{{len(strategy_keys)}}}{{*}}{{{cl_name}}}"
+                    f"\\multirow{{{num_strategies}}}{{*}}{{{cl_name}}}"
                     if s_idx == 0
                     else ""
                 )
                 baseline_cell = (
-                    f"\\multirow{{{len(strategy_keys)}}}{{*}}{{{r['baseline_acc']:.2f}}}"
+                    f"\\multirow{{{num_strategies}}}{{*}}{{{r_top1['baseline_acc']:.2f}}}"
                     if s_idx == 0
                     else ""
                 )
-                delta_prefix = "+" if r["delta_pp"] >= 0 else ""
-                delta_ci = f"{delta_prefix}{r['delta_pp']:.2f} [{r['ci_lower']:.2f}, {r['ci_upper']:.2f}]"
 
-                # Format and apply \textbf if value matches the maximum
-                acc_str = f"{r['tta_acc']:.2f}"
-                if max_acc is not None and r["tta_acc"] == max_acc:
-                    acc_str = f"\\textbf{{{acc_str}}}"
+                top1_val = f"{r_top1['tta_acc']:.2f}"
+                if max_top1 is not None and r_top1["tta_acc"] == max_top1:
+                    top1_val = f"\\textbf{{{top1_val}}}"
+
+                bal_val = f"{r_bal['tta_acc']:.2f}"
+                if max_bal is not None and r_bal["tta_acc"] == max_bal:
+                    bal_val = f"\\textbf{{{bal_val}}}"
+
+                top1_str = f"{top1_val} $\\pm$ {r_top1['std']:.2f}" if r_top1.get("std") is not None else f"{top1_val}"
+                bal_str = f"{bal_val} $\\pm$ {r_bal['std']:.2f}" if r_bal.get("std") is not None else f"{bal_val}"
+
+                delta_prefix = "+" if r_top1["delta_pp"] >= 0 else ""
+                delta_ci = f"{delta_prefix}{r_top1['delta_pp']:.2f} [{r_top1['ci_lower']:.2f}, {r_top1['ci_upper']:.2f}]"
 
                 row = [
                     classifier_cell,
                     baseline_cell,
                     strategy_label(strategy_key),
-                    acc_str,
+                    top1_str,
+                    bal_str,
                     delta_ci,
-                    format_pvalue(r["p_value"]),
-                    ece,
-                    auc
+                    format_pvalue(r_top1["p_value"]),
                 ]
                 lines.append(" & ".join(row) + r" \\")
 
             if cl_idx < len(ALL_CLASSIFIERS) - 1:
                 lines.append(r"\midrule")
-
-        lines.append(r"\bottomrule")
-        lines.append(r"\end{tabular}")
-
-    elif table_mode == "benchmarks":
-        lines.append(r"\begin{tabular}{llcccccc}")
-        lines.append(r"\toprule")
-        lines.append(
-            r"\textbf{Backbone} & \textbf{Benchmark} & \textbf{Baseline (\%)} & "
-            r"\textbf{Strategy} & \textbf{TTA (\%$\uparrow$)} & "
-            r"\textbf{$\Delta$ (95\% CI)} & \textbf{$p$}"
-            r" \\"
-        )
-        lines.append(r"\midrule")
-
-        for cl_idx, cl in enumerate(TARGET_CLASSIFIERS):
-            cl_name = latex_escape(latex_classifier_name(cl))
-
-            printable_rows = []
-            for ds, ds_split in ALL_SPLITS.items():
-                for strategy_key in strategy_keys:
-                    if strategy_key == "ablation/adain_tta":
-                        continue
-                    if data[cl].get(ds, {}).get(strategy_key) is not None:
-                        printable_rows.append((ds, ds_split, strategy_key))
-
-            total_cl_rows = len(printable_rows)
-            cl_rendered = False
-
-            valid_ds_keys = list(ALL_SPLITS.keys())
-            for ds_idx, (ds, ds_split) in enumerate(ALL_SPLITS.items()):
-                ds_rows = [r_tuple for r_tuple in printable_rows if r_tuple[0] == ds]
-                ds_row_count = len(ds_rows)
-                if ds_row_count == 0:
-                    continue
-                ds_rendered = False
-
-                # Calculate max accuracy for the current dataset and classifier
-                ds_accs = [
-                    data[cl][ds][sk]["tta_acc"]
-                    for _, _, sk in ds_rows
-                    if "tta_acc" in data[cl][ds][sk]
-                ]
-                ds_max_acc = max(ds_accs) if ds_accs else None
-
-                for r_ds, r_split, strategy_key in ds_rows:
-                    r = data[cl][r_ds][strategy_key]
-
-                    classifier_cell = (
-                        f"\\multirow{{{total_cl_rows}}}{{*}}{{{cl_name}}}"
-                        if not cl_rendered
-                        else ""
-                    )
-                    cl_rendered = True
-
-                    clean_split = latex_escape(r_split)
-                    dataset_cell = (
-                        f"\\multirow{{{ds_row_count}}}{{*}}{{{clean_split}}}"
-                        if not ds_rendered
-                        else ""
-                    )
-
-                    baseline_cell = (
-                        f"\\multirow{{{ds_row_count}}}{{*}}{{{r['baseline_acc']:.2f}}}"
-                        if not ds_rendered
-                        else ""
-                    )
-                    ds_rendered = True
-
-                    delta_prefix = "+" if r["delta_pp"] >= 0 else ""
-                    delta_ci = f"{delta_prefix}{r['delta_pp']:.2f} [{r['ci_lower']:.2f}, {r['ci_upper']:.2f}]"
-
-                    acc_str = f"{r['tta_acc']:.2f}"
-                    if ds_max_acc is not None and r["tta_acc"] == ds_max_acc:
-                        acc_str = f"\\textbf{{{acc_str}}}"
-
-                    clean_strat = latex_escape(strategy_label(strategy_key))
-
-                    row = [
-                        classifier_cell,
-                        dataset_cell,
-                        baseline_cell,
-                        clean_strat,
-                        acc_str,
-                        delta_ci,
-                        format_pvalue(r["p_value"]),
-                    ]
-                    lines.append(" & ".join(row) + r" \\")
-
-                # Insert partial line between datasets (columns 2 through 7)
-                if ds_idx < len(valid_ds_keys) - 1:
-                    lines.append(r"\cmidrule{2-7}")
-
-            if cl_idx < len(TARGET_CLASSIFIERS) - 1:
-                lines.append(r"\midrule")
-
-        lines.append(r"\bottomrule")
-        lines.append(r"\end{tabular}%")
 
     elif table_mode == "n_refs":
         del TTA_STRATEGIES["hybrid_tta"]
@@ -724,7 +606,7 @@ def generate_transition_table(
                 if cfg_key == "geo":
                     data[cl][cfg_key] = {
                         view: load_transition_stats(
-                            results_dir, dataset, "geometric_tta", cl, view, seed=seed, against=against
+                            results_dir, dataset, "geometric_tta", cl, view, seed=seed, against=against, stat_type="acc"
                         )
                         for view in views
                     }
@@ -732,7 +614,7 @@ def generate_transition_table(
                     data[cl][cfg_key] = {
                         view: load_transition_stats(
                             results_dir, dataset, "hybrid_tta", cl, view,
-                            seed=seed, against=against,split=sp, sty=sty,
+                            seed=seed, against=against,stat_type="acc", split=sp, sty=sty,
                         )
                         for view in views
                     }
@@ -809,13 +691,81 @@ def generate_transition_table(
         )
         lines.append(r"\bottomrule")
         lines.append(r"\end{tabular}")
+    elif table_mode == "hybrid_refs":
+        ref_steps = [8, 16, 32, 64]
+        ref_cols = [f"$N={rfs}$" for rfs in ref_steps]
+
+        # Table header setup: Backbone | Baseline | Geo (N=8..64) | StyleID (N=8..64) | Hybrid S1 (N=8..64) | Hybrid S2 (N=8..64)
+        # Total columns = 1 (Backbone) + 1 (Baseline) + 4 strategies * len(ref_steps)
+        tot_cols = 2 + 4 * len(ref_steps)
+        lines.append(r"\begin{tabular}{l" + "c" * (tot_cols - 1) + "}")
+        lines.append(r"\toprule")
+        lines.append(
+            r"\textbf{Backbone} & \textbf{Baseline} & "
+            + r" & ".join(
+                [f"\\textbf{{Geo ($N={rfs}$)}}" for rfs in ref_steps]
+                + [f"\\textbf{{StyleID ($N={rfs}$)}}" for rfs in ref_steps]
+                + [f"\\textbf{{Hybrid S1 ($N={rfs}$)}}" for rfs in ref_steps]
+                + [f"\\textbf{{Hybrid S2 ($N={rfs}$)}}" for rfs in ref_steps]
+            )
+            + r" \\"
+        )
+        lines.append(r"\midrule")
+
+        for cl_idx, cl in enumerate(ALL_CLASSIFIERS):
+            cl_name = latex_classifier_name(cl)
+
+            geo_accs = []
+            style_accs = []
+            hs1_accs = []
+            hs2_accs = []
+            baseline_val = 0.0
+
+            for rfs in ref_steps:
+                geo = load_transition_stats(
+                    results_dir, dataset, "geometric_tta", cl, rfs, seed=seed, against=against,stat_type="acc"
+                )
+                style_id = load_transition_stats(
+                    results_dir, dataset, "ablation/retristyle", cl, rfs, seed=seed, against=against, stat_type="acc"
+                )
+                h_s1 = load_transition_stats(
+                    results_dir, dataset, "hybrid_tta", cl, rfs, seed=seed, against=against,stat_type="acc" ,split=1, sty=hybrid_sty
+                )
+                h_s2 = load_transition_stats(
+                    results_dir, dataset, "hybrid_tta", cl, rfs, seed=seed, against=against,stat_type="acc" ,split=4, sty=hybrid_sty
+                )
+
+                if geo and baseline_val == 0.0:
+                    baseline_val = geo.get("baseline_acc", 0.0)
+
+                geo_accs.append(geo["tta_acc"] if geo else 0.0)
+                style_accs.append(style_id["tta_acc"] if style_id else 0.0)
+                hs1_accs.append(h_s1["tta_acc"] if h_s1 else 0.0)
+                hs2_accs.append(h_s2["tta_acc"] if h_s2 else 0.0)
+
+            all_accs = geo_accs + style_accs + hs1_accs + hs2_accs
+            max_acc = max(all_accs) if all_accs else 0.0
+
+            def fmt(acc):
+                s = f"{acc:.2f}"
+                return f"\\textbf{{{s}}}" if acc == max_acc else s
+
+            row = (
+                [cl_name, f"{baseline_val:.2f}"]
+                + [fmt(a) for a in geo_accs]
+                + [fmt(a) for a in style_accs]
+                + [fmt(a) for a in hs1_accs]
+                + [fmt(a) for a in hs2_accs]
+            )
+            lines.append(" & ".join(row) + r" \\")
+
     elif table_mode == "hybrid_overview":
         lines.append(r"\begin{tabular}{lcccccc}")
         lines.append(r"\toprule")
         lines.append(
-            r"\textbf{Backbone} & \textbf{Baseline} & \textbf{Geo-TTA ($N=32$)} & "
-            r"\textbf{StyleID only (best $N$)} & \textbf{Hybrid S1 ($N=32$)} & "
-            r"\textbf{Hybrid S2 ($N=32$)} & \textbf{$\Delta$ S2 vs Geo} \\"
+            r"\textbf{Backbone} & \textbf{Baseline} & \textbf{Geo-TTA ($N=64$)} & "
+            r"\textbf{StyleID only ($N=16$)} & \textbf{Hybrid S1 ($N=64$)} & "
+            r"\textbf{Hybrid S2 ($N=64$)} & \textbf{$\Delta$ S2 vs Geo} \\"
         )
         lines.append(r"\midrule")
 
@@ -974,8 +924,8 @@ def generate_transition_table(
         lines.append(r"\toprule")
         lines.append(
             r"\textbf{Dataset} & \textbf{Backbone} & \textbf{Baseline} & "
-            r"\textbf{Geo-TTA ($N=32$)} & \textbf{StyleID only (best $N$)} & "
-            r"\textbf{Hybrid S1 ($N=32$)} & \textbf{Hybrid S2 ($N=32$)} & "
+            r"\textbf{Geo-TTA ($N=64$)} & \textbf{STyle-TTA($N=16$)} & "
+            r"\textbf{Hybrid S1 ($N=64$)} & \textbf{Hybrid S2 ($N=64$)} & "
             r"\textbf{$\Delta$ S2 vs Geo} \\"
         )
         lines.append(r"\midrule")
@@ -991,7 +941,7 @@ def generate_transition_table(
 
                 # Load statistics across all 4 evaluation pathways
                 geo = load_transition_stats(
-                    results_dir, ds_name, "geometric_tta", cl, 32, seed=seed, against=against
+                    results_dir, ds_name, "geometric_tta", cl, 64, seed=seed, against=against
                 )
                 style_rfs = rfs_values.get("ablation/retristyle", 16)
                 if ds_name == "imagenet":
@@ -1001,10 +951,10 @@ def generate_transition_table(
                     results_dir, ds_name, "ablation/retristyle", cl, style_rfs, seed=seed, against=against
                 )
                 h_s1 = load_transition_stats(
-                    results_dir, ds_name, "hybrid_tta", cl, 32, seed=seed, against=against, split=1, sty=hybrid_sty
+                    results_dir, ds_name, "hybrid_tta", cl, 64, seed=seed, against=against, split=1, sty=hybrid_sty
                 )
                 h_s2 = load_transition_stats(
-                    results_dir, ds_name, "hybrid_tta", cl, 32, seed=seed, against=against, split=4, sty=hybrid_sty
+                    results_dir, ds_name, "hybrid_tta", cl, 64, seed=seed, against=against, split=4, sty=hybrid_sty
                 )
 
                 baseline_val = geo["baseline_acc"] if geo else 0.0
@@ -1079,7 +1029,7 @@ def generate_transition_table(
 
             for s_idx, strategy_key in enumerate(strategy_keys):
                 r = data[cl].get(strategy_key, None)
-                if r is None:
+                if r is None or strategy_key=="ablation/adain_tta":
                     continue
                 auc = f"{r["metrics"]["auc"]:.2f}"
                 ece = f"{r["metrics"]["ece"]:.2f}"
@@ -1224,16 +1174,15 @@ if __name__ == "__main__":
     results_dir = Path("./results")
     output_dir = Path("./output")
     against = "baseline"
-    table_mode = "calibration"
+    table_mode = "compact"
     for ds in ["imagenet", "eurosat", "midog", "camelyon17wilds", "epistr"]:
     # 5.3.3 ImageNet-R — comprehensive, all style-transfer strategies
         generate_transition_table(
             results_dir=results_dir,
             dataset=ds,
             split=TRUE_SPLITS[ALL_SPLITS[ds]],
-            strategy_keys=["ablation/adain_tta", "ablation/retristyle", "geometric_tta"],
+            strategy_keys=["ablation/retristyle", "geometric_tta"],
             rfs_values={
-                "ablation/adain_tta": 64,
                 "ablation/retristyle": 4,
                 "geometric_tta": 64,
             },

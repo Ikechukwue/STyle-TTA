@@ -1,0 +1,19 @@
+\begin{table}[htbp]
+\centering
+\caption{Evaluation of baseline MIDOG(Test) and TTA methods across CNN, Vision Transformer, and Foundation Model backbones. Bold indicates the best performance per metric.}
+\label{tab:MIDOG_transitions}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lccccccccccccccccc}
+\toprule
+\textbf{Backbone} & \textbf{Baseline} & \textbf{Geo ($N=8$)} & \textbf{Geo ($N=16$)} & \textbf{Geo ($N=32$)} & \textbf{Geo ($N=64$)} & \textbf{StyleID ($N=8$)} & \textbf{StyleID ($N=16$)} & \textbf{StyleID ($N=32$)} & \textbf{StyleID ($N=64$)} & \textbf{Hybrid S1 ($N=8$)} & \textbf{Hybrid S1 ($N=16$)} & \textbf{Hybrid S1 ($N=32$)} & \textbf{Hybrid S1 ($N=64$)} & \textbf{Hybrid S2 ($N=8$)} & \textbf{Hybrid S2 ($N=16$)} & \textbf{Hybrid S2 ($N=32$)} & \textbf{Hybrid S2 ($N=64$)} \\
+\midrule
+ResNet-18 & 44.95 & 36.65 & 36.56 & 36.53 & 36.53 & 0.00 & 0.00 & 0.00 & 0.00 & \textbf{36.86} & 36.62 & 36.53 & 36.53 & \textbf{36.86} & 36.47 & 36.53 & 36.53 \\
+DenseNet-121 & 40.47 & 36.89 & 36.62 & 36.59 & 36.71 & 0.00 & 0.00 & 0.00 & 0.00 & \textbf{37.07} & 36.86 & 36.74 & 36.71 & 36.59 & 36.71 & 36.56 & 36.56 \\
+ViT-B/16 (224) & 37.10 & 36.53 & 36.56 & 36.50 & 36.56 & 0.00 & 0.00 & 0.00 & 0.00 & 36.50 & 36.56 & 36.50 & 36.56 & \textbf{36.62} & 36.44 & 36.50 & 36.40 \\
+Swin-B (224) & 54.62 & \textbf{47.65} & 47.17 & 47.44 & 46.56 & 0.00 & 0.00 & 0.00 & 0.00 & 47.47 & 46.80 & 47.04 & 47.07 & 44.20 & 42.56 & 41.35 & 41.25 \\
+CLIP ViT-B/16 & 61.41 & 58.32 & 57.93 & 57.87 & 58.41 & 0.00 & 0.00 & 0.00 & 0.00 & 62.66 & \textbf{62.75} & 61.38 & 61.32 & 61.99 & 62.50 & 60.84 & 61.14 \\
+DINOv2 ViT-B/14 & 52.11 & \textbf{50.11} & 49.74 & 49.86 & 50.05 & 0.00 & 0.00 & 0.00 & 0.00 & 48.80 & 48.77 & 49.23 & 49.20 & 43.98 & 43.19 & 42.86 & 42.26 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}

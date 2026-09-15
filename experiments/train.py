@@ -33,6 +33,7 @@ from sklearn.metrics import accuracy_score, balanced_accuracy_score, roc_auc_sco
 from torch.utils.data import WeightedRandomSampler
 from collections import Counter
 from sklearn.linear_model import LogisticRegression
+
 torch.cuda.empty_cache()
 
 #from medmnistc.augmentation import AugMedMNISTC
@@ -536,6 +537,13 @@ def train_one_epoch(
         # Track metrics
         total_loss += loss.item()
         y_true_list.append(y.cpu())
+
+        global_step = epoch * len(train_loader) + batch_idx
+        if accelerator.is_main_process:
+            accelerator.log({
+                "train/step_loss": loss.item(),
+                "train/lr": optimizer.param_groups[0]['lr']
+            }, step=global_step)
         
         # Handle potential NaNs in outputs for metrics (though less likely if loss is valid)
         preds = prediction_fn(outputs).detach().cpu()
@@ -672,11 +680,7 @@ def train(
     seed: int,
     use_cuda: bool,
     num_workers: int,
-    use_wandb: bool,
     split: Optional[str] = None,
-    wandb_project: Optional[str] = None,
-    wandb_entity: Optional[str] = None,
-    wandb_path: Optional[str] = None,
     resume_from_checkpoint: bool = False,
     save_checkpoint_every: int = 10,
     gradient_accumulation_steps: int = 1,
@@ -745,43 +749,16 @@ def train(
             'p': color_transfer_prob
         }
 
-    # Set WandB directory if specified
-    if wandb_path is not None:
-        os.environ['WANDB_DIR'] = wandb_path
-        # Create directory if it doesn't exist
-        Path(wandb_path).mkdir(parents=True, exist_ok=True)
-    
     # Initialize accelerator with gradient accumulation, mixed precision, and logging
-    log_with = ["wandb"] if use_wandb else None
     accelerator = Accelerator(
         gradient_accumulation_steps=gradient_accumulation_steps,
-        log_with=log_with
+        log_with="tensorboard",
+        project_dir="/home/stud/nemmler/retristyle/runs"
     )
         
-    # Check if resuming from checkpoint and get WandB run ID
-    wandb_run_id = None
-    wandb_resume = "never"  # Default: don't resume
-    
-    if resume_from_checkpoint and latest_checkpoint_path.exists():
-        wandb_run_id = get_wandb_run_id(latest_checkpoint_path)
-        if wandb_run_id:
-            wandb_resume = "allow"  # Resume if run exists, create new if not
-            accelerator.print(f"Found WandB run ID: {wandb_run_id}")
-            accelerator.print(f"WandB will attempt to resume run: {wandb_run_id}")
-    
-    # Initialize WandB with resume support
-    wandb_init_kwargs = {
-        "entity": wandb_entity,
-        "name": run_name,
-        "resume": wandb_resume
-    }
-    
-    # Add run ID if resuming
-    if wandb_run_id:
-        wandb_init_kwargs["id"] = wandb_run_id
-    
+   
     accelerator.init_trackers(
-        project_name=wandb_project,
+        project_name=run_name,
         config={
             'dataset': dataset,
             'classifier': classifier,
@@ -793,8 +770,7 @@ def train(
             'batch_size': batch_size,
             'lr': lr,
             'seed': seed,
-        },
-        init_kwargs={"wandb": wandb_init_kwargs},
+        }
     )
     
     # Set random seed
@@ -974,16 +950,27 @@ def train(
         )
         
         # Log metrics
-        accelerator.log({
-            "train/loss": train_metrics['loss'],
-            "train/accuracy": train_metrics['accuracy'],
-            "train/balanced_accuracy": train_metrics['balanced_accuracy'],
-            #"train/auc": train_metrics['auc'],
-            "val/loss": val_metrics['loss'],
-            "val/accuracy": val_metrics['accuracy'],
-            "val/balanced_accuracy": val_metrics['balanced_accuracy'],
-            #"val/auc": val_metrics['auc'],
-        }, step=epoch + 1)
+        logs = {
+                "epoch": epoch + 1,
+                "train/loss": train_metrics['loss'],
+                "train/accuracy": train_metrics['accuracy'],
+                "train/balanced_accuracy": train_metrics['balanced_accuracy'],
+                "val/loss": val_metrics['loss'],
+                "val/accuracy": val_metrics['accuracy'],
+                "val/balanced_accuracy": val_metrics['balanced_accuracy'],
+                "lr": optimizer.param_groups[0]['lr'],
+            }
+
+        #Log via Accelerate (wandb/tensorboard)
+        accelerator.log(logs, step=epoch + 1)
+
+        if accelerator.is_main_process:
+            log_file = output_path / f"{run_name}_metrics.csv"
+            file_exists = log_file.exists()
+            with open(log_file, mode='a') as f:
+                if not file_exists:
+                    f.write(",".join(logs.keys()) + "\n")
+                f.write(",".join(map(str, logs.values())) + "\n")
         
         # Print metrics
         accelerator.print(f"\nEpoch [{epoch + 1}/{epochs}]")
@@ -1012,14 +999,6 @@ def train(
                 'best_val_loss': best_val_loss,
                 'epochs_no_improve': epochs_no_improve
             }
-            
-            if hasattr(accelerator, 'get_tracker'):
-                try:
-                    wandb_tracker = accelerator.get_tracker("wandb")
-                    if wandb_tracker and hasattr(wandb_tracker, 'run'):
-                        checkpoint_metadata['wandb_run_id'] = wandb_tracker.run.id
-                except:
-                    pass
             
             save_latest_checkpoint(
                 accelerator,
@@ -1050,14 +1029,7 @@ def train(
         'best_val_loss': best_val_loss,
         'training_complete': True
     }
-    
-    if hasattr(accelerator, 'get_tracker'):
-        try:
-            wandb_tracker = accelerator.get_tracker("wandb")
-            if wandb_tracker and hasattr(wandb_tracker, 'run'):
-                final_metadata['wandb_run_id'] = wandb_tracker.run.id
-        except:
-            pass
+
     
     save_latest_checkpoint(
         accelerator,
@@ -1125,12 +1097,6 @@ def main():
     parser.add_argument('--resume_from_checkpoint', action='store_true', help='Resume training from latest checkpoint if available')
     parser.add_argument('--save_checkpoint_every', type=int, default=10, help='Save checkpoint every N epochs')
     
-    # WandB configuration
-    parser.add_argument('--use_wandb', action='store_true', help='Enable WandB tracking for experiment logging')
-    parser.add_argument('--wandb_project', type=str, default='colorist-training', help='WandB project name')
-    parser.add_argument('--wandb_entity', type=str, default='ofu-xai', help='WandB entity name')
-    parser.add_argument('--wandb_path', type=str, default=None, help='Directory for WandB logs (default: wandb/ in current directory)')
-    
     args = parser.parse_args()
     
     # Validate arguments
@@ -1157,10 +1123,6 @@ def main():
         seed=args.seed,
         use_cuda=args.use_cuda,
         num_workers=args.num_workers,
-        use_wandb=args.use_wandb,
-        wandb_project=args.wandb_project,
-        wandb_entity=args.wandb_entity,
-        wandb_path=args.wandb_path,
         resume_from_checkpoint=args.resume_from_checkpoint,
         save_checkpoint_every=args.save_checkpoint_every,
         gradient_accumulation_steps=args.gradient_accumulation_steps,

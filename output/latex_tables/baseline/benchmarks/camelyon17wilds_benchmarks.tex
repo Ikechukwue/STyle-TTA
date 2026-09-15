@@ -1,57 +1,17 @@
 \begin{table}[htbp]
 \centering
-\caption{Sample-level transitions (Baseline $\rightarrow$ TTA), Camelyon17-WILDS $\rightarrow$ Camelyon17-WILDS(Val).}
+\caption{Evaluation of baseline Camelyon17-WILDS(Test) and TTA methods across CNN, Vision Transformer, and Foundation Model backbones. Bold indicates the best performance per metric.}
 \label{tab:Camelyon17-WILDS_transitions}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{llcccccc}
 \toprule
 \textbf{Backbone} & \textbf{Benchmark} & \textbf{Baseline (\%)} & \textbf{Strategy} & \textbf{TTA (\%$\uparrow$)} & \textbf{$\Delta$ (95\% CI)} & \textbf{$p$} \\
 \midrule
-\multirow{10}{*}{CNN} & \multirow{2}{*}{MIDOG(Val)} & \multirow{2}{*}{48.98} & StyleID & \textbf{50.03} & +1.05 [-1.00, 3.15] & $<$0.001 \\
- &  &  & Geometric & 49.97 & +0.99 [-0.35, 2.39] & $<$0.001 \\
-\cmidrule{2-7}
- & \multirow{2}{*}{UCMerced} & \multirow{2}{*}{33.83} & StyleID & \textbf{52.67} & +18.83 [14.75, 22.83] & $<$0.001 \\
- &  &  & Geometric & 27.25 & -6.58 [-9.50, -3.58] & $<$0.001 \\
-\cmidrule{2-7}
- & \multirow{2}{*}{Camelyon17-WILDS(Val)} & \multirow{2}{*}{67.66} & StyleID & 80.22 & +12.56 [10.75, 14.37] & $<$0.001 \\
- &  &  & Geometric & \textbf{84.15} & +16.80 [16.54, 17.07] & $<$0.001 \\
-\cmidrule{2-7}
- & \multirow{2}{*}{EpiStr(Val)} & \multirow{2}{*}{50.12} & StyleID & 67.36 & +17.24 [15.10, 19.33] & $<$0.001 \\
- &  &  & Geometric & \textbf{76.94} & +26.82 [24.49, 29.09] & $<$0.001 \\
-\cmidrule{2-7}
- & \multirow{2}{*}{ImageNet-R} & \multirow{2}{*}{40.60} & StyleID & \textbf{50.32} & +9.72 [9.21, 10.23] & $<$0.001 \\
- &  &  & Geometric & 43.67 & +3.08 [2.68, 3.48] & $<$0.001 \\
 \midrule
-\multirow{10}{*}{Foundation Model} & \multirow{2}{*}{MIDOG(Val)} & \multirow{2}{*}{50.28} & StyleID & \textbf{51.05} & +0.77 [-1.22, 2.77] & $<$0.001 \\
- &  &  & Geometric & 49.50 & -0.78 [-2.42, 0.87] & 0.014 \\
-\cmidrule{2-7}
- & \multirow{2}{*}{UCMerced} & \multirow{2}{*}{72.92} & StyleID & 69.75 & -3.17 [-6.08, -0.08] & $<$0.001 \\
- &  &  & Geometric & \textbf{72.17} & -0.75 [-3.33, 1.92] & 0.034 \\
-\cmidrule{2-7}
- & \multirow{2}{*}{Camelyon17-WILDS(Val)} & \multirow{2}{*}{92.97} & StyleID & \textbf{94.98} & +2.01 [1.17, 2.86] & $<$0.001 \\
- &  &  & Geometric & 93.81 & +0.85 [-0.00, 1.70] & 0.068 \\
-\cmidrule{2-7}
- & \multirow{2}{*}{EpiStr(Val)} & \multirow{2}{*}{65.70} & StyleID & 66.45 & +0.75 [-1.27, 2.75] & 0.932 \\
- &  &  & Geometric & \textbf{74.35} & +8.65 [6.93, 10.34] & $<$0.001 \\
-\cmidrule{2-7}
- & \multirow{2}{*}{ImageNet-R} & \multirow{2}{*}{69.04} & StyleID & 67.23 & -1.80 [-2.23, -1.39] & $<$0.001 \\
- &  &  & Geometric & \textbf{70.41} & +1.37 [1.05, 1.69] & $<$0.001 \\
 \midrule
-\multirow{10}{*}{Vision Transformer} & \multirow{2}{*}{MIDOG(Val)} & \multirow{2}{*}{51.80} & StyleID & 49.33 & -2.47 [-4.60, -0.37] & $<$0.001 \\
- &  &  & Geometric & \textbf{50.31} & -1.49 [-3.13, 0.17] & $<$0.001 \\
-\cmidrule{2-7}
- & \multirow{2}{*}{UCMerced} & \multirow{2}{*}{68.58} & StyleID & 68.92 & +0.33 [-2.92, 3.58] & 0.002 \\
- &  &  & Geometric & \textbf{72.08} & +3.50 [0.42, 6.75] & 0.320 \\
-\cmidrule{2-7}
- & \multirow{2}{*}{Camelyon17-WILDS(Val)} & \multirow{2}{*}{92.76} & StyleID & \textbf{95.21} & +2.45 [1.49, 3.49] & $<$0.001 \\
- &  &  & Geometric & 92.82 & +0.55 [0.40, 0.71] & $<$0.001 \\
-\cmidrule{2-7}
- & \multirow{2}{*}{EpiStr(Val)} & \multirow{2}{*}{69.87} & StyleID & \textbf{70.41} & +0.54 [-1.85, 2.90] & 0.624 \\
- &  &  & Geometric & 67.48 & -2.39 [-4.08, -0.67] & 0.010 \\
-\cmidrule{2-7}
- & \multirow{2}{*}{ImageNet-R} & \multirow{2}{*}{60.41} & StyleID & \textbf{63.88} & +3.47 [2.99, 3.94] & $<$0.001 \\
- &  &  & Geometric & 62.47 & +2.06 [1.68, 2.45] & $<$0.001 \\
 \bottomrule
 \end{tabular}%
+\bottomrule
+\end{tabular}
 }
 \end{table}

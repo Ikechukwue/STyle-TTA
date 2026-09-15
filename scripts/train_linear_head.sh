@@ -2,9 +2,9 @@
 
 export PYTHONWARNINGS="ignore::UserWarning:pkg_resources"
 # Define the dataset to evaluate
-DATASET="epistr"
+DATASET=("epistr" "midog" "camelyon17wilds" "eurosat")
 DATA_PATH="./data"
-OUTPUT_PATH="./data/models/$DATASET"
+
 # 1. Models designated for LINEAR PROBING
 # Typically uses a higher learning rate and fewer epochs
 LP_CLASSIFIERS=(
@@ -25,37 +25,39 @@ FT_CLASSIFIERS=(
 )
 
 echo "=== Starting Linear Probing Experiments ==="
-for CL in "${LP_CLASSIFIERS[@]}"
-do
-    echo "Running LP for model: $CL"
-    python -m experiments.train \
-        --dataset "$DATASET" \
-        --data_path "$DATA_PATH" \
-        --classifier "$CL" \
-        --augmentations "random_flip" "random_resized_crop" \
-        --train_mode "linear_probe" \
-        --epochs 50 \
-        --lr 0.01 \
-        --batch_size 32 \
-        --seed 42 \
-        --output_path "$OUTPUT_PATH" \
-        --use_cuda 2>&1 | tee "logs/${DATASET}-${CL}-linear_probe.log"
-done
+for DS in "${DATASET[@]}"; do
+    OUTPUT_PATH="./data/models/test/$DS"
+    for CL in "${LP_CLASSIFIERS[@]}"; do
+        echo "Running LP for model: $CL"
+        python -m experiments.train \
+            --dataset "$DS" \
+            --data_path "$DATA_PATH" \
+            --classifier "$CL" \
+            --augmentations "random_flip" "random_resized_crop" \
+            --train_mode "linear_probe" \
+            --epochs 50 \
+            --lr 0.01 \
+            --batch_size 32 \
+            --seed 42 \
+            --output_path "$OUTPUT_PATH" \
+            --use_cuda 2>&1 | tee "logs/${DATASET}-${CL}-linear_probe.log"
+    done
 
-echo "=== Starting Full Finetuning Experiments ==="
-for CL in "${FT_CLASSIFIERS[@]}"
-do
-    echo "Running FT for model: $CL"
-    python -m experiments.train \
-        --dataset "$DATASET" \
-        --data_path "$DATA_PATH" \
-        --classifier "$CL" \
-        --train_mode "finetune" \
-        --augmentations "random_flip" "random_resized_crop" \
-        --epochs 20 \
-        --lr 0.0003 \
-        --batch_size 32 \
-        --seed 42 \
-        --output_path "$OUTPUT_PATH" \
-        --use_cuda 2>&1 | tee "logs/${DATASET}-${CL}-finetune.log"
+    echo "=== Starting Full Finetuning Experiments ==="
+    for CL in "${FT_CLASSIFIERS[@]}"
+    do
+        echo "Running FT for model: $CL"
+        python -m experiments.train \
+            --dataset "$DS" \
+            --data_path "$DATA_PATH" \
+            --classifier "$CL" \
+            --train_mode "finetune" \
+            --augmentations "random_flip" "random_resized_crop" \
+            --epochs 20 \
+            --lr 0.0003 \
+            --batch_size 32 \
+            --seed 42 \
+            --output_path "$OUTPUT_PATH" \
+            --use_cuda 2>&1 | tee "logs/${DATASET}-${CL}-finetune.log"
+    done
 done

@@ -1,0 +1,19 @@
+\begin{table}[htbp]
+\centering
+\caption{Evaluation of baseline Camelyon17-WILDS(Test) and TTA methods across CNN, Vision Transformer, and Foundation Model backbones. Bold indicates the best performance per metric.}
+\label{tab:Camelyon17-WILDS_transitions}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lccccccccccccccccc}
+\toprule
+\textbf{Backbone} & \textbf{Baseline} & \textbf{Geo ($N=8$)} & \textbf{Geo ($N=16$)} & \textbf{Geo ($N=32$)} & \textbf{Geo ($N=64$)} & \textbf{StyleID ($N=8$)} & \textbf{StyleID ($N=16$)} & \textbf{StyleID ($N=32$)} & \textbf{StyleID ($N=64$)} & \textbf{Hybrid S1 ($N=8$)} & \textbf{Hybrid S1 ($N=16$)} & \textbf{Hybrid S1 ($N=32$)} & \textbf{Hybrid S1 ($N=64$)} & \textbf{Hybrid S2 ($N=8$)} & \textbf{Hybrid S2 ($N=16$)} & \textbf{Hybrid S2 ($N=32$)} & \textbf{Hybrid S2 ($N=64$)} \\
+\midrule
+ResNet-18 & 73.20 & 87.05 & 88.10 & 88.60 & 88.70 & 0.00 & 0.00 & 0.00 & 0.00 & 91.00 & 89.55 & 89.85 & 89.50 & 91.45 & 92.35 & \textbf{92.40} & 92.15 \\
+DenseNet-121 & 67.95 & 84.30 & 84.70 & 85.10 & 85.40 & 0.00 & 0.00 & 0.00 & 0.00 & 85.60 & 85.80 & 86.15 & 85.75 & 91.30 & \textbf{92.70} & 92.60 & 92.55 \\
+ViT-B/16 (224) & 89.20 & 91.50 & 91.35 & 91.70 & 91.60 & 0.00 & 0.00 & 0.00 & 0.00 & 93.10 & 92.65 & 92.35 & 91.90 & 93.55 & 93.90 & \textbf{94.00} & \textbf{94.00} \\
+Swin-B (224) & 92.75 & 92.40 & 92.75 & 92.60 & 92.65 & 0.00 & 0.00 & 0.00 & 0.00 & 94.90 & 94.10 & 93.40 & 93.15 & \textbf{95.30} & 95.20 & 94.80 & 94.65 \\
+CLIP ViT-B/16 & 92.30 & 83.95 & 82.65 & 82.50 & 82.35 & 0.00 & 0.00 & 0.00 & 0.00 & \textbf{92.95} & 90.15 & 89.00 & 87.60 & 92.85 & 90.35 & 87.75 & 86.55 \\
+DINOv2 ViT-B/14 & 93.00 & 93.30 & 93.75 & 93.80 & 93.85 & 0.00 & 0.00 & 0.00 & 0.00 & 95.10 & 94.65 & 94.25 & 93.85 & \textbf{95.50} & 95.20 & \textbf{95.50} & 95.30 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}

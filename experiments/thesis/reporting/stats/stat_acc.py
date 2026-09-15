@@ -1,15 +1,25 @@
-from pathlib import Path
-from typing import Optional
 import json
-from tqdm import tqdm 
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
-from scipy.stats import chi2
-from config.constants import ALL_CLASSIFIERS, TTA_STRATEGIES, DEFAULT_SEED, ALL_DATASETS, RETRIEVAL_STRATEGIES, ALL_SEEDS
+from scipy.stats import binomtest
+from tqdm import tqdm
+
+from config.constants import (
+    ALL_CLASSIFIERS,
+    ALL_DATASETS,
+    ALL_SEEDS,
+    DEFAULT_SEED,
+    RETRIEVAL_STRATEGIES,
+    TTA_STRATEGIES,
+)
 from config.helpers import baseline_results
+
 
 def get_prediction_filename(s_key, cfg, ds, cl, ev, retr, rfs, seed, sty=1, use_n=1):
     target_cfg = TTA_STRATEGIES.get(s_key, cfg)
-    
+
     if s_key == "hybrid_tta":
         geo = (rfs - 1) - sty
         return "{ds}_{cl}_hybrid_geo{geo}_sty{sty}_{eval}_split{use_n}_nr{rfs}_seed{seed}_predictions.json".format(
@@ -25,168 +35,136 @@ def get_prediction_filename(s_key, cfg, ds, cl, ev, retr, rfs, seed, sty=1, use_
 
     fmt_kwargs = {
         "ds": ds,
-        "cl": cl, 
-        "eval": ev if ev else target_cfg.get("default_eval", "vanilla"), 
+        "cl": cl,
+        "eval": ev if ev else target_cfg.get("default_eval", "vanilla"),
         "rfs": rfs,
-        "seed": seed, 
-        "retr": retr if retr is not None else target_cfg.get("default_retr", ""), 
-    }              
+        "seed": seed,
+        "retr": retr if retr is not None else target_cfg.get("default_retr", ""),
+    }
+
     try:
         return target_cfg["template"].format(**fmt_kwargs)
     except KeyError:
         return target_cfg["template"].format(cl=cl, rfs=rfs, seed=seed)
 
 
+_prediction_cache = {}
+
+
 def get_predictions(results: dict):
-    """
-    Extract true labels and predicted classes from a results JSON.
-
-    Assumes:
-        results["predictions"] = [
-            {"y_true": ..., "y_pred": [...]},
-            ...
-        ]
-
-    Returns:
-        y_true: shape (N,)
-        y_pred: shape (N,)
-    """
-    y_true = np.array(
-        [sample["y_true"] for sample in results["predictions"]]
-    )
-
-    y_pred_matrix = np.array(
-        [sample["y_pred"] for sample in results["predictions"]]
-    )
-
+    y_true = np.array([sample["y_true"] for sample in results["predictions"]])
+    y_pred_matrix = np.array([sample["y_pred"] for sample in results["predictions"]])
     y_pred = np.argmax(y_pred_matrix, axis=1)
-
     return y_true, y_pred
 
 
+def load_predictions(path: Path):
+    path_str = str(path)
+    if path_str not in _prediction_cache:
+        with open(path_str, "r") as f:
+            results = json.load(f)
+        _prediction_cache[path_str] = get_predictions(results)
+    return _prediction_cache[path_str]
+
+
 def balanced_accuracy_score_np(y_true, y_pred, normal=False):
-    """
-    Balanced accuracy = mean recall over classes.
-    """
     if normal:
         return float(np.mean(y_true == y_pred))
-    
+
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
     classes = np.unique(y_true)
+    n_classes = len(classes)
 
-    recalls = []
+    class_to_idx = {cls: i for i, cls in enumerate(classes)}
+    y_true_idx = np.array([class_to_idx[v] for v in y_true], dtype=np.int64)
+    y_pred_idx = np.array([class_to_idx.get(v, -1) for v in y_pred], dtype=np.int64)
 
-    for cls in classes:
-        mask = y_true == cls
-        if np.sum(mask) == 0:
-            continue
+    totals = np.bincount(y_true_idx, minlength=n_classes)
+    correct_mask = y_pred_idx == y_true_idx
+    correct = np.bincount(y_true_idx[correct_mask], minlength=n_classes)
 
-        recall = np.mean(y_pred[mask] == cls)
-        recalls.append(recall)
-
+    recalls = np.divide(correct, totals, out=np.zeros(n_classes, dtype=np.float64), where=totals != 0)
     return float(np.mean(recalls))
 
 
-def stratified_bootstrap_difference(
-    y_true,
-    pred_baseline,
-    pred_tta,
+def multi_seed_cluster_bootstrap_difference(
+    seed_data: Dict[int, Tuple[np.ndarray, np.ndarray, np.ndarray]],
     normal=False,
     n_bootstrap=10_000,
     confidence_level=0.95,
     seed=42,
 ):
-    """
-    Stratified bootstrap CI for the difference in balanced accuracy:
-
-        TTA balanced accuracy - baseline balanced accuracy
-
-    Resampling is performed independently within each ground-truth class.
-    """
-
     rng = np.random.default_rng(seed)
+    seeds_list = list(seed_data.keys())
+    n_seeds = len(seeds_list)
 
-    classes = np.unique(y_true)
-
-    # Store indices for every class.
-    class_indices = {
-        cls: np.where(y_true == cls)[0]
-        for cls in classes
-    }
+    preprocessed_seeds = {}
+    for s_id in seeds_list:
+        yt, pb, pt = seed_data[s_id]
+        classes = np.unique(yt)
+        class_indices = {cls: np.where(yt == cls)[0] for cls in classes}
+        preprocessed_seeds[s_id] = {
+            "y_true": yt,
+            "pred_baseline": pb,
+            "pred_tta": pt,
+            "classes": classes,
+            "class_indices": class_indices,
+        }
 
     bootstrap_differences = np.empty(n_bootstrap)
 
-    for b in tqdm(range(n_bootstrap)):
+    for b in tqdm(range(n_bootstrap), desc="Cluster Bootstrap"):
+        sampled_seed_ids = rng.choice(seeds_list, size=n_seeds, replace=True)
 
-        sampled_indices = []
+        all_yt, all_pb, all_pt = [], [], []
 
-        # Stratified resampling:
-        # sample the same number of examples from each class
-        # as originally present in that class.
-        for cls in classes:
-            indices = class_indices[cls]
+        for s_id in sampled_seed_ids:
+            s_meta = preprocessed_seeds[s_id]
+            yt = s_meta["y_true"]
+            pb = s_meta["pred_baseline"]
+            pt = s_meta["pred_tta"]
+            class_indices = s_meta["class_indices"]
 
-            sampled = rng.choice(
-                indices,
-                size=len(indices),
-                replace=True,
-            )
+            sampled_indices = []
+            for cls in s_meta["classes"]:
+                indices = class_indices[cls]
+                sampled = rng.choice(indices, size=len(indices), replace=True)
+                sampled_indices.append(sampled)
 
-            sampled_indices.append(sampled)
+            sampled_indices = np.concatenate(sampled_indices)
+            all_yt.append(yt[sampled_indices])
+            all_pb.append(pb[sampled_indices])
+            all_pt.append(pt[sampled_indices])
 
-        sampled_indices = np.concatenate(sampled_indices)
+        pooled_yt = np.concatenate(all_yt)
+        pooled_pb = np.concatenate(all_pb)
+        pooled_pt = np.concatenate(all_pt)
 
-        y_true_b = y_true[sampled_indices]
-        baseline_b = pred_baseline[sampled_indices]
-        tta_b = pred_tta[sampled_indices]
-
-        baseline_bal_acc = balanced_accuracy_score_np(
-            y_true_b,
-            baseline_b,
-            normal
-        )
-
-        tta_bal_acc = balanced_accuracy_score_np(
-            y_true_b,
-            tta_b,
-            normal
-        )
-
-        bootstrap_differences[b] = (
-            tta_bal_acc - baseline_bal_acc
-        )
+        baseline_bal_acc = balanced_accuracy_score_np(pooled_yt, pooled_pb, normal)
+        tta_bal_acc = balanced_accuracy_score_np(pooled_yt, pooled_pt, normal)
+        bootstrap_differences[b] = tta_bal_acc - baseline_bal_acc
 
     alpha = 1.0 - confidence_level
+    lower = np.percentile(bootstrap_differences, 100 * (alpha / 2))
+    upper = np.percentile(bootstrap_differences, 100 * (1 - alpha / 2))
 
-    lower = np.percentile(
-        bootstrap_differences,
-        100 * (alpha / 2),
-    )
+    obs_base_accs, obs_tta_accs = [], []
+    for s_id in seeds_list:
+        yt, pb, pt = seed_data[s_id]
+        obs_base_accs.append(balanced_accuracy_score_np(yt, pb, normal))
+        obs_tta_accs.append(balanced_accuracy_score_np(yt, pt, normal))
 
-    upper = np.percentile(
-        bootstrap_differences,
-        100 * (1 - alpha / 2),
-    )
-
-    # Difference on the original test set
-    baseline_bal_acc = balanced_accuracy_score_np(
-        y_true,
-        pred_baseline,
-        normal
-    )
-
-    tta_bal_acc = balanced_accuracy_score_np(
-        y_true,
-        pred_tta,
-        normal
-    )
-
-    observed_difference = tta_bal_acc - baseline_bal_acc
+    mean_baseline_acc = float(np.mean(obs_base_accs))
+    mean_tta_acc = float(np.mean(obs_tta_accs))
+    observed_difference = mean_tta_acc - mean_baseline_acc
 
     return {
-        "baseline_balanced_accuracy": baseline_bal_acc,
-        "tta_balanced_accuracy": tta_bal_acc,
-        "difference": observed_difference,
-        "difference_percentage_points": observed_difference * 100,
+        "baseline_balanced_accuracy_mean": mean_baseline_acc,
+        "tta_balanced_accuracy_mean": mean_tta_acc,
+        "difference": float(observed_difference),
+        "difference_percentage_points": float(observed_difference * 100),
         "ci_lower": float(lower),
         "ci_upper": float(upper),
         "ci_lower_percentage_points": float(lower * 100),
@@ -197,41 +175,21 @@ def stratified_bootstrap_difference(
     }
 
 
-def mcnemar_test(
-    y_true,
-    pred_baseline,
-    pred_tta,
-):
-    """
-    McNemar's test comparing paired baseline and TTA predictions.
+def mcnemar_test_pooled(seed_data: Dict[int, Tuple[np.ndarray, np.ndarray, np.ndarray]]):
+    all_yt = np.concatenate([v[0] for v in seed_data.values()])
+    all_pb = np.concatenate([v[1] for v in seed_data.values()])
+    all_pt = np.concatenate([v[2] for v in seed_data.values()])
 
-    Uses the exact binomial test, which is preferable to the
-    chi-square approximation when the number of discordant
-    observations is small.
-    """
+    baseline_correct = all_pb == all_yt
+    tta_correct = all_pt == all_yt
 
-    baseline_correct = pred_baseline == y_true
-    tta_correct = pred_tta == y_true
-
-    # Baseline correct, TTA wrong
-    b = np.sum(
-        baseline_correct & ~tta_correct
-    )
-
-    # Baseline wrong, TTA correct
-    c = np.sum(
-        ~baseline_correct & tta_correct
-    )
-
+    b = np.sum(baseline_correct & ~tta_correct)
+    c = np.sum(~baseline_correct & tta_correct)
     discordant = b + c
 
     if discordant == 0:
         p_value = 1.0
     else:
-        # Exact two-sided binomial test:
-        # Under H0, b and c have probability 0.5 each.
-        from scipy.stats import binomtest
-
         p_value = binomtest(
             k=min(b, c),
             n=discordant,
@@ -247,97 +205,61 @@ def mcnemar_test(
     }
 
 
-def calculate_statistical_comparison(
-    baseline_path: Path,
-    tta_path: Path,
+def calculate_statistical_comparison_multi_seed(
+    seed_paths: Dict[int, Tuple[Path, Path]],
     output_path: Path,
     normal=False,
     n_bootstrap=10_000,
     confidence_level=0.95,
     seed=42,
 ):
-    """
-    Calculate stratified bootstrap CI and McNemar's test
-    for one baseline-vs-TTA comparison.
+    seed_data = {}
+    for s_id, (base_path, tta_path) in seed_paths.items():
+        yt_base, pb = load_predictions(base_path)
+        yt_tta, pt = load_predictions(tta_path)
 
-    Results are saved as JSON.
-    """
+        if len(yt_base) != len(yt_tta):
+            raise ValueError(f"Seed {s_id}: baseline and TTA prediction sizes mismatch.")
 
-    with open(baseline_path, "r") as f:
-        baseline_results = json.load(f)
+        if not np.array_equal(yt_base, yt_tta):
+            raise ValueError(f"Seed {s_id}: Ground-truth labels mismatch between baseline and TTA.")
 
-    with open(tta_path, "r") as f:
-        tta_results = json.load(f)
+        seed_data[s_id] = (yt_base, pb, pt)
 
-    y_true_baseline, pred_baseline = get_predictions(
-        baseline_results
-    )
-
-    y_true_tta, pred_tta = get_predictions(
-        tta_results
-    )
-
-    if len(y_true_baseline) != len(y_true_tta):
-        raise ValueError(
-            f"Baseline {len(y_true_baseline)} and TTA {len(y_true_tta)} contain different numbers of predictions."
-        )
-
-    if not np.array_equal(y_true_baseline, y_true_tta):
-        raise ValueError(
-            "Ground-truth labels do not match between baseline and TTA."
-        )
-
-    y_true = y_true_baseline
-
-    bootstrap_results = stratified_bootstrap_difference(
-        y_true=y_true,
-        pred_baseline=pred_baseline,
-        pred_tta=pred_tta,
+    bootstrap_results = multi_seed_cluster_bootstrap_difference(
+        seed_data=seed_data,
         normal=normal,
         n_bootstrap=n_bootstrap,
         confidence_level=confidence_level,
         seed=seed,
     )
 
-    mcnemar_results = mcnemar_test(
-        y_true=y_true,
-        pred_baseline=pred_baseline,
-        pred_tta=pred_tta,
-    )
+    mcnemar_results = mcnemar_test_pooled(seed_data=seed_data)
 
+    first_s = list(seed_data.keys())[0]
     result = {
-        "baseline_file": str(baseline_path),
-        "tta_file": str(tta_path),
-        "n_samples": int(len(y_true)),
-        "n_classes": int(len(np.unique(y_true))),
-
+        "seeds": list(seed_paths.keys()),
+        "baseline_files": {s: str(p[0]) for s, p in seed_paths.items()},
+        "tta_files": {s: str(p[1]) for s, p in seed_paths.items()},
+        "n_samples_per_seed": int(len(seed_data[first_s][0])),
+        "n_classes": int(len(np.unique(seed_data[first_s][0]))),
         "bootstrap": bootstrap_results,
-
         "mcnemar": mcnemar_results,
     }
 
-    output_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
-        json.dump(
-            result,
-            f,
-            indent=2,
-        )
+        json.dump(result, f, indent=2)
 
-    print(f"Saved statistical results to: {output_path}")
-
+    print(f"Saved aggregated statistical results to: {output_path}")
     return result
 
-def set_against_path(against, cfg, ds, cl , seed, results_dir, split, s_key, rfs=1, sty=3, use_n=4):
+
+def set_against_path(against, cfg, ds, cl, seed, results_dir, split, s_key, rfs=1, sty=3, use_n=4):
     if against == "baseline":
         base_fname = get_prediction_filename("geometric_tta", cfg, ds, cl, "vanilla", "", rfs=1, seed=seed)
-        # Baselines are stored at top-level split directory or without split subfolder depending on setup
         base_pred_path = results_dir / f"geometric_tta/tta_inference/predictions/{ds}/{split}" / base_fname
-        
+
         if not base_pred_path.exists():
             base_pred_path = results_dir / s_key / f"tta_inference/predictions/{ds}" / base_fname
             if not base_pred_path.exists():
@@ -347,22 +269,25 @@ def set_against_path(against, cfg, ds, cl , seed, results_dir, split, s_key, rfs
         retr = "" if against == "geometric_tta" else "dino"
         base_fname = get_prediction_filename(against, cfg, ds, cl, eval, retr, rfs, seed=seed, sty=sty, use_n=use_n)
         base_pred_path = results_dir / against / f"tta_inference/predictions/{ds}/{split}" / base_fname
-    
+
     return base_pred_path
+
 
 def run_all_statistical_comparisons(
     results_dir: Path,
     output_dir: Path,
     datasets: list,
     against: str = "baseline",
-    normal: bool = False, 
+    normal: bool = False,
     n_bootstrap: int = 10_000,
 ):
     output_dir.mkdir(parents=True, exist_ok=True)
     all_summary_stats = {}
-  
+
     for ds in datasets:
+        print(f"\n=== Starting dataset: {ds} ===")
         all_summary_stats[ds] = {}
+
         split = "test"
         if ds == "eurosat":
             split = "ucmerced"
@@ -372,126 +297,103 @@ def run_all_statistical_comparisons(
         for s_key, cfg in TTA_STRATEGIES.items():
             if s_key == against:
                 continue
+
+            print(f"  Strategy: {s_key}")
             ev = cfg.get("default_eval", "vanilla")
             retr = cfg.get("default_retr", "")
             all_summary_stats[ds][s_key] = {}
+
             for cl in ALL_CLASSIFIERS:
                 all_summary_stats[ds][s_key][cl] = {}
-                for seed in ALL_SEEDS:
-                    
-                    # 2. Loop through TTA step settings in axis
-                    for rfs in cfg["axis"]:
-                        if s_key == "hybrid_tta":
-                            for sty_val in [1, 2, 3]:
-                                for use_n in [1, sty_val + 1]:
+
+                for rfs in cfg["axis"]:
+                    if s_key == "hybrid_tta":
+                        for sty_val in [1, 2, 3]:
+                            for use_n in [1, sty_val + 1]:
+                                print(f"    Processing multi-seed: {ds} | {s_key} | {cl} | rfs={rfs} | sty={sty_val} | use_n={use_n}")
+
+                                seed_paths = {}
+                                missing_seed = False
+
+                                for seed in ALL_SEEDS:
                                     tta_fname = get_prediction_filename(
-                                        s_key, cfg, ds, cl, ev, retr, rfs=rfs, seed=seed, sty=sty_val, use_n=use_n
+                                        s_key, cfg, ds, cl, ev, retr,
+                                        rfs=rfs, seed=seed,
+                                        sty=sty_val, use_n=use_n,
                                     )
                                     tta_pred_path = results_dir / s_key / f"tta_inference/predictions/{ds}/{split}" / tta_fname
+                                    base_pred_path = set_against_path(
+                                        against, cfg, ds, cl, seed,
+                                        results_dir, split, s_key,
+                                        rfs, sty_val, use_n,
+                                    )
 
-                                    base_pred_path = set_against_path(against, cfg, ds, cl, seed, results_dir, split, s_key,rfs, sty_val, use_n)
-                                    if not base_pred_path.exists():
-                                        continue
-                                    if tta_pred_path.exists():
-                                        out_json = output_dir / against / ds / s_key / cl / f"stats_nr{rfs}_sty{sty_val}_split{use_n}_seed{seed}.json"
-                                        stats_res = calculate_statistical_comparison(
-                                            baseline_path=base_pred_path,
-                                            tta_path=tta_pred_path,
-                                            output_path=out_json,
-                                            normal=normal,
-                                            n_bootstrap=n_bootstrap,
-                                            seed=seed,
-                                        )
-                                        all_summary_stats[ds][s_key][cl][f"nr_{rfs}_sty_{sty_val}_split_{use_n}_seed_{seed}"] = stats_res
-                        else:
-                            tta_fname = get_prediction_filename(s_key, cfg, ds, cl, ev, retr, rfs=rfs, seed=seed)
-                            tta_pred_path = results_dir / s_key / f"tta_inference/predictions/{ds}/{split}" / tta_fname
-                            base_pred_path = set_against_path(against, cfg, ds, cl, seed, results_dir, split, s_key, rfs)
-                            if not base_pred_path.exists():
-                                continue                            
-                            if tta_pred_path.exists():
-                                out_json = output_dir / against / ds / s_key / cl / f"stats_rfs{rfs}_seed{seed}.json"
-                                stats_res = calculate_statistical_comparison(
-                                    baseline_path=base_pred_path,
-                                    tta_path=tta_pred_path,
+                                    if base_pred_path is None or not base_pred_path.exists() or not tta_pred_path.exists():
+                                        missing_seed = True
+                                        break
+
+                                    seed_paths[seed] = (base_pred_path, tta_pred_path)
+
+                                if missing_seed or len(seed_paths) < len(ALL_SEEDS):
+                                    print("      Missing required seed paths, skipping combination.")
+                                    continue
+
+                                out_json = output_dir / against / ds / s_key / cl / f"stats_nr{rfs}_sty{sty_val}_split{use_n}_all_seeds.json"
+                                stats_res = calculate_statistical_comparison_multi_seed(
+                                    seed_paths=seed_paths,
                                     output_path=out_json,
                                     normal=normal,
                                     n_bootstrap=n_bootstrap,
-                                    seed=seed,
                                 )
-                                all_summary_stats[ds][s_key][cl][f"rfs_{rfs}_seed_{seed}"] = stats_res
+                                all_summary_stats[ds][s_key][cl][f"nr_{rfs}_sty_{sty_val}_split_{use_n}"] = stats_res
 
-    # Save aggregated execution metadata
-    #with open(output_dir / "aggregated_summary.json", "w") as f:
-    #    json.dump(all_summary_stats, f, indent=2)
+                    else:
+                        print(f"    Processing multi-seed: {ds} | {s_key} | {cl} | rfs={rfs}")
 
+                        seed_paths = {}
+                        missing_seed = False
 
-import re
+                        for seed in ALL_SEEDS:
+                            tta_fname = get_prediction_filename(
+                                s_key, cfg, ds, cl, ev, retr,
+                                rfs=rfs, seed=seed,
+                            )
+                            tta_pred_path = results_dir / s_key / f"tta_inference/predictions/{ds}/{split}" / tta_fname
+                            base_pred_path = set_against_path(
+                                against, cfg, ds, cl, seed,
+                                results_dir, split, s_key, rfs,
+                            )
 
-def run_list_comparisons(
-    prediction_paths: str,
-    results_dir: Path,
-    output_dir: Path,
-    dataset:str, 
-    split: str, 
-    n_bootstrap: int = 10_000,
-):
-    output_dir.mkdir(parents=True, exist_ok=True)
-    all_summary_stats = {}
+                            if base_pred_path is None or not base_pred_path.exists() or not tta_pred_path.exists():
+                                missing_seed = True
+                                break
 
-    for cls in ALL_CLASSIFIERS:
-        for retr in RETRIEVAL_STRATEGIES:
-            tta_pred_path = preds.format(cl=cls, retr=retr)
+                            seed_paths[seed] = (base_pred_path, tta_pred_path)
 
+                        if missing_seed or len(seed_paths) < len(ALL_SEEDS):
+                            print("      Missing required seed paths, skipping combination.")
+                            continue
 
+                        out_json = output_dir / against / ds / s_key / cl / f"stats_rfs{rfs}_all_seeds.json"
+                        stats_res = calculate_statistical_comparison_multi_seed(
+                            seed_paths=seed_paths,
+                            output_path=out_json,
+                            normal=normal,
+                            n_bootstrap=n_bootstrap,
+                        )
+                        all_summary_stats[ds][s_key][cl][f"rfs_{rfs}"] = stats_res
 
-            filename = Path(tta_pred_path)
-            if not filename.exists():
-                print(f"Skipping non-existent path: {tta_pred_path}")
-                continue
-            classifier = cls
+        print(f"=== Finished dataset: {ds} ===\n")
 
-            # Locate baseline matching dataset/split setup
-            base_fname = f"{classifier}_vanilla.json"
-            base_pred_path = Path(baseline_results(dataset=dataset, split=split, cls=cls, prediction=True))
-           
-            if not base_pred_path.exists():
-                base_pred_path = results_dir / f"geometric_tta/tta_inference/predictions/{dataset}" / base_fname
-                if not base_pred_path.exists():
-                    print(f"Baseline not found for {tta_pred_path}, skipping.")
-                    continue
-
-            # Define structured output location
-            stem = filename.stem
-            out_json = output_dir / dataset / classifier / f"stats_{stem}.json"
-
-            stats_res = calculate_statistical_comparison(
-                baseline_path=base_pred_path,
-                tta_path=filename,
-                output_path=out_json,
-                n_bootstrap=n_bootstrap,
-            )
-
-            all_summary_stats[stem] = stats_res
-
-    with open(output_dir / "aggregated_summary.json", "w") as f:
-        json.dump(all_summary_stats, f, indent=2)
 
 if __name__ == "__main__":
-    """
-    preds = "/home/stud/nemmler/retristyle/results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/{cl}_adain_tta_zero_{retr}_nrefs32_seed71397589.json"
-    run_list_comparisons(preds, 
-                        Path("./results"),
-                        Path("./results/statistics"),
-                        dataset="imagenet", 
-                        split="test_r")
-    """
-    for ag in ["baseline", "geometric_tta"]:
-        run_all_statistical_comparisons(
-            results_dir=Path("./results"),
-            output_dir=Path("./results/statistics/acc"),
-            datasets=["eurosat", "imagenet", "midog","camelyon17wilds", "epistr"],
-            against=ag,
-            normal=True
-        )
-   
+    print("SCRIPT STARTED", flush=True)
+    for acc_state in [True, False]:
+        for ag in ["baseline", "geometric_tta"]:
+            run_all_statistical_comparisons(
+                results_dir=Path("./results"),
+                output_dir=Path("./results/statistics/bal"),
+                datasets=["imagenet", "midog", "camelyon17wilds", "epistr"],
+                against=ag,
+                normal=acc_state,
+            )

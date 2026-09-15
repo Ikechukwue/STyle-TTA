@@ -1,0 +1,43 @@
+\begin{table}[htbp]
+\centering
+\caption{Evaluation of baseline EpiStr(Test) and TTA methods across CNN, Vision Transformer, and Foundation Model backbones. Bold indicates the best performance per metric.}
+\label{tab:EpiStr_transitions}
+\resizebox{\textwidth}{!}{
+\small
+\begin{tabular}{llcccc}
+\toprule
+ & & \multicolumn{4}{c}{\textbf{Total Ensemble Size}} \\
+\cmidrule(lr){3-6}
+\textbf{Backbone} & \textbf{Configuration} & \textbf{8} & \textbf{16} & \textbf{32} & \textbf{64} \\
+\midrule
+\multirow{3}{*}{ResNet-18} & Geo-TTA only & \textbf{68.82$^{***}$} & 69.84$^{***}$ & 70.64$^{***}$ & 70.35$^{***}$ \\
+ & Hybrid (sty=3, split=1) & 64.46$^{***}$ & 68.31$^{***}$ & 69.55$^{***}$ & 70.35$^{***}$ \\
+ & Hybrid (sty=3, split=4) & 67.81$^{***}$ & \textbf{73.26$^{***}$} & \textbf{75.51$^{***}$} & \textbf{76.38$^{***}$} \\
+\midrule
+\multirow{3}{*}{DenseNet-121} & Geo-TTA only & 77.11$^{***}$ & 77.62$^{***}$ & 78.20$^{***}$ & 78.92$^{***}$ \\
+ & Hybrid (sty=3, split=1) & 78.71$^{***}$ & 80.38$^{***}$ & 80.09$^{***}$ & 79.51$^{***}$ \\
+ & Hybrid (sty=3, split=4) & \textbf{80.01$^{***}$} & \textbf{83.36$^{***}$} & \textbf{85.83$^{***}$} & \textbf{85.47$^{***}$} \\
+\midrule
+\multirow{3}{*}{ViT-B/16 (224)} & Geo-TTA only & 81.98$^{***}$ & 81.83$^{***}$ & 82.63$^{***}$ & 81.98$^{***}$ \\
+ & Hybrid (sty=3, split=1) & 82.70$^{***}$ & 82.78$^{***}$ & 82.78$^{***}$ & 82.85$^{***}$ \\
+ & Hybrid (sty=3, split=4) & \textbf{83.72$^{***}$} & \textbf{85.03$^{***}$} & \textbf{84.96$^{***}$} & \textbf{85.25$^{***}$} \\
+\midrule
+\multirow{3}{*}{Swin-B (224)} & Geo-TTA only & 75.00 & 75.00 & 74.85 & 73.84$^{*}$ \\
+ & Hybrid (sty=3, split=1) & \textbf{75.80} & \textbf{75.44} & \textbf{74.93} & \textbf{74.56} \\
+ & Hybrid (sty=3, split=4) & 74.93 & 74.78 & 74.49 & 74.35 \\
+\midrule
+\multirow{3}{*}{CLIP ViT-B/16} & Geo-TTA only & 66.50$^{**}$ & 66.86$^{***}$ & 67.01$^{***}$ & 67.01$^{***}$ \\
+ & Hybrid (sty=3, split=1) & 87.06$^{***}$ & \textbf{87.72$^{***}$} & 86.99$^{***}$ & 87.28$^{***}$ \\
+ & Hybrid (sty=3, split=4) & \textbf{87.35$^{***}$} & 87.57$^{***}$ & \textbf{87.72$^{***}$} & \textbf{87.86$^{***}$} \\
+\midrule
+\multirow{3}{*}{DINOv2 ViT-B/14} & Geo-TTA only & \textbf{78.63$^{***}$} & \textbf{79.14$^{***}$} & \textbf{79.80$^{***}$} & 79.29$^{***}$ \\
+ & Hybrid (sty=3, split=1) & 76.96$^{***}$ & \textbf{79.14$^{***}$} & 79.58$^{***}$ & \textbf{79.58$^{***}$} \\
+ & Hybrid (sty=3, split=4) & 75.58$^{***}$ & 76.74$^{***}$ & 77.98$^{***}$ & 78.42$^{***}$ \\
+\midrule
+\multicolumn{6}{l}{\footnotesize $^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$ (McNemar test vs.\ baseline)} \\
+\bottomrule
+\end{tabular}
+\bottomrule
+\end{tabular}
+}
+\end{table}

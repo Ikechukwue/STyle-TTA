@@ -208,7 +208,7 @@ def print_dynamic_results(
 
             for ev in eval_list:
                 for retr in retr_list:
-                    for rfs in rfs_list:
+                    for rfs in [1]:#rfs_list:
                         accs, bal_accs, aucs, eces = [], [], [], []
 
                         for seed in seed_list:
@@ -224,6 +224,8 @@ def print_dynamic_results(
                                 )
                                 f = results_dir / s_key / f"tta_inference/results/{dataset}" / f_name
                             else:
+                                if s_key=="geometric_tta":
+                                    retr = ""
                                 fmt_kwargs = {"cl": cl, "rfs": rfs, "seed": seed, "eval": ev, "retr": retr}
                                 try:
                                     f_name = cfg["template"].format(**fmt_kwargs)
@@ -232,6 +234,7 @@ def print_dynamic_results(
                                 f = results_dir / s_key / f"tta_inference/results/{dataset}/{split}" / f_name
 
                             if not f.exists():
+
                                 continue
 
                             data = load_json(f)
@@ -259,5 +262,5 @@ if __name__ == "__main__":
             split = "ucmerced"
         elif ds == "imagenet":
             split = "test_r"
-
-        print_ablation_nrefs_multi(Path("./results"), ["ablation/retristyle", "ablation/adain_tta", "hybrid_tta","geometric_tta"], ds, split)
+        print_dynamic_results(Path("./results"), ds, split, "geometric_tta")
+        #print_ablation_nrefs_multi(Path("./results"), ["geometric_tta"], ds, split)

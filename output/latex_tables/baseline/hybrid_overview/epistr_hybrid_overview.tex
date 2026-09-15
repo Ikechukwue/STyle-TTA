@@ -1,0 +1,21 @@
+\begin{table}[htbp]
+\centering
+\caption{Evaluation of baseline EpiStr(Test) and TTA methods across CNN, Vision Transformer, and Foundation Model backbones. Bold indicates the best performance per metric.}
+\label{tab:EpiStr_transitions}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Backbone} & \textbf{Baseline} & \textbf{Geo-TTA ($N=64$)} & \textbf{StyleID only ($N=16$)} & \textbf{Hybrid S1 ($N=64$)} & \textbf{Hybrid S2 ($N=64$)} & \textbf{$\Delta$ S2 vs Geo} \\
+\midrule
+ResNet-18 & 60.54 & 70.35 & 62.79 & 70.35 & \textbf{76.38} & +6.03 \\
+DenseNet-121 & 59.45 & 78.92 & 73.69 & 79.51 & \textbf{85.47} & +6.54 \\
+ViT-B/16 (224) & 75.65 & 81.98 & 81.76 & 82.85 & \textbf{85.25} & +3.27 \\
+Swin-B (224) & 75.73 & 73.84 & \textbf{75.15} & 74.56 & 74.35 & +0.51 \\
+CLIP ViT-B/16 & 63.44 & 67.01 & 79.43 & 87.28 & \textbf{87.86} & +20.86 \\
+DINOv2 ViT-B/14 & 72.46 & 79.29 & 72.60 & \textbf{79.58} & 78.42 & -0.87 \\
+\bottomrule
+\end{tabular}
+\bottomrule
+\end{tabular}
+}
+\end{table}

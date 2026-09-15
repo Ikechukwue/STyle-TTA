@@ -1,0 +1,46 @@
+{
+  "baseline_file": "results/geometric_tta/tta_inference/predictions/imagenet/test_r/resnet18_geometric_vanilla_nviews1_seed71397589.json",
+  "tta_file": "results/ablation/retristyle/tta_inference/predictions/imagenet/test_r/resnet18_retristyle_vanilla_dino_nrefs16_seed71397589.json",
+  "n_samples": 30000,
+  "n_classes": 200,
+  "mcnemar": {
+    "baseline_correct_tta_wrong": 948,
+    "baseline_wrong_tta_correct": 4644,
+    "discordant_pairs": 5592,
+    "p_value": 0.0
+  },
+  "metrics": {
+    "accuracy": {
+      "baseline": 0.3362,
+      "tta": 0.4594,
+      "difference": 0.12319999999999998,
+      "ci_lower": 0.11853333333333332,
+      "ci_upper": 0.1278675,
+      "bootstrap_p_value": 0.5003
+    },
+    "balanced_accuracy": {
+      "baseline": 0.35438858109361526,
+      "tta": 0.467995269466144,
+      "difference": 0.11360668837252874,
+      "ci_lower": 0.10843200480764868,
+      "ci_upper": 0.1187345077340135,
+      "bootstrap_p_value": 0.4991
+    },
+    "auc": {
+      "baseline": 0.902024404000058,
+      "tta": 0.9420889913428436,
+      "difference": 0.04006458734278562,
+      "ci_lower": 0.03858044215719726,
+      "ci_upper": 0.04152577844995162,
+      "bootstrap_p_value": 0.5007
+    },
+    "ece": {
+      "baseline": 0.13571005325472602,
+      "tta": 0.045030767203867436,
+      "difference": -0.09067928605085858,
+      "ci_lower": -0.09647479494547627,
+      "ci_upper": -0.08383511018596125,
+      "bootstrap_p_value": 0.4969
+    }
+  }
+}

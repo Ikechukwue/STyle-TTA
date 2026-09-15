@@ -21,14 +21,14 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-CLASSIFIER="vit_base_patch16_dinov3_lvd1689m"
+ALL_CLASSIFIERS=("resnet50")
 EVAL_STRATEGY="vanilla"
 RETRIEVAL_STRATEGY="dino"
-ALL_N_REFS=(2 4)
+ALL_N_REFS=(16)
 SEED=$DEFAULT_SEED
 
-DATASET=("eurosat")
-
+DATASET=("imagenet")
+SPLIT="test_r"
 while [[ $# -gt 0 ]]; do
     case $1 in
         --classifier) CLASSIFIER="$2"; shift 2 ;;
@@ -44,15 +44,15 @@ done
 
 for DT in "${DATASET}"; do
     for CL in "${ALL_CLASSIFIERS[@]}"; do
-        AUGMENTATION="random_flip-random_resized_crop"
-        SPLIT="test"
-        #WEIGHTS_PATH="pretrained"
+        #AUGMENTATION="random_flip-random_resized_crop"
+        #SPLIT="test"
+        WEIGHTS_PATH="pretrained"
         #if is_pretrained "$CL"; then
-        if [[ $DT == "eurosat" ]]; then
-            AUGMENTATION="random_flip-random_resized_crop"
-            SPLIT="ucmerced"
-        fi
-            WEIGHTS_PATH="${MODEL_DIR}/${DT}/${DT}-${CL}-${AUGMENTATION}-seed42.pth"
+        #if [[ $DT == "eurosat" ]]; then
+        #    AUGMENTATION="random_flip-random_resized_crop"
+        #    SPLIT="ucmerced"
+        #fi
+        #    WEIGHTS_PATH="${MODEL_DIR}/${DT}/${DT}-${CL}-${AUGMENTATION}-seed42.pth"
         #fi
 
         for N_REFS in "${ALL_N_REFS[@]}"; do

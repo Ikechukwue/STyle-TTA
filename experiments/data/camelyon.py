@@ -1,7 +1,7 @@
 import os
 import random
 from typing import Any, Callable, Optional, Tuple
-
+import torch
 from PIL import Image
 from torch.utils.data import Subset
 from torchvision.datasets.vision import VisionDataset
@@ -119,7 +119,26 @@ class Camelyon17WILDS(VisionDataset):
             f"Using subset of {subset_size} samples from "
             f"{dataset_size} total samples (seed={seed})."
         )
+    @property
+    def targets(self):
+        """
+        Return labels corresponding exactly to this dataset's indexing.
+        """
+        from torch.utils.data import Subset
 
+        dataset = self.dataset
+        indices = list(range(len(dataset)))
+
+        while isinstance(dataset, Subset):
+            indices = [dataset.indices[i] for i in indices]
+            dataset = dataset.dataset
+
+        targets = dataset.y_array
+
+        if not isinstance(targets, torch.Tensor):
+            targets = torch.as_tensor(targets, dtype=torch.long)
+
+        return targets[indices]
     # =============================================================
     # STYLIZED IMAGE INJECTION
     # =============================================================

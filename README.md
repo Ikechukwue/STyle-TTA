@@ -1,6 +1,6 @@
-# RetriStyle
+# STyle-TTA
 
-RetriStyle is a research framework for **structure-aware retrieval and diffusion-based test-time adaptation (TTA)**. It evaluates whether retrieved style references and style-transfer transformations can improve image classification under distribution and domain shifts.
+STyle-TTA is a research framework for **structure-aware retrieval and diffusion-based test-time adaptation (TTA)**. It evaluates whether retrieved style references and style-transfer transformations can improve image classification under distribution and domain shifts.
 
 The project combines:
 
@@ -14,7 +14,7 @@ The project combines:
 
 ```text
 retristyle/
-├── retristyle/          Core RetriStyle library
+├── retristyle/          Core STyle-TTA library
 ├── experiments/         Training, TTA, evaluation, metrics, and reporting
 ├── scripts/             Local experiment runners and HPC job generators
 ├── config/              Shared project configuration and constants
@@ -71,7 +71,7 @@ python -m experiments.tta.run_inference \
     --output_path ./results
 ```
 
-For RetriStyle retrieval-based TTA:
+For STyle-TTA retrieval-based TTA:
 
 ```bash
 python -m experiments.tta.run_inference \
@@ -106,7 +106,7 @@ bash scripts/train_reference_baselines.sh
 # Geometric TTA baseline
 bash scripts/geometric_tta_eval.sh
 
-# RetriStyle ablations
+# STyle-TTA ablations
 bash scripts/ablation_tta.sh
 
 # Hybrid geometric + style TTA
@@ -157,7 +157,7 @@ HPC job-generation scripts are available under `scripts/`, including generators 
 
 ## Citation
 
-This repository contains the implementation for the RetriStyle research project. Add the project publication citation here once the associated paper or thesis metadata is finalized.
+This repository contains the implementation for the STyle-TTA research project. Add the project publication citation here once the associated paper or thesis metadata is finalized.
 
 ## License
 

@@ -151,22 +151,18 @@ class ReferenceDatabase:
         from torchvision.datasets import ImageFolder
         
         try:
-            # 1. Fast Path: Use your helper to drill down to the ImageFolder
+      
             base_folder = get_base_image_folder(self.dataset)
             
-            # ImageFolder stores paths/labels in `samples` as [(path, class_idx), ...]
-            # Extracting just the integers is lightning fast
             raw_labels = torch.tensor([s[1] for s in base_folder.samples], dtype=torch.long)
             
-            # If your dataset was wrapped in a standard PyTorch Subset, we must track 
-            # how the indices changed. Let's account for that:
+
             curr = self.dataset
             indices_map = None
             
-            # Map indices backwards if there are Subsets involved before reaching ImageFolder
             while curr is not None and curr != base_folder:
                 if hasattr(curr, "indices"):
-                    # If it's a torch.utils.data.Subset
+
                     subset_indices = curr.indices
                     if indices_map is False: 
                         raw_labels = raw_labels[subset_indices]

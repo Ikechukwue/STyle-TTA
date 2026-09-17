@@ -6,8 +6,8 @@ The project combines:
 
 - retrieval of reference images using random, metric, or DINO-based strategies;
 - style-transfer and diffusion methods for generating test-time views;
-- TTA baselines such as geometric augmentation and TENT;
-- evaluation strategies including vanilla averaging, ZERO, TPT, and FOODS;
+- TTA baselines such as geometric augmentation;
+- evaluation strategies including vanilla averaging, ZERO and TPT;
 - experiments across ImageNet variants and medical and natural-domain datasets.
 
 ## Repository Layout

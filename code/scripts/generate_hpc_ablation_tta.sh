@@ -29,7 +29,7 @@ TARGET_DIR="${SCRIPT_DIR}/generated/ablation"
 rm -rf "$TARGET_DIR"
 mkdir -p "$TARGET_DIR"
 
-TTA_METHOD="retristyle"
+TTA_METHOD="style_tta"
 AUGMENTATION="none"
 DATASET="imagenet"
 SPLIT="test_r_c26"
@@ -61,7 +61,7 @@ gen_script() {
 
     local WEIGHTS_LINE='WEIGHTS_PATH="pretrained"'
     if is_pretrained "$CLF"; then
-        WEIGHTS_LINE='WEIGHTS_PATH=$WORK/retristyle/data/imagenet-$CLASSIFIER-random_flip-random_resized_crop-seed42.pth'
+        WEIGHTS_LINE='WEIGHTS_PATH=$WORK/style_tta/data/imagenet-$CLASSIFIER-random_flip-random_resized_crop-seed42.pth'
     fi
 
     local SCRIPT="${TARGET_DIR}/${SUBDIR}/abl_${CLF_SAFE}_${RETR}_${EVAL}_nr${NREFS}_s${SEED}.sh"
@@ -96,7 +96,7 @@ OUTPUT_PATH=$(eval echo ${HPC_OUTPUT_PATH})
 EMBEDDING_DIR=$(eval echo ${HPC_EMBEDDING_DIR})
 HF_MODELS_CACHE=$(eval echo ${HPC_HF_CACHE})
 TORCH_MODELS_CACHE=$(eval echo ${HPC_TORCH_CACHE})
-LIVE_CODE=\$HPCVAULT/snapshots/retristyle
+LIVE_CODE=\$HPCVAULT/snapshots/style_tta
 
 echo "Ablation ${TAG}: \$CLASSIFIER | retr=\$RETRIEVAL_STRATEGY | eval=\$EVAL_STRATEGY | nr=\$N_REFS | seed=\$SEED"
 echo "Job: \$SLURM_JOB_ID | \$(date)"
@@ -145,7 +145,7 @@ timeout 15m apptainer exec --nv \\
     --pwd /app \\
     --bind \$EFFECTIVE_DATA_PATH:/app/data \\
     --bind \$OUTPUT_PATH:/app/results \\
-    --bind \$HOME/retristyle/data/imagenet/imagenet_subsets.json:/app/data/imagenet/imagenet_subsets.json \\
+    --bind \$HOME/style_tta/data/imagenet/imagenet_subsets.json:/app/data/imagenet/imagenet_subsets.json \\
     --bind \$LOCAL_CACHE:/app/data/augmented_cache \\
     --bind \$HF_MODELS_CACHE:/app/hf_models \\
     --bind \$EMBEDDING_DIR:/app/data/embeddings \\

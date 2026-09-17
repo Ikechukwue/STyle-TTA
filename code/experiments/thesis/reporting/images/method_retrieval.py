@@ -79,7 +79,7 @@ def main():
     data_path = "./data"
     sample_idx = 29680
     k = 5
-    mapping_path = "/home/stud/nemmler/retristyle/results/retrieval_mapping/imagenet/retrieval_mapping_dino_test_r_s71397589.json"
+    mapping_path = "/home/stud/nemmler/style_tta/results/retrieval_mapping/imagenet/retrieval_mapping_dino_test_r_s71397589.json"
     output_path = "top_5_retrieved.png"
 
     plot_top_k_retrieved(

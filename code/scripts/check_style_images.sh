@@ -59,7 +59,7 @@ for DT in "${DATASETS[@]}"; do
 
             echo "Test: $CL | Dataset: $DT | retr=$RETRIEVAL_STRATEGY | eval=$EVAL_STRATEGY | Style Image=$i"
             echo "$WEIGHTS_PATH"
-            python -m experiments.tta.run_inference \
+            python -m code.experiments.tta.run_inference \
                 --dataset "$DT" --data_path "$DATA_PATH" --split "$SPLIT" \
                 --classifier "$CL" --weights_path "$WEIGHTS_PATH" \
                 --tta_method geometric --eval_strategy "$EVAL_STRATEGY" \

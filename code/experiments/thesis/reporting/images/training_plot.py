@@ -26,5 +26,5 @@ def plot_training_results(csv_path):
     plt.savefig('output/training_metrics.png', dpi=300)
     plt.close()
 
-csv_path = '/home/stud/nemmler/retristyle/data/models/test/camelyon17wilds/camelyon17wilds-densenet121-random_flip-random_resized_crop-seed42_metrics.csv'
+csv_path = '/home/stud/nemmler/style_tta/data/models/test/camelyon17wilds/camelyon17wilds-densenet121-random_flip-random_resized_crop-seed42_metrics.csv'
 plot_training_results(csv_path)

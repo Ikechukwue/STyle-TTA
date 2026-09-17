@@ -53,19 +53,19 @@ def build_experiment_key(args: argparse.Namespace, eval_split: str, model:str) -
 
     Key format examples::
 
-        densenet121_retristyle_zero_dino_nrefs7_none_seed71397589
+        densenet121_style_tta_zero_dino_nrefs7_none_seed71397589
         densenet121_geometric_zero_nviews64_none_seed71397589
         densenet121_geometric_zero_nviews8_color_jitter_seed71397589
         densenet121_tent_vanilla_none_seed71397589
     """
     key = f"{model}_{args.tta_method}_{args.eval_strategy}"
-    if args.tta_method in ("adain_tta", "color_tta", "retristyle"):
+    if args.tta_method in ("adain_tta", "color_tta", "style_tta"):
         key += f"_{args.retrieval_strategy}"
     if args.tta_method == "color_tta":
         key += f"_{args.color_method}"
     # Include view/ref count so sweeps over n_refs / n_views get
     # separate entries in the JSON files.
-    if args.tta_method in ("adain_tta", "color_tta", "retristyle"):
+    if args.tta_method in ("adain_tta", "color_tta", "style_tta"):
         key += f"_nrefs{args.n_refs}"
     elif hasattr(args, "n_views") and args.tta_method not in ("tent", "none"):
         key += f"_nviews{args.n_views}"

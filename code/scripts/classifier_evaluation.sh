@@ -42,7 +42,7 @@ for DS in "${DATASET[@]}"; do
         echo "Weights target resolving to: $WEIGHTS_PATH"
 
         # Pass the entire SPLITS array directly to the argument
-        python -m experiments.classifier_evaluation \
+        python -m code.experiments.classifier_evaluation \
             --dataset "$DS" \
             --data_path "./data" \
             --classifier "$MDL" \

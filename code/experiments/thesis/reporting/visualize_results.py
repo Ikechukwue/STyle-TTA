@@ -267,10 +267,10 @@ def generate_all_plots(args):
     #plot_all_topk_metrics(results_dir, args.dataset, args.split)
     #plot_all_ablation_retr(results_dir, output_dir,'ablation/adain_tta',  args)
     done = []
-    for method in ['hybrid_tta', 'geometric_tta' ,'ablation/adain_tta',  'ablation/retristyle', ]:
+    for method in ['hybrid_tta', 'geometric_tta' ,'ablation/adain_tta',  'ablation/style_tta', ]:
         done.append(method)
         plot_ablation_nrefs_multi(results_dir, output_dir, done, args)
-        anchors["best_n_refs"] = 16 #if method == 'ablation/retristyle' else 32
+        anchors["best_n_refs"] = 16 #if method == 'ablation/style_tta' else 32
         #plot_all_ablation_nrefs(results_dir, output_dir, method, args, True)
         #plot_ablation_lines(results_dir, output_dir, "retrieval", method, args, **anchors)
         #plot_ablation_lines(results_dir, output_dir, "eval", method, args, **anchors)

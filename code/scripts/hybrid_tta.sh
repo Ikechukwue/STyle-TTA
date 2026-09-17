@@ -73,7 +73,7 @@ for SD in "${ALL_SEEDS[@]}"; do
                     echo "Geo refs   : original only"
                     echo "--------------------------------------------------------"
 
-                    python -m experiments.tta.hybrid \
+                    python -m code.experiments.tta.hybrid \
                         --dataset "$DT" \
                         --split "$SPLIT" \
                         --data_path "$DATA_PATH" \
@@ -108,7 +108,7 @@ for SD in "${ALL_SEEDS[@]}"; do
                     echo "Geo refs   : original + $N_REFS style refs"
                     echo "--------------------------------------------------------"
 
-                    python -m experiments.tta.hybrid \
+                    python -m code.experiments.tta.hybrid \
                         --dataset "$DT" \
                         --split "$SPLIT" \
                         --data_path "$DATA_PATH" \

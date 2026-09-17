@@ -1,11 +1,11 @@
 #!/bin/bash
-# Script to prepare and deploy retristyle to HPC cluster
+# Script to prepare and deploy style_tta to HPC cluster
 
 set -e
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_NAME="retristyle"
+PROJECT_NAME="style_tta"
 DEFAULT_TARGET="production"  # Only production target available
 
 # Colors for output
@@ -32,7 +32,7 @@ usage() {
     cat << EOF
 Usage: $0 [OPTIONS]
 
-Prepare retristyle Docker image for HPC deployment
+Prepare style_tta Docker image for HPC deployment
 
 OPTIONS:
     -t, --target TARGET      Build target (only 'production' supported)
@@ -215,7 +215,7 @@ fi
 INSTRUCTIONS_FILE="${PROJECT_NAME}-${TARGET}-deployment.txt"
 cat > "$INSTRUCTIONS_FILE" << EOF
 ===============================================================================
-retristyle HPC Deployment Instructions
+style_tta HPC Deployment Instructions
 ===============================================================================
 
 IMAGE DETAILS:
@@ -237,50 +237,50 @@ DEPLOYMENT STEPS:
 1. TRANSFER TO NHR@FAU CLUSTER:
 
    # Transfer to NHR@FAU cluster (use csnhr.nhr.fau.de dialog server)
-   rsync -avz --progress $OUTPUT USERNAME@csnhr.nhr.fau.de:\$WORK/retristyle/
+   rsync -avz --progress $OUTPUT USERNAME@csnhr.nhr.fau.de:\$WORK/style_tta/
 
-   $([ -f "$SIF_OUTPUT" ] && echo "rsync -avz --progress $SIF_OUTPUT USERNAME@csnhr.nhr.fau.de:\$WORK/retristyle/")
+   $([ -f "$SIF_OUTPUT" ] && echo "rsync -avz --progress $SIF_OUTPUT USERNAME@csnhr.nhr.fau.de:\$WORK/style_tta/")
 
 2. CONVERT TO APPTAINER (if not already done):
 
    On NHR@FAU frontend node (e.g., Alex, Fritz, Woody, Meggie):
    
    # Apptainer is available by default, no module load needed
-   cd \$WORK/retristyle
+   cd \$WORK/style_tta
    apptainer build $SIF_OUTPUT docker-archive://$OUTPUT
 
 3. PREPARE DATA DIRECTORIES ON NHR@FAU:
 
    # Use \$WORK for active data (no backup, large quota)
-   mkdir -p \$WORK/retristyle/data
-   mkdir -p \$WORK/retristyle/checkpoints
-   mkdir -p \$WORK/retristyle/outputs
-   mkdir -p \$WORK/retristyle/logs
+   mkdir -p \$WORK/style_tta/data
+   mkdir -p \$WORK/style_tta/checkpoints
+   mkdir -p \$WORK/style_tta/outputs
+   mkdir -p \$WORK/style_tta/logs
    
    # Store important code and final results in \$HOME (backed up, 50GB limit)
-   mkdir -p \$HOME/retristyle/scripts
-   mkdir -p \$HOME/retristyle/results
+   mkdir -p \$HOME/style_tta/scripts
+   mkdir -p \$HOME/style_tta/results
    
    # For long-term archive use \$HPCVAULT (backed up, 500GB)
-   mkdir -p \$HPCVAULT/retristyle/archive
+   mkdir -p \$HPCVAULT/style_tta/archive
    
    # Note: Local development uses different paths:
-   # - Code: /home/staff/sdoerric/research/retristyle/
-   # - Data: /data/local/retristyle/{data,checkpoints,results,logs}
+   # - Code: /home/staff/sdoerric/research/style_tta/
+   # - Data: /data/local/style_tta/{data,checkpoints,results,logs}
 
 4. SET ENVIRONMENT VARIABLES:
 
    export WANDB_API_KEY="your_wandb_api_key"
    export WANDB_ENTITY="ofu-xai"
-   export WANDB_PROJECT="retristyle"
+   export WANDB_PROJECT="style_tta"
 
 5. TEST THE IMAGE:
 
    # Test basic functionality
-   apptainer exec \$WORK/retristyle/$SIF_OUTPUT python -c "import torch; print(torch.cuda.is_available())"
+   apptainer exec \$WORK/style_tta/$SIF_OUTPUT python -c "import torch; print(torch.cuda.is_available())"
    
    # Test GPU access (requires --nv flag on GPU node)
-   apptainer exec --nv \$WORK/retristyle/$SIF_OUTPUT nvidia-smi
+   apptainer exec --nv \$WORK/style_tta/$SIF_OUTPUT nvidia-smi
 
 6. RUN TRAINING:
 
@@ -289,11 +289,11 @@ DEPLOYMENT STEPS:
    
    # Once allocated, run training (--nv flag required for GPU support):
    apptainer exec --nv \\
-     --bind \$WORK/retristyle/data:/app/data \\
-     --bind \$WORK/retristyle/checkpoints:/app/checkpoints \\
-     --bind \$WORK/retristyle/outputs:/app/outputs \\
-     --bind \$WORK/retristyle/logs/wandb:/app/wandb \\
-     \$WORK/retristyle/$SIF_OUTPUT \\
+     --bind \$WORK/style_tta/data:/app/data \\
+     --bind \$WORK/style_tta/checkpoints:/app/checkpoints \\
+     --bind \$WORK/style_tta/outputs:/app/outputs \\
+     --bind \$WORK/style_tta/logs/wandb:/app/wandb \\
+     \$WORK/style_tta/$SIF_OUTPUT \\
      accelerate launch --config_file /app/configs/auto_gpu.yaml \\
        /app/experiments/reference_methods/pretrain.py \\
        --method adain \\
@@ -310,18 +310,18 @@ USEFUL COMMANDS FOR NHR@FAU:
 apptainer --version
 
 # Inspect image
-apptainer inspect \$WORK/retristyle/$SIF_OUTPUT
+apptainer inspect \$WORK/style_tta/$SIF_OUTPUT
 
 # Shell into container
 apptainer shell \\
-  --bind \$WORK/retristyle/data:/app/data \\
-  \$WORK/retristyle/$SIF_OUTPUT
+  --bind \$WORK/style_tta/data:/app/data \\
+  \$WORK/style_tta/$SIF_OUTPUT
 
 # Check GPU access (on GPU node, requires --nv flag)
-apptainer exec --nv \$WORK/retristyle/$SIF_OUTPUT nvidia-smi
+apptainer exec --nv \$WORK/style_tta/$SIF_OUTPUT nvidia-smi
 
 # List available Python packages
-apptainer exec \$WORK/retristyle/$SIF_OUTPUT pip list
+apptainer exec \$WORK/style_tta/$SIF_OUTPUT pip list
 
 # Check filesystem quotas
 shownicerquota.pl

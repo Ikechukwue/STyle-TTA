@@ -37,9 +37,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--tta_method",
         type=str,
-        default="retristyle",
+        default="style_tta",
         choices=[
-            "retristyle",
+            "style_tta",
             "color_tta",
             "adain_tta",
             "geometric",
@@ -165,7 +165,7 @@ def main():
 
     retriever = None
     color_transfer_fn = None
-    retristyle_infer = None
+    style_tta_infer = None
 
     if args.tta_method in RETRIEVAL_TTA_METHODS:
         if args.retrieval_strategy == "dino" and args.embedding_dir:
@@ -195,10 +195,10 @@ def main():
             device=str(device),
         )
 
-        if args.tta_method == "retristyle":
-            from code.retristyle.infer_style_base import StyleIDMethod
+        if args.tta_method == "style_tta":
+            from code.style_tta.infer_style_base import StyleIDMethod
 
-            retristyle_infer = StyleIDMethod()
+            style_tta_infer = StyleIDMethod()
         elif args.tta_method in ("color_tta", "adain_tta"):
             from code.experiments.reference_methods.style_transfer_factory import (
                 create_color_transfer_method,
@@ -230,7 +230,7 @@ def main():
             retriever=retriever,
             n_refs=args.n_refs,
             color_transfer_fn=color_transfer_fn,
-            retristyle_infer=retristyle_infer,
+            style_tta_infer=style_tta_infer,
             native_size=args.native_size,
             classifier_size=args.input_size,
             input_size=args.input_size,

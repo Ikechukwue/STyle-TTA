@@ -188,11 +188,11 @@ def plot_reliability_comparison_multi_seed(
 
     metrics = {
         "ece_geometric64_pooled": ece_base_pooled,
-        "ece_retristyle16_pooled": ece_tta_pooled,
+        "ece_style_tta16_pooled": ece_tta_pooled,
         "ece_geometric64_seeds_mean": float(np.mean(list(seed_eces_base.values()))),
-        "ece_retristyle16_seeds_mean": float(np.mean(list(seed_eces_tta.values()))),
+        "ece_style_tta16_seeds_mean": float(np.mean(list(seed_eces_tta.values()))),
         "seed_eces_geometric64": seed_eces_base,
-        "seed_eces_retristyle16": seed_eces_tta,
+        "seed_eces_style_tta16": seed_eces_tta,
     }
 
     output_json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -214,7 +214,7 @@ def run_all_reliability_evaluations(
     cfg_base = TTA_STRATEGIES[strategy_base]
     rfs_base = 64
 
-    strategy_target = "ablation/retristyle"
+    strategy_target = "ablation/style_tta"
     cfg_target = TTA_STRATEGIES[strategy_target]
     rfs_target = 16
 
@@ -257,8 +257,8 @@ def run_all_reliability_evaluations(
             if not seed_paths:
                 continue
 
-            out_plot = output_dir / "geom64_vs_retristyle16" / ds / cl / "reliability_comparison.png"
-            out_json = output_dir / "geom64_vs_retristyle16" / ds / cl / "ece_comparison.json"
+            out_plot = output_dir / "geom64_vs_style_tta16" / ds / cl / "reliability_comparison.png"
+            out_json = output_dir / "geom64_vs_style_tta16" / ds / cl / "ece_comparison.json"
             title_str = f"{ds.upper()} | {cl} | Geometric (rfs=64) vs Retristyle (rfs=16)"
 
             plot_reliability_comparison_multi_seed(

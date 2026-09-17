@@ -41,9 +41,9 @@ def compute_method_flips(base_dir: Path, method: str, ds: str, split: str, cl: s
     if y_true_base is None:
         return None
     
-    if method == "retristyle":
-        fname = f"{cl}_retristyle_vanilla_dino_nrefs{param_val}_seed{seed}.json"
-        path = base_dir / "ablation" / "retristyle" / "tta_inference" / "predictions" / ds / split / fname
+    if method == "style_tta":
+        fname = f"{cl}_style_tta_vanilla_dino_nrefs{param_val}_seed{seed}.json"
+        path = base_dir / "ablation" / "style_tta" / "tta_inference" / "predictions" / ds / split / fname
     elif method == "geometric":
         fname = f"{cl}_geometric_vanilla_nviews{param_val}_seed{seed}.json"
         path = base_dir / "geometric_tta" / "tta_inference" / "predictions" / ds / split / fname
@@ -97,7 +97,7 @@ def run_dual_analysis(results_dir: Path, refs: int = 16, views: int = 64):
             retri_list, geo_list = [], []
             for seed in ALL_SEEDS:
                 refs = 16 if ds == "imagenet" else 4
-                m_retri = compute_method_flips(results_dir, "retristyle", ds, split, cl_raw, seed, refs)
+                m_retri = compute_method_flips(results_dir, "style_tta", ds, split, cl_raw, seed, refs)
                 m_geo = compute_method_flips(results_dir, "geometric", ds, split, cl_raw, seed, views)
 
                 if m_retri:
@@ -117,5 +117,5 @@ def run_dual_analysis(results_dir: Path, refs: int = 16, views: int = 64):
 
 
 if __name__ == "__main__":
-    results_base = Path("/home/stud/nemmler/retristyle/results")
+    results_base = Path("/home/stud/nemmler/style_tta/results")
     run_dual_analysis(results_base)

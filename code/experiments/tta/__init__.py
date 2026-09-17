@@ -20,7 +20,7 @@ Quick-start
     python -m experiments.tta.run_inference \\
         --dataset pathmnist --data_path ./data \\
         --classifier densenet121 --weights_path ./checkpoints/model.pth \\
-        --tta_method retristyle --eval_strategy zero \\
+        --tta_method style_tta --eval_strategy zero \\
         --retrieval_strategy random --n_refs 1
 
     # Extract embeddings independently

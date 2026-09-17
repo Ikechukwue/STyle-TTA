@@ -1,4 +1,4 @@
-"""AesFA – Method wrapper for the retristyle framework."""
+"""AesFA – Method wrapper for the style_tta framework."""
 
 import torch
 from types import SimpleNamespace

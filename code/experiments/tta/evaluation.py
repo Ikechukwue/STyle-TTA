@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from code.retristyle.ensemble_utils import FOODSFilter, soft_vote
+from code.style_tta.ensemble_utils import FOODSFilter, soft_vote
 from code.experiments.reference_methods.TTA import TENT
 
 from .constants import ZERO_GAMMA, TPT_GAMMA

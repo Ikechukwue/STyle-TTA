@@ -60,8 +60,8 @@ def print_style_influence(base_pred_path: Path, tta_pred_path: Path, mapping_jso
     print(f"Class Pull Effect: {shifted_to_predominant_style}/{total_shifts} ({pct_shifted:.1f}%) of prediction changes moved toward the PREDOMINANT style class.")
 
 if __name__=="__main__":
-    base_pred = "/home/stud/nemmler/retristyle/results/baseline/tta_inference/predictions/imagenet/test_r/resnet18_geometric_vanilla_nviews1_seed71397589.json"
+    base_pred = "/home/stud/nemmler/style_tta/results/baseline/tta_inference/predictions/imagenet/test_r/resnet18_geometric_vanilla_nviews1_seed71397589.json"
     for ref in [1, 3, 7, 15]:
-        tta_path = f"/home/stud/nemmler/retristyle/results/ablation/retristyle/tta_inference/predictions/imagenet/test_r/resnet18_retristyle_vanilla_dino_nrefs{ref+1}_seed71397589.json"
-        mapping_path = "/home/stud/nemmler/retristyle/results/retrieval_mapping/retrieval_mapping_dino_test_r_s71397589.json"
+        tta_path = f"/home/stud/nemmler/style_tta/results/ablation/style_tta/tta_inference/predictions/imagenet/test_r/resnet18_style_tta_vanilla_dino_nrefs{ref+1}_seed71397589.json"
+        mapping_path = "/home/stud/nemmler/style_tta/results/retrieval_mapping/retrieval_mapping_dino_test_r_s71397589.json"
         print_style_influence(base_pred, tta_path, mapping_path, ref)

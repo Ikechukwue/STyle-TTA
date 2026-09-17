@@ -8,7 +8,7 @@ Produces ``(V, 3, H, W)`` views of a single test image via:
   RandAugment, TrivialAugment, AugMix, grayscale, random erasing,
   targeted augment, and an *oracle* that randomly picks from all of them.
 - **TENT** — Identity (single forward pass).
-- **Style-transfer** (color_tta, retristyle, adain_tta) — *n_refs*
+- **Style-transfer** (color_tta, style_tta, adain_tta) — *n_refs*
   stylised copies produced by passing the test image + retrieved
   reference through a colour- or diffusion-based style transfer.
 
@@ -27,7 +27,7 @@ from accelerate import Accelerator
 from accelerate.utils import broadcast
 from torchvision.transforms import v2
 
-from code.retristyle.infer_style_base import StyleIDMethod
+from code.style_tta.infer_style_base import StyleIDMethod
 from .constants import AUGMENTATION_TTA_METHODS
 
 
@@ -202,7 +202,7 @@ def augment_views(
     retriever=None,
     n_refs: int = 5,
     color_transfer_fn=None,
-    retristyle_infer: StyleIDMethod | None = None,
+    style_tta_infer: StyleIDMethod | None = None,
     native_size: int = 512,
     classifier_size: int = 224,
     input_size: int = 224,
@@ -262,13 +262,13 @@ def augment_views(
         # forward pass (one content inversion + one batched style
         # inversion + one batched sampling).
         if (
-            tta_method in ["retristyle", "adain_tta"]
+            tta_method in ["style_tta", "adain_tta"]
             and chunked
             and B > 1
         ):
-            if retristyle_infer is None:
+            if style_tta_infer is None:
                 raise ValueError(
-                    "retristyle_infer required for retristyle"
+                    "style_tta_infer required for style_tta"
                 )
             refs = torch.stack(
                 [retriever.get_image(idx) for idx in chunk_indices]
@@ -277,7 +277,7 @@ def augment_views(
             img_native = _resize(img_batch, native_size)        # (B, 3, nat, nat)
             refs_native = _resize(refs, native_size)            # (B, 3, nat, nat)
 
-            out = retristyle_infer(img_native, refs_native)     # (B, 3, H', W')
+            out = style_tta_infer(img_native, refs_native)     # (B, 3, H', W')
             out = _resize(out, classifier_size)                 # (B, 3, cls, cls)
             for v in out:
                 views.append(v.clamp(0, 1).to(store_device))
@@ -297,12 +297,12 @@ def augment_views(
                             "color_transfer_fn required for color_tta"
                         )
                     out = color_transfer_fn(img_native, ref_native)
-                elif tta_method in ("retristyle"):
-                    if retristyle_infer is None:
+                elif tta_method in ("style_tta"):
+                    if style_tta_infer is None:
                         raise ValueError(
-                            "retristyle_infer required for retristyle"
+                            "style_tta_infer required for style_tta"
                         )
-                    out = retristyle_infer(img_native, ref_native)
+                    out = style_tta_infer(img_native, ref_native)
                 else:
                     raise ValueError(f"Unknown tta_method: {tta_method}")
 
@@ -331,7 +331,7 @@ def augment_views_distributed(
     accelerator: Accelerator,
     retriever=None,
     color_transfer_fn=None,
-    retristyle_infer: StyleIDMethod | None = None,
+    style_tta_infer: StyleIDMethod | None = None,
     native_size: int = 512,
     classifier_size: int = 224,
     style_batch_size: int | None = None,
@@ -381,13 +381,13 @@ def augment_views_distributed(
 
         # -- True batched path for diffusion-based methods -----------------
         if (
-            tta_method in ("retristyle", "adain_tta", "wct2_tta")
+            tta_method in ("style_tta", "adain_tta", "wct2_tta")
             and batched
             and B > 1
         ):
-            if retristyle_infer is None:
+            if style_tta_infer is None:
                 raise ValueError(
-                    "retristyle_infer required for retristyle/adain_tta"
+                    "style_tta_infer required for style_tta/adain_tta"
                 )
             refs = torch.stack(
                 [retriever.get_image(idx) for idx in batch_indices]
@@ -396,7 +396,7 @@ def augment_views_distributed(
             img_native = _resize(img_batch, native_size)
             refs_native = _resize(refs, native_size)
 
-            out = retristyle_infer(img_native, refs_native)     # (B, 3, H', W')
+            out = style_tta_infer(img_native, refs_native)     # (B, 3, H', W')
             out = _resize(out, classifier_size)
             for v in out:
                 my_views.append(v.clamp(0, 1))
@@ -413,12 +413,12 @@ def augment_views_distributed(
                     if color_transfer_fn is None:
                         raise ValueError("color_transfer_fn required for color_tta")
                     out = color_transfer_fn(img_native, ref_native)
-                elif tta_method in ("retristyle", "adain_tta", "wct2_tta"):
-                    if retristyle_infer is None:
+                elif tta_method in ("style_tta", "adain_tta", "wct2_tta"):
+                    if style_tta_infer is None:
                         raise ValueError(
-                            "retristyle_infer required for retristyle/adain_tta"
+                            "style_tta_infer required for style_tta/adain_tta"
                         )
-                    out = retristyle_infer(img_native, ref_native)
+                    out = style_tta_infer(img_native, ref_native)
                 else:
                     raise ValueError(
                         f"Unsupported tta_method for distributed: {tta_method}"

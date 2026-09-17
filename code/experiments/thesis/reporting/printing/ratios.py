@@ -343,7 +343,7 @@ def plot_class_metric_variance(class_metrics, output_dir="figures/domain_compari
             plt.show()
 
 if __name__ == "__main__":
-    domain_path = Path("/home/stud/nemmler/retristyle/results/domain_gap/feature_space/test_r")
+    domain_path = Path("/home/stud/nemmler/style_tta/results/domain_gap/feature_space/test_r")
 
     #print_domain_gap(domain_path)
     #print_domain_gap_class(domain_path)

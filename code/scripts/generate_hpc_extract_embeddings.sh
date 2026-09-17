@@ -51,7 +51,7 @@ HF_MODELS_CACHE=${HPC_HF_CACHE}
 TORCH_MODELS_CACHE=${HPC_TORCH_CACHE}
 if [[ -n "\$TMPDIR" ]]; then
     echo "Unpacking Source ImageNet to SSD..."
-    tar -xf \$WORK/retristyle/data/${DATASET}_${SPLIT}.tar -C \$TMPDIR/
+    tar -xf \$WORK/style_tta/data/${DATASET}_${SPLIT}.tar -C \$TMPDIR/
     DATA_PATH=\$TMPDIR/data
 
 else
@@ -70,12 +70,12 @@ APPTAINERENV_TORCH_HOME=/app/torch_models \\
 apptainer exec --nv \\
     --bind \$DATA_PATH:/app/data \\
     --bind \$EMBEDDING_DIR:/app/embeddings \\
-    --bind \$HOME/retristyle/experiments/data:/app/experiments/data:ro \\
+    --bind \$HOME/style_tta/experiments/data:/app/experiments/data:ro \\
     --bind \$HF_MODELS_CACHE:/app/hf_models \\
-    --bind \$HOME/retristyle/reference_db.py:/app/retristyle/retrieval/reference_db.py \\
+    --bind \$HOME/style_tta/reference_db.py:/app/style_tta/retrieval/reference_db.py \\
     --bind \$TORCH_MODELS_CACHE:/app/torch_models \\
     \$CONTAINER \\
-    python -m experiments.tta.extract_embeddings \\
+    python -m code.experiments.tta.extract_embeddings \\
         --dataset ${DATASET} --data_path /app/data --split train@${SPLIT} ${SPLIT} \\
         --output_dir /app/embeddings \\
         --model_name ${EMBEDDING_MODEL} \\

@@ -11,9 +11,9 @@ mkdir -p "$LOG_DIR"
 
 # Subsets for testing
 TEST_MODELS=("ViT-B-16" "resnet18")
-TEST_METHODS=("retristyle") # Now includes styleid
+TEST_METHODS=("style_tta") # Now includes styleid
 TEST_EVALS=("zero")
-MAIN_DIR="/home/stud/nemmler/retristyle"
+MAIN_DIR="/home/stud/nemmler/style_tta"
 export PYTHONPATH="$PROJECT_ROOT:$PYTHONPATH"
 
 for MDL in "${ALL_CLASSIFIERS[@]}"; do
@@ -22,7 +22,7 @@ for MDL in "${ALL_CLASSIFIERS[@]}"; do
         # Determine if we need to loop through retrieval strategies
         # If the method is styleid, we test all retrievers. Otherwise, we just use "none"
         CURRENT_RETRIEVERS=("dino")
-        if [[ "$TTA" == "retristyle" ]]; then
+        if [[ "$TTA" == "style_tta" ]]; then
             CURRENT_RETRIEVERS=("${RETRIEVAL_STRATEGIES[@]}")
         fi
 

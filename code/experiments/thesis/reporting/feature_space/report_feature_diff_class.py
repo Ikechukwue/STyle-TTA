@@ -6,8 +6,8 @@ from code.config.helpers import load_json, extract_class_metrics
 from code.config.constants import ALL_CLASSIFIERS
 
 def version_domain_gap(force=True):
-    results_path = Path("/home/stud/nemmler/retristyle/results/domain_gap/feature_space")
-    pred_base_path = Path("/home/stud/nemmler/retristyle/results/style_check/styleid")
+    results_path = Path("/home/stud/nemmler/style_tta/results/domain_gap/feature_space")
+    pred_base_path = Path("/home/stud/nemmler/style_tta/results/style_check/styleid")
 
     output_dir = results_path / "aggregated"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -180,9 +180,9 @@ def compute_gains_and_correlations(base_path, tta_path, sty_path, gap_df, classi
 
 
 def print_gains_and_correlations(df):
-    base = "/home/stud/nemmler/retristyle/results/baseline/tta_inference/predictions/imagenet/test_r/{cl}_geometric_vanilla_nviews1_seed71397589.json"
-    tta = "/home/stud/nemmler/retristyle/results/ablation/retristyle/tta_inference/predictions/imagenet/test_r/{cl}_retristyle_vanilla_dino_nrefs2_seed71397589.json"
-    sty = "/home/stud/nemmler/retristyle/results/style_check/styleid/view_001.png/tta_inference/predictions/imagenet/test_r/{cl}_geometric_vanilla_nviews1_seed71397589.json"
+    base = "/home/stud/nemmler/style_tta/results/baseline/tta_inference/predictions/imagenet/test_r/{cl}_geometric_vanilla_nviews1_seed71397589.json"
+    tta = "/home/stud/nemmler/style_tta/results/ablation/style_tta/tta_inference/predictions/imagenet/test_r/{cl}_style_tta_vanilla_dino_nrefs2_seed71397589.json"
+    sty = "/home/stud/nemmler/style_tta/results/style_check/styleid/view_001.png/tta_inference/predictions/imagenet/test_r/{cl}_geometric_vanilla_nviews1_seed71397589.json"
     
     for cl in ALL_CLASSIFIERS:
         base_path = Path(base.format(cl=cl))

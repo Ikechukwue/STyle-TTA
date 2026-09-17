@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# Common configuration for all retristyle scripts.
+# Common configuration for all style_tta scripts.
 # Source this file in other scripts: source "$(dirname "$0")/common.sh"
 # ============================================================================
 
@@ -16,15 +16,15 @@ EMBEDDING_DIR="${EMBEDDING_DIR:-${PROJECT_ROOT}/data/embeddings}"
 MODEL_DIR="${MODEL_DIR:-${PROJECT_ROOT}/models}"
 AUG_DIR="${AUG_DIR:-${PROJECT_ROOT}/data/augmented_cache}"
 # ── HPC cluster paths (NHR@FAU) ──
-HPC_CONTAINER='$WORK/retristyle/retristyle-production.sif'
-HPC_DATA_PATH='$WORK/retristyle/data'
-HPC_OUTPUT_PATH='$WORK/retristyle/results'
-HPC_WEIGHTS_DIR='$WORK/retristyle/models'
-HPC_EMBEDDING_DIR='$HPCVAULT/retristyle/embeddings'
-HPC_MODEL_DIR='$WORK/retristyle/models'
+HPC_CONTAINER='$WORK/style_tta/style_tta-production.sif'
+HPC_DATA_PATH='$WORK/style_tta/data'
+HPC_OUTPUT_PATH='$WORK/style_tta/results'
+HPC_WEIGHTS_DIR='$WORK/style_tta/models'
+HPC_EMBEDDING_DIR='$HPCVAULT/style_tta/embeddings'
+HPC_MODEL_DIR='$WORK/style_tta/models'
 HPC_HF_CACHE='$WORK/model_cache/hf'
 HPC_TORCH_CACHE='$WORK/model_cache/torch'
-HPC_LIVE_CODE='$HPCVAULT/snapshots/retristyle_20260518'
+HPC_LIVE_CODE='$HPCVAULT/snapshots/style_tta_20260518'
 # ── Default experiment settings ──
 DEFAULT_SEED=71397589
 ALL_SEEDS=(71397589 133560673 265017005)
@@ -136,7 +136,7 @@ if [[ -n "$TMPDIR" ]]; then
     echo "Unpacking data to $TMPDIR..."
     mkdir -p $TMPDIR/data
     # Unpack your tarball directly into the node's local SSD
-    tar -xf $WORK/retristyle/retristyle_data.tar -C $TMPDIR/
+    tar -xf $WORK/style_tta/style_tta_data.tar -C $TMPDIR/
     EFFECTIVE_DATA_PATH=$TMPDIR/data
     echo "Staging complete."
 else

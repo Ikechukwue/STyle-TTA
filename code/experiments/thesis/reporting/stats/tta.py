@@ -16,7 +16,7 @@ from code.experiments.data import create_dataset
 from code.experiments.classifier_evaluation import load_classifier
 from code.experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
 from code.experiments.reference_methods.style_transfer.artistic.adain.method import Method as AdaINMethod
-from code.retristyle.infer_style_base import StyleIDMethod
+from code.style_tta.infer_style_base import StyleIDMethod
 from code.experiments.tta.reference_db_setup import build_reference_db, build_retriever
 from code.experiments.tta.augmentation import augment_views
 from code.experiments.tta.evaluation import eval_vanilla
@@ -147,10 +147,10 @@ def benchmark_method(
     # Build style infrastructure OUTSIDE timed loop
     # -------------------------------------------------------------
 
-    retristyle_infer = None
+    style_tta_infer = None
     retriever = None
 
-    if method_name in ("retristyle", "adain_tta"):
+    if method_name in ("style_tta", "adain_tta"):
 
         ref_db = build_reference_db(
             args.dataset,
@@ -170,21 +170,21 @@ def benchmark_method(
             device=str(device),
         )
 
-        if method_name == "retristyle":
-            retristyle_infer = StyleIDMethod()
+        if method_name == "style_tta":
+            style_tta_infer = StyleIDMethod()
 
         elif method_name == "adain_tta":
             adain_path = Path(args.method_weights) / "adain.pth"
 
-            retristyle_infer = AdaINMethod(
+            style_tta_infer = AdaINMethod(
                 pretrained_weights=adain_path
             )
 
-            if hasattr(retristyle_infer, "to"):
-                retristyle_infer = retristyle_infer.to(device)
+            if hasattr(style_tta_infer, "to"):
+                style_tta_infer = style_tta_infer.to(device)
 
-            elif hasattr(retristyle_infer, "model"):
-                retristyle_infer.model = retristyle_infer.model.to(device)
+            elif hasattr(style_tta_infer, "model"):
+                style_tta_infer.model = style_tta_infer.model.to(device)
 
     # -------------------------------------------------------------
     # Storage
@@ -218,7 +218,7 @@ def benchmark_method(
                     end_idx=effective_n_refs,
                     retriever=retriever,
                     n_refs=effective_n_refs,
-                    retristyle_infer=retristyle_infer,
+                    style_tta_infer=style_tta_infer,
                     native_size=args.input_size,
                     classifier_size=args.input_size,
                     input_size=args.input_size,
@@ -237,7 +237,7 @@ def benchmark_method(
                     end_idx=effective_n_refs,
                     retriever=retriever,
                     n_refs=effective_n_refs,
-                    retristyle_infer=retristyle_infer,
+                    style_tta_infer=style_tta_infer,
                     native_size=args.input_size,
                     classifier_size=args.input_size,
                     input_size=args.input_size,
@@ -284,7 +284,7 @@ def benchmark_method(
                     end_idx=effective_n_refs,
                     retriever=retriever,
                     n_refs=effective_n_refs,
-                    retristyle_infer=retristyle_infer,
+                    style_tta_infer=style_tta_infer,
                     native_size=args.input_size,
                     classifier_size=args.input_size,
                     input_size=args.input_size,
@@ -666,7 +666,7 @@ def main():
 
     target_methods = [
         "geometric",
-        "retristyle",
+        "style_tta",
         "adain_tta",
     ]
 

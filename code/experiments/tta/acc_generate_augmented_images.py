@@ -27,7 +27,7 @@ Usage (single GPU)::
 
     python -m experiments.tta.generate_augmented_images \
         --dataset imagenet --split test_r --data_path ./data \
-        --tta_method retristyle --retrieval_strategy random \
+        --tta_method style_tta --retrieval_strategy random \
         --n_refs 1 --seed 71397589 --cache_root ./data/augmented_cache
 
 Usage (multi-GPU via Accelerate)::
@@ -35,7 +35,7 @@ Usage (multi-GPU via Accelerate)::
     accelerate launch --config_file configs/gpu_04.yaml \
         -m experiments.tta.generate_augmented_images \
         --dataset imagenet --split test_r --data_path ./data \
-        --tta_method retristyle --retrieval_strategy dino \
+        --tta_method style_tta --retrieval_strategy dino \
         --n_refs 16 --seed 71397589 --cache_root ./data/augmented_cache
 """
 
@@ -77,8 +77,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--split", type=str, default="test_r")
 
     # TTA method
-    p.add_argument("--tta_method", type=str, default="retristyle",
-                   choices=["retristyle", "color_tta", "adain_tta", "wct2_tta",
+    p.add_argument("--tta_method", type=str, default="style_tta",
+                   choices=["style_tta", "color_tta", "adain_tta", "wct2_tta",
                             "geometric", "color_jitter", "rand_augment",
                             "trivial_augment", "aug_mix", "auto_augment"])
     p.add_argument("--method_weights", type=str, default="./data/models",
@@ -112,7 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _cache_dir_name(args: argparse.Namespace) -> str:
     """Build a unique cache directory name from experiment config."""
     parts = [args.dataset, args.split, args.tta_method]
-    if args.tta_method in ("retristyle", "color_tta", "adain_tta", "wct2_tta"):
+    if args.tta_method in ("style_tta", "color_tta", "adain_tta", "wct2_tta"):
         parts.extend([args.retrieval_strategy, f"nr{args.n_refs}"])
     if args.tta_method == "color_tta" and args.color_method:
         parts.append(args.color_method)
@@ -265,7 +265,7 @@ def main():
     # ---- retriever setup (for style-transfer methods) -----------------------
     retriever = None
     color_transfer_fn = None
-    retristyle_infer = None
+    style_tta_infer = None
 
     if args.tta_method in RETRIEVAL_TTA_METHODS:
         ref_db = build_reference_db(
@@ -287,10 +287,10 @@ def main():
         )
         accelerator.print(f"  Retriever ready — {len(ref_db)} references")
 
-        if args.tta_method == "retristyle":
-            from code.retristyle.infer_style_base import StyleIDMethod
+        if args.tta_method == "style_tta":
+            from code.style_tta.infer_style_base import StyleIDMethod
             accelerator.print("Initialising StyleID diffusion...")
-            retristyle_infer = StyleIDMethod()
+            style_tta_infer = StyleIDMethod()
             accelerator.print("  StyleID ready")
 
         elif args.tta_method in ("color_tta", "adain_tta", "wct2_tta"):
@@ -352,7 +352,7 @@ def main():
         if use_distributed_style:
             # Shard reference retrievals across GPUs; returns full
             # (n_refs+1, 3, H, W) on every rank after gather.
-            from code.retristyle.infer_style_base import StyleIDMethod
+            from code.style_tta.infer_style_base import StyleIDMethod
             views = augment_views_distributed(
                 image,
                 args.tta_method,
@@ -360,7 +360,7 @@ def main():
                 accelerator=accelerator,
                 retriever=retriever,
                 color_transfer_fn=color_transfer_fn,
-                retristyle_infer=retristyle_infer,
+                style_tta_infer=style_tta_infer,
                 native_size=args.native_size,
                 classifier_size=args.input_size,
                 style_batch_size=args.style_batch_size,
@@ -373,7 +373,7 @@ def main():
                 retriever=retriever,
                 n_refs=effective_n_refs,
                 color_transfer_fn=color_transfer_fn,
-                retristyle_infer=retristyle_infer,
+                style_tta_infer=style_tta_infer,
                 native_size=args.native_size,
                 classifier_size=args.input_size,
                 input_size=args.input_size,

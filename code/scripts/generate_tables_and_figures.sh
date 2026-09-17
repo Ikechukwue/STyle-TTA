@@ -22,12 +22,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Generating LaTeX tables..."
-python -m experiments.reporting.generate_latex_tables \
+python -m code.experiments.thesis.reporting.generate_latex_tables \
     --results_dir "$RESULTS_DIR" \
     --output_dir "$RESULTS_DIR/tables"
 
 echo "Generating figures..."
-python -m experiments.reporting.visualize_results \
+python -m code.experiments.thesis.reporting.visualize_results \
     --results_dir "$RESULTS_DIR" \
     --output_dir "$RESULTS_DIR/figures"
 

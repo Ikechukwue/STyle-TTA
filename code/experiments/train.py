@@ -809,13 +809,13 @@ def train(
         import warnings
         warnings.warn(
             "Legacy colorist color_transfer augmentation has been removed. "
-            "Use retristyle for test-time adaptation instead. "
+            "Use style_tta for test-time adaptation instead. "
             "Continuing without color transfer augmentation.",
             DeprecationWarning,
             stacklevel=2,
         )
         use_color_transfer = False
-        accelerator.print("WARNING: color_transfer augmentation disabled (colorist removed). Use retristyle TTA at eval time.")
+        accelerator.print("WARNING: color_transfer augmentation disabled (colorist removed). Use style_tta TTA at eval time.")
         
         # Build post-color-transfer augmentations (e.g., RandomErasing)
         post_transforms = []

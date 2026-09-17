@@ -25,7 +25,7 @@ for EMBEDDING_MODEL in "${TIMM_CLASSIFIERS[@]}"; do
 for S in "${SPLIT[@]}"; do
     echo "Extracting embeddings: $DATASET / $SPLIT / $EMBEDDING_MODEL"
 
-    python -m experiments.tta.extract_embeddings \
+    python -m code.experiments.tta.extract_embeddings \
         --dataset "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
         --output_dir "$EMBEDDING_DIR" \
         --model_name "$EMBEDDING_MODEL" \
@@ -33,7 +33,7 @@ for S in "${SPLIT[@]}"; do
 done
     echo "Extracting embeddings: $DATASET / UCMerced / $EMBEDDING_MODEL"
 
-    python -m experiments.tta.extract_embeddings \
+    python -m code.experiments.tta.extract_embeddings \
         --dataset "$DATASET" --data_path "$DATA_PATH" --split "ucmerced" \
         --output_dir "$EMBEDDING_DIR" \
         --model_name "$EMBEDDING_MODEL" \

@@ -50,12 +50,12 @@ RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkg
     conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r && \
     conda config --set channel_priority flexible && \
     conda config --set auto_activate_base false && \
-    conda create -n retristyle python=${PYTHON_VERSION} -y && \
+    conda create -n style_tta python=${PYTHON_VERSION} -y && \
     conda clean -ya
 
 # Activate environment by default
-ENV CONDA_DEFAULT_ENV=retristyle \
-    PATH=/opt/conda/envs/retristyle/bin:$PATH
+ENV CONDA_DEFAULT_ENV=style_tta \
+    PATH=/opt/conda/envs/style_tta/bin:$PATH
 
 SHELL ["/bin/bash", "-c"]
 
@@ -108,11 +108,11 @@ ENV DATA_PATH=/app/data \
     OUTPUT_PATH=/app/results
 
 # Non-root user for security
-# Note: Container runs as retristyle user, but on HPC the bind mounts
+# Note: Container runs as style_tta user, but on HPC the bind mounts
 # will use the host user's UID, so file permissions work correctly
-RUN useradd -m retristyle && \
-    chown -R retristyle:retristyle /app
-USER retristyle
+RUN useradd -m style_tta && \
+    chown -R style_tta:style_tta /app
+USER style_tta
 
 # Default command
-CMD ["python", "-c", "import code.retristyle; print('RetriStyle is ready!')"]
+CMD ["python", "-c", "import code.style_tta; print('RetriStyle is ready!')"]

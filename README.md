@@ -28,11 +28,11 @@ The project combines:
 ## Repository Layout
 
 ```text
-retristyle/
+style_tta/
 ├── code/
 │   ├── config/          Paths, constants, and GPU configuration
 │   ├── experiments/     Training, inference, TTA, evaluation, and reporting
-│   ├── retristyle/      Retrieval, style-transfer, and ensemble library code
+│   ├── style_tta/       Retrieval, style-transfer, and ensemble library code
 │   └── scripts/         Local and HPC experiment wrappers
 ├── data/                Local datasets, embeddings, and augmented caches
 ├── models/              Local model weights, checkpoints, and style-transfer weights
@@ -73,7 +73,7 @@ python -m pip install -e .
 For a containerized environment:
 
 ```bash
-docker build --target production -t retristyle:production .
+docker build --target production -t style_tta:production .
 ```
 
 The container copies the canonical `code/` source tree into `/app/code`.
@@ -104,7 +104,7 @@ python -m code.experiments.tta.run_inference \
     --data_path ./data \
     --classifier densenet121 \
     --weights_path ./models/model.pth \
-    --tta_method retristyle \
+    --tta_method style_tta \
     --eval_strategy zero \
     --retrieval_strategy random \
     --n_refs 1 \
@@ -191,6 +191,13 @@ baseline training.
 
 This repository contains the implementation for the STyle-TTA research project. Add the project publication citation here once the associated paper or thesis metadata is finalized.
 
-## License
+## Licensing & Third-Party Content
 
-The package metadata identifies this project as MIT licensed. Add the repository's full license text to a `LICENSE` file before distributing releases.
+- **Code:** Licensed under the MIT License. See `LICENSE` for details.
+- **Thesis Text & Original Figures:** Licensed under CC BY 4.0.
+
+### Third-Party Media
+The following images included in this repository are exempt from the CC BY 4.0 license and are used under their original author copyrights / academic fair use:
+
+- (StyleID Framework): © Original Authors (Chung et al.), CC BY-NC-SA 4.0.
+- (StyleID Roster): © Original Authors, sourced from the StyleID GitHub repository (MIT License).

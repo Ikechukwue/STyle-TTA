@@ -29,7 +29,7 @@ for DS in "${DATASET[@]}"; do
     OUTPUT_PATH="./data/models/test/$DS"
     for CL in "${LP_CLASSIFIERS[@]}"; do
         echo "Running LP for model: $CL"
-        python -m experiments.train \
+        python -m code.experiments.train \
             --dataset "$DS" \
             --data_path "$DATA_PATH" \
             --classifier "$CL" \
@@ -47,7 +47,7 @@ for DS in "${DATASET[@]}"; do
     for CL in "${FT_CLASSIFIERS[@]}"
     do
         echo "Running FT for model: $CL"
-        python -m experiments.train \
+        python -m code.experiments.train \
             --dataset "$DS" \
             --data_path "$DATA_PATH" \
             --classifier "$CL" \

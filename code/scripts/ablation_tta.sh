@@ -62,7 +62,7 @@ for DT in "${DATASET}"; do
             python -m code.experiments.tta.run_inference \
                 --dataset "$DT" --data_path "$DATA_PATH" --split "$SPLIT" \
                 --classifier "$CL" --weights_path "$WEIGHTS_PATH" \
-                --tta_method retristyle --eval_strategy "$EVAL_STRATEGY" \
+                --tta_method style_tta --eval_strategy "$EVAL_STRATEGY" \
                 --retrieval_strategy "$RETRIEVAL_STRATEGY" \
                 --n_refs "$N_REFS" --n_views $N_REFS \
                 --style_batch_size $STYLE_BATCH_SIZE \
@@ -70,7 +70,7 @@ for DT in "${DATASET}"; do
                 --embedding_dir "$EMBEDDING_DIR" \
                 --seed "$SEED" \
                 --augmented_cache "$AUG_DIR" \
-                --output_path "$OUTPUT_PATH/ablation/retristyle"
+                --output_path "$OUTPUT_PATH/ablation/style_tta"
         done
     done
 done

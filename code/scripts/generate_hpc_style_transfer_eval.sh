@@ -73,7 +73,7 @@ timeout 7h apptainer exec --nv \\
     --bind \$WEIGHTS_DIR:/app/weights \\
     --bind \$OUTPUT_DIR:/app/output \\
     \$CONTAINER \\
-    python -m experiments.style_transfer_evaluation \\
+    python -m code.experiments.style_transfer_evaluation \\
         --data_path /app/data \\
         --weights_dir /app/weights \\
         --output_dir /app/output \\

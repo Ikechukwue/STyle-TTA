@@ -158,8 +158,8 @@ def main():
     data_path = "./data"
     seed = 71397589
     input_size = 224
-    mapping_path = "/home/stud/nemmler/retristyle/results/retrieval_mapping/imagenet/retrieval_mapping_dino_test_r_s71397589.json"
-    cache_base_dir = "/home/stud/nemmler/retristyle/data/augmented_cache"
+    mapping_path = "/home/stud/nemmler/style_tta/results/retrieval_mapping/imagenet/retrieval_mapping_dino_test_r_s71397589.json"
+    cache_base_dir = "/home/stud/nemmler/style_tta/data/augmented_cache"
     stylized_folders = [
         "adain_dino_imagenet_test_r_s71397589",
         "dino_imagenet_test_r_s71397589",
@@ -167,9 +167,9 @@ def main():
     view_name = "view_001.png"
     output_path = "image_roster_clea.png"
 
-    pred_path_a = "/home/stud/nemmler/retristyle/results/ablation/retristyle/tta_inference/predictions/imagenet/test_r/densenet121_retristyle_vanilla_dino_nrefs2_seed71397589.json"
-    pred_path_b = "/home/stud/nemmler/retristyle/results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/densenet121_adain_tta_zero_dino_nrefs2_seed71397589.json"
-    pred_path_c = "/home/stud/nemmler/retristyle/results/geometric_tta/tta_inference/predictions/imagenet/test_r/densenet121_geometric_vanilla_nviews1_seed71397589.json"
+    pred_path_a = "/home/stud/nemmler/style_tta/results/ablation/style_tta/tta_inference/predictions/imagenet/test_r/densenet121_style_tta_vanilla_dino_nrefs2_seed71397589.json"
+    pred_path_b = "/home/stud/nemmler/style_tta/results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/densenet121_adain_tta_zero_dino_nrefs2_seed71397589.json"
+    pred_path_c = "/home/stud/nemmler/style_tta/results/geometric_tta/tta_inference/predictions/imagenet/test_r/densenet121_geometric_vanilla_nviews1_seed71397589.json"
     comparison_mode = "a_and_b_only"
 
     num_cols = 8

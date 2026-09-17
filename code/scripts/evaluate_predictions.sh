@@ -23,7 +23,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Collecting and merging results..."
-python -m experiments.tta.collect_results --results_dir "$RESULTS_DIR"
+python -m code.experiments.tta.collect_results --results_dir "$RESULTS_DIR"
 
 echo "Evaluating predictions..."
-python -m experiments.evaluate_predictions --results_dir "$RESULTS_DIR"
+python -m code.experiments.evaluate_predictions --results_dir "$RESULTS_DIR"

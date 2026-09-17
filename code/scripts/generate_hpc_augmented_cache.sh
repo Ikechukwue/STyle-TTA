@@ -102,7 +102,7 @@ timeout 22h apptainer exec --nv \\
     accelerate launch --config_file \$ACCELERATE_CONFIG \\
         -m experiments.tta.acc_generate_augmented_images \\
         --dataset ${DATASET} --data_path /app/data --split ${SPLIT} \\
-        --tta_method retristyle \\
+        --tta_method style_tta \\
         --retrieval_strategy ${RETRIEVAL} \\
         --n_refs ${N_REFS} --n_views ${DEFAULT_N_VIEWS} \\
         --embedding_dir /app/data/embeddings --embedding_model ${EMBEDDING_MODEL} \\

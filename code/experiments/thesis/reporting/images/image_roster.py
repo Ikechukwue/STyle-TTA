@@ -82,7 +82,7 @@ def generate_dataset_3x6_roster(
     stylized_folder: str,
     sample_indices: list[int],
     data_path: str = "./data",
-    cache_base_dir: str = "/home/stud/nemmler/retristyle/data/augmented_cache",
+    cache_base_dir: str = "/home/stud/nemmler/style_tta/data/augmented_cache",
     view_name: str = "view_001.png",
     input_size: int = 224,
     seed: int = 71397589,
@@ -193,7 +193,7 @@ def generate_dataset_3x6_roster(
 
 
 if __name__ == "__main__":
-    mapping_template = "/home/stud/nemmler/retristyle/results/retrieval_mapping/{ds}/retrieval_mapping_dino_test_r_s71397589.json"
+    mapping_template = "/home/stud/nemmler/style_tta/results/retrieval_mapping/{ds}/retrieval_mapping_dino_test_r_s71397589.json"
 
     dataset_configs = [
         {

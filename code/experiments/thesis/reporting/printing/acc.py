@@ -105,7 +105,7 @@ def print_ablation_nrefs_multi(results_dir, strategy_keys, dataset, split):
                         for seed in ALL_SEEDS:
                             if s_key == "ablation/adain_tta":
                                 f_name = cfg["template"].format(cl=cl, eval="zero", retr="dino", rfs=rfs, seed=seed)
-                            elif s_key == "ablation/retristyle":
+                            elif s_key == "ablation/style_tta":
                                 f_name = cfg["template"].format(cl=cl, eval="vanilla", retr="dino", rfs=rfs, seed=seed)
                             elif s_key == "geometric_tta":
                                 f_name = cfg["template"].format(cl=cl, eval="vanilla", rfs=rfs, seed=seed, retr="")

@@ -78,9 +78,9 @@ def update_master_dataset(input_folder: str, master_csv_path: str):
 
 if __name__ == "__main__":
     MASTER_FILE = "./results/master_results.csv"
-    result_dir = f"/home/stud/nemmler/retristyle/results/ablation/adain_tta/tta_inference/results/imagenet/test_r"
+    result_dir = f"/home/stud/nemmler/style_tta/results/ablation/adain_tta/tta_inference/results/imagenet/test_r"
     build_master_dataset(result_dir, MASTER_FILE)
-    sec_results_dir = "/home/stud/nemmler/retristyle/results/ablation/retristyle/tta_inference/results/imagenet/test_r"
-    geometric_dir = "/home/stud/nemmler/retristyle/results/baseline/tta_inference/results/imagenet/test_r"
+    sec_results_dir = "/home/stud/nemmler/style_tta/results/ablation/style_tta/tta_inference/results/imagenet/test_r"
+    geometric_dir = "/home/stud/nemmler/style_tta/results/baseline/tta_inference/results/imagenet/test_r"
     update_master_dataset(sec_results_dir, MASTER_FILE)
     update_master_dataset(geometric_dir,MASTER_FILE)

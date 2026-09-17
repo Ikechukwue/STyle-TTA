@@ -4,14 +4,14 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name='retristyle',
+    name='style_tta',
     version='0.1.0',
     description='RetriStyle-TTA: Structure-Aware Retrieval and Diffusion for Test-Time Stain Adaptation.',
     long_description=long_description,
     long_description_content_type="text/markdown",
     author='xAILab Bamberg',
     author_email='your.email@example.com',
-    url='https://github.com/yourusername/retristyle',
+    url='https://github.com/yourusername/style_tta',
     packages=find_packages(exclude=['experiments', 'examples', 'tests']),
     install_requires=[
         "torch>=2.0.0",

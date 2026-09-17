@@ -16,7 +16,7 @@ source "$SCRIPT_DIR/common.sh"
 TARGET_SPLIT="test_r"
 echo "Domain shift analysis: imagenet/val → imagenet/${TARGET_SPLIT}"
 for i in {1..4}; do
-python -m experiments.thesis.reporting.feature_space.domain_shift_feature \
+python -m code.experiments.thesis.reporting.feature_space.domain_shift_feature \
     --embedding_dir ./data/embeddings \
     --dataset imagenet \
     --split_domain test_r \

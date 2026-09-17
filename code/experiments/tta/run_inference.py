@@ -10,7 +10,7 @@ TTA Methods
 * ``geometric``   — 16-view geometric augmentations (crop, flip, rotate)
 * ``tent``        — Test-time Entropy minimisation (BatchNorm affine)
 * ``color_tta``   — Any of the 21 color/style-transfer reference methods
-* ``retristyle``  — RetriStyle diffusion-based TTA (this project)
+* ``style_tta``  — RetriStyle diffusion-based TTA (this project)
 
 Evaluation Strategies
 ---------------------
@@ -35,13 +35,13 @@ Usage
     python -m experiments.tta.run_inference \\
         --dataset pathmnist --data_path ./data \\
         --classifier densenet121 --weights_path ./checkpoints/model.pth \\
-        --tta_method retristyle --eval_strategy zero \\
+        --tta_method style_tta --eval_strategy zero \\
         --retrieval_strategy random --n_refs 1
 
     python -m experiments.tta.run_inference \
         --dataset imagenet --split test_r --data_path ./data \
         --classifier densenet121 --weights_path ./checkpoints/model.pth \
-        --tta_method retristyle --eval_strategy zero \
+        --tta_method style_tta --eval_strategy zero \
         --retrieval_strategy random --n_refs 2
 
         
@@ -50,7 +50,7 @@ Usage
         -m experiments.tta.run_inference \\
         --dataset pathmnist --data_path /data \\
         --classifier densenet121 --weights_path /checkpoints/model.pth \\
-        --tta_method retristyle --eval_strategy zero \\
+        --tta_method style_tta --eval_strategy zero \\
         --retrieval_strategy dino --n_refs 64 \\
         --embedding_dir ./embeddings
 """
@@ -94,8 +94,8 @@ from code.experiments.reference_methods.TTA import GeometricTTA, TENT
 from code.config.constants import PRETRAINED_CLASSIFIERS
 from code.config.paths import DATA_PATH, OUTPUT_PATH, WEIGHTS_DIR
 # RetriStyle
-from code.retristyle.infer_style_base import StyleIDMethod
-from code.retristyle.ensemble_utils import FOODSFilter
+from code.style_tta.infer_style_base import StyleIDMethod
+from code.style_tta.ensemble_utils import FOODSFilter
 # Adain 
 from code.experiments.reference_methods.style_transfer.artistic.adain.method import Method as AdaINMethod
 # Package-local imports
@@ -208,7 +208,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     #accelerator.print(f"Classifier    : {args.classifier}")
     accelerator.print(f"TTA method    : {args.tta_method}")
     accelerator.print(f"Eval strategy : {args.eval_strategy}")
-    if args.tta_method in ("adain_tta", "color_tta", "retristyle"):
+    if args.tta_method in ("adain_tta", "color_tta", "style_tta"):
         accelerator.print(f"Retrieval     : {args.retrieval_strategy}")
         accelerator.print(f"n_refs        : {args.n_refs}")
     if args.tta_method == "color_tta":
@@ -285,7 +285,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
     else:
         sample_dir = None
     if (sample_dir is None
-        and args.tta_method in ("adain_tta", "color_tta", "retristyle")
+        and args.tta_method in ("adain_tta", "color_tta", "style_tta")
         and args.retrieval_strategy == "dino"
         and embedding_dir is not None
     ):
@@ -325,7 +325,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
         retriever = DummyRetriever()
         accelerator.print("Using dummy stub components (cache active).")
 
-    if sample_dir is None and args.tta_method in ("adain_tta", "color_tta", "retristyle"):
+    if sample_dir is None and args.tta_method in ("adain_tta", "color_tta", "style_tta"):
         accelerator.print("Building reference database (lazy loading)...")
         ref_db = build_reference_db(
             dataset=args.dataset,
@@ -358,15 +358,15 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
         ct_model = accelerator.prepare(ct_model)
         accelerator.print("  Color-transfer method ready")
     # ---- RetriStyle / StyleID diffusion (lazy) ------------------------------
-    retristyle_infer = None
-    if args.tta_method == "retristyle":
+    style_tta_infer = None
+    if args.tta_method == "style_tta":
         accelerator.print("Initialising StyleID diffusion...")
-        retristyle_infer = StyleIDMethod()
+        style_tta_infer = StyleIDMethod()
         accelerator.print("  StyleID diffusion ready")
     # ---- Adain based Styletransfer ------------------------------------------
     if args.tta_method == "adain_tta":
         accelerator.print("Initialising AdaIN...")
-        retristyle_infer = AdaINMethod(pretrained_weights=Path(args.method_weights) / "adain.pth")
+        style_tta_infer = AdaINMethod(pretrained_weights=Path(args.method_weights) / "adain.pth")
         accelerator.print("  AdaIN  ready")
 
     # ---- TENT setup ---------------------------------------------------------
@@ -564,7 +564,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
                 retriever=retriever,
                 n_refs=effective_n_refs,
                 color_transfer_fn=color_transfer_fn,
-                retristyle_infer=retristyle_infer,
+                style_tta_infer=style_tta_infer,
                 native_size=args.native_size,
                 classifier_size=args.input_size,
                 input_size=args.input_size,
@@ -609,7 +609,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
                     accelerator=accelerator,
                     retriever=retriever,
                     color_transfer_fn=color_transfer_fn,
-                    retristyle_infer=retristyle_infer,
+                    style_tta_infer=style_tta_infer,
                     native_size=args.native_size,
                     classifier_size=args.input_size,
                     style_batch_size=getattr(
@@ -622,7 +622,7 @@ def run_inference(args: argparse.Namespace) -> Dict[str, float]:
                     retriever=retriever,
                     n_refs=effective_n_refs,
                     color_transfer_fn=color_transfer_fn,
-                    retristyle_infer=retristyle_infer,
+                    style_tta_infer=style_tta_infer,
                     native_size=args.native_size,
                     classifier_size=args.input_size,
                     input_size=args.input_size,

@@ -211,7 +211,7 @@ def get_args():
     parser.add_argument("--dataset", type=str, default="imagenet")
     parser.add_argument("--data_path", type=str, default="./data")
     parser.add_argument("--stylized_dir", type=str,
-                        default="/home/stud/nemmler/retristyle/data/augmented_cache/adain_dino_imagenet_test_r_s71397589",
+                        default="/home/stud/nemmler/style_tta/data/augmented_cache/adain_dino_imagenet_test_r_s71397589",
                         help="Root directory containing stylized image folders")
     parser.add_argument("--view_name", type=str, default="view_001.png",
                         help="Specific view filename inside the sample directory")

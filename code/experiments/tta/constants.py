@@ -41,7 +41,7 @@ AUGMENTATION_TTA_METHODS = [
 RETRIEVAL_TTA_METHODS = [
     "adain_tta",
     "color_tta",
-    "retristyle",
+    "style_tta",
 ]
 
 # Available options -------------------------------------------------------

@@ -21,11 +21,11 @@ def get_classifier_name(cls: str) -> tuple[str, str]:
 def print_all_nrefs_metrics(results_dir: Path, dataset, split):
     """
     Prints a terminal table of Top-1 accuracy for all classifiers 
-    across adain, retristyle, and geometric methods.
+    across adain, style_tta, and geometric methods.
     """
     methods = {
         "ablation/adain_tta": "{cl}_adain_tta_zero_dino_nrefs{rfs}_seed71397589.json",
-        "ablation/retristyle": "{cl}_retristyle_zero_dino_nrefs{rfs}_seed71397589.json",
+        "ablation/style_tta": "{cl}_style_tta_zero_dino_nrefs{rfs}_seed71397589.json",
         "geometric_tta": "{cl}_geometric_zero_nviews{rfs}_seed71397589.json"
     }
     
@@ -41,7 +41,7 @@ def print_all_nrefs_metrics(results_dir: Path, dataset, split):
             vals = []
             for rfs in axis_values:
 
-                if method == "ablation/retristyle" and rfs > 16:
+                if method == "ablation/style_tta" and rfs > 16:
                     continue
                 # Build path
                 f = results_dir / method / f"tta_inference/results/{dataset}/{split}" / template.format(cl=cl, rfs=rfs)
@@ -65,7 +65,7 @@ def print_all_nrefs_metrics(results_dir: Path, dataset, split):
 def print_all_topk_metrics(results_dir: Path, dataset, split):
     methods = {
         "ablation/adain_tta": "{cl}_adain_tta_zero_dino_nrefs64_seed71397589.json",
-        "ablation/retristyle": "{cl}_retristyle_zero_dino_nrefs16_seed71397589.json",
+        "ablation/style_tta": "{cl}_style_tta_zero_dino_nrefs16_seed71397589.json",
         "geometric_tta": "{cl}_geometric_zero_nviews64_seed71397589.json"
     }
 

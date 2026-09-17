@@ -79,6 +79,6 @@ def generate_latex_table(data: dict) -> str:
     return "\n".join(latex)
 
 if __name__ == "__main__":
-    data = load_data("/home/stud/nemmler/retristyle/results/domain_gap/feature_space/test_r/full_cross_domain_gap.json")
+    data = load_data("/home/stud/nemmler/style_tta/results/domain_gap/feature_space/test_r/full_cross_domain_gap.json")
     latex_code = generate_latex_table(data)
     print(latex_code)

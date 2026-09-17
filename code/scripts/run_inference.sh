@@ -3,7 +3,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-python -m experiments.tta.run_inference \
+python -m code.experiments.tta.run_inference \
     --dataset imagenet --data_path ./data --split test_r_c26 \
     --classifier resnet18 --weights_path pretrained \
     --tta_method geometric --eval_strategy vanilla \

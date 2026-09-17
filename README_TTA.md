@@ -122,7 +122,7 @@ bash scripts/inference_tta/create_inference_tta_scripts.sh \
 
 # RetriStyle baseline
 bash scripts/inference_tta/create_inference_tta_scripts.sh \
-    retristyle zero dino none
+    style_tta zero dino none
 
 # Then submit
 bash scripts/inference_tta/geometric_zero_random_none/submit_all.sh
@@ -171,7 +171,7 @@ all existing scripts continue to work.
 Build the Docker image from the project root:
 
 ```bash
-docker build -t retristyle:latest .
+docker build -t style_tta:latest .
 ```
 
 ### Required Data
@@ -186,7 +186,7 @@ docker build -t retristyle:latest .
 If running outside Docker, install the project and its dependencies:
 
 ```bash
-pip install -e .               # retristyle package
+pip install -e .               # style_tta package
 pip install timm faiss-cpu     # DINOv3 embeddings + FAISS search
 ```
 
@@ -203,8 +203,8 @@ docker run --rm --gpus 1 \
     -v $(pwd)/models:/app/models:ro \
     -v $(pwd)/results:/app/results \
     -e PYTHONPATH=/app -e HF_HOME=/app/hf_models -e TORCH_HOME=/app/torch_models \
-    retristyle:production \
-    python -m experiments.tta.run_inference \
+    style_tta:production \
+    python -m code.experiments.tta.run_inference \
         --dataset pathmnist \
         --data_path /app/data \
         --classifier densenet121 \
@@ -223,13 +223,13 @@ docker run --rm --gpus 1 \
     -v $(pwd)/models:/app/models:ro \
     -v $(pwd)/results:/app/results \
     -e PYTHONPATH=/app -e HF_HOME=/app/hf_models -e TORCH_HOME=/app/torch_models \
-    retristyle:production \
-    python -m experiments.tta.run_inference \
+    style_tta:production \
+    python -m code.experiments.tta.run_inference \
         --dataset pathmnist \
         --data_path /app/data \
         --classifier densenet121 \
         --weights_path /app/models/pathmnist-densenet121-none-seed265017005.pth \
-        --tta_method retristyle \
+        --tta_method style_tta \
         --eval_strategy zero \
         --retrieval_strategy random \
         --n_refs 1 \
@@ -244,8 +244,8 @@ docker run --rm --gpus 1 \
     -v $(pwd)/models:/app/models:ro \
     -v $(pwd)/results:/app/results \
     -e PYTHONPATH=/app -e HF_HOME=/app/hf_models -e TORCH_HOME=/app/torch_models \
-    retristyle:production \
-    python -m experiments.tta.run_inference \
+    style_tta:production \
+    python -m code.experiments.tta.run_inference \
         --dataset pathmnist \
         --data_path /app/data \
         --classifier densenet121 \
@@ -276,13 +276,13 @@ docker run --rm --gpus all \
     -v $(pwd)/results:/app/results \
     -v $(pwd)/embeddings:/app/embeddings \
     -e PYTHONPATH=/app -e HF_HOME=/app/hf_models -e TORCH_HOME=/app/torch_models \
-    retristyle:production \
-    python -m experiments.tta.run_inference \
+    style_tta:production \
+    python -m code.experiments.tta.run_inference \
         --dataset pathmnist \
         --data_path /app/data \
         --classifier densenet121 \
         --weights_path /app/models/pathmnist-densenet121-none-seed265017005.pth \
-        --tta_method retristyle \
+        --tta_method style_tta \
         --eval_strategy zero \
         --retrieval_strategy dino \
         --n_refs 64 \
@@ -301,14 +301,14 @@ docker run --rm --gpus all \
     -v $(pwd)/results:/app/results \
     -v $(pwd)/embeddings:/app/embeddings \
     -e PYTHONPATH=/app -e HF_HOME=/app/hf_models -e TORCH_HOME=/app/torch_models \
-    retristyle:production \
+    style_tta:production \
     accelerate launch --config_file /app/configs/gpu_04.yaml \
         -m experiments.tta.run_inference \
         --dataset pathmnist \
         --data_path /app/data \
         --classifier densenet121 \
         --weights_path /app/models/pathmnist-densenet121-none-seed265017005.pth \
-        --tta_method retristyle \
+        --tta_method style_tta \
         --eval_strategy zero \
         --retrieval_strategy dino \
         --n_refs 64 \
@@ -337,8 +337,8 @@ standalone step (useful for running once across multiple experiments):
 docker run --rm --gpus 1 \
     -v $(pwd)/data:/app/data \
     -v $(pwd)/embeddings:/app/embeddings \
-    retristyle:latest \
-    python -m experiments.tta.extract_embeddings \
+    style_tta:latest \
+    python -m code.experiments.tta.extract_embeddings \
         --dataset pathmnist \
         --data_path /app/data \
         --output_dir /app/embeddings \
@@ -346,7 +346,7 @@ docker run --rm --gpus 1 \
         --model_name vit_base_patch16_dinov3.lvd1689m
 
 # Without Docker
-python -m experiments.tta.extract_embeddings \
+python -m code.experiments.tta.extract_embeddings \
     --dataset pathmnist \
     --data_path ./data \
     --output_dir ./embeddings \
@@ -375,7 +375,7 @@ A separate script is created for each `(dataset, seed)` combination.
 ```bash
 # Generate scripts for RetriStyle + ZERO + DINO retrieval (baseline classifier)
 bash scripts/inference_tta/create_inference_tta_scripts.sh \
-    retristyle zero dino none "gpu:a100:1" "a100"
+    style_tta zero dino none "gpu:a100:1" "a100"
 
 # Generate scripts for color_jitter + ZERO (aug-trained classifier — Setup B)
 bash scripts/inference_tta/create_inference_tta_scripts.sh \
@@ -396,7 +396,7 @@ bash scripts/inference_tta/create_inference_tta_scripts.sh \
 This creates:
 
 ```
-scripts/inference_tta/retristyle_zero_dino_none/
+scripts/inference_tta/style_tta_zero_dino_none/
 ├── submit_all.sh                              # Submit all jobs
 ├── infer_hpc_pathmnist_seed71397589.sh        # Per-dataset per-seed
 ├── infer_hpc_pathmnist_seed133560673.sh
@@ -409,7 +409,7 @@ scripts/inference_tta/retristyle_zero_dino_none/
 ### Submit Jobs
 
 ```bash
-bash scripts/inference_tta/retristyle_zero_dino_none/submit_all.sh
+bash scripts/inference_tta/style_tta_zero_dino_none/submit_all.sh
 ```
 
 ### Key HPC Features
@@ -427,7 +427,7 @@ bash scripts/inference_tta/retristyle_zero_dino_none/submit_all.sh
 
 ```bash
 # On HPC login node
-apptainer build colorist-production.sif docker-archive://retristyle_latest.tar
+apptainer build colorist-production.sif docker-archive://style_tta_latest.tar
 ```
 
 ---
@@ -440,7 +440,7 @@ Main entry-point. Can be launched directly or via `experiments.inference_tta`
 (backward-compatible wrapper).
 
 ```
-python -m experiments.tta.run_inference [OPTIONS]
+python -m code.experiments.tta.run_inference [OPTIONS]
 ```
 
 | Argument | Type | Default | Description |
@@ -475,7 +475,7 @@ python -m experiments.tta.run_inference [OPTIONS]
 Standalone embedding extraction.
 
 ```
-python -m experiments.tta.extract_embeddings [OPTIONS]
+python -m code.experiments.tta.extract_embeddings [OPTIONS]
 ```
 
 | Argument | Type | Default | Description |
@@ -525,7 +525,7 @@ spans the entire training set.
 |--------|-------------|
 | `adain_tta` | AdaIN style transfer |
 | `color_tta` | Classical color-transfer methods (21 variants) |
-| `retristyle` | Diffusion-based style transfer via StyleID |
+| `style_tta` | Diffusion-based style transfer via StyleID |
 
 ### Other
 
@@ -551,7 +551,7 @@ method. TENT always uses `vanilla` (it does its own adaptation).
 ## Retrieval Strategies
 
 Only relevant when `--tta_method` is `adain_tta`, `color_tta`, or
-`retristyle`. Ignored for augmentation-based methods and TENT.
+`style_tta`. Ignored for augmentation-based methods and TENT.
 
 | Strategy | Description | Requires |
 |----------|-------------|----------|
@@ -577,11 +577,11 @@ To re-evaluate predictions:
 
 ```bash
 # Single dataset
-python -m experiments.evaluate_predictions \
+python -m code.experiments.evaluate_predictions \
     --predictions_path ./results/tta_inference/predictions/epistr.json
 
 # All datasets
-python -m experiments.evaluate_predictions \
+python -m code.experiments.evaluate_predictions \
     --predictions_dir ./results/tta_inference/predictions/
 ```
 
@@ -593,7 +593,7 @@ python -m experiments.evaluate_predictions \
 #!/bin/bash
 # Full local experiment sweep — adjust paths and GPU count as needed
 
-IMAGE="retristyle:production"
+IMAGE="style_tta:production"
 DATA="$(pwd)/data"
 MODELS="$(pwd)/models"
 RESULTS="$(pwd)/results"
@@ -614,42 +614,42 @@ DOCKER="docker run --rm --gpus 1
     $IMAGE"
 
 # 1. Extract embeddings (once, reused by all dino experiments)
-$DOCKER python -m experiments.tta.extract_embeddings \
+$DOCKER python -m code.experiments.tta.extract_embeddings \
     --dataset "$DATASET" --data_path /app/data \
     --output_dir /app/embeddings --splits train test
 
 # 2. Setup A: Baseline classifier + geometric TTA + ZERO
-$DOCKER python -m experiments.tta.run_inference \
+$DOCKER python -m code.experiments.tta.run_inference \
     --dataset "$DATASET" --data_path /app/data \
     --classifier "$CLASSIFIER" --weights_path "/app/models/$W_NONE" \
     --tta_method geometric --eval_strategy zero \
     --n_views 64 --seed $SEED --output_path /app/results
 
 # 3. Setup A: Baseline classifier + oracle TTA + ZERO
-$DOCKER python -m experiments.tta.run_inference \
+$DOCKER python -m code.experiments.tta.run_inference \
     --dataset "$DATASET" --data_path /app/data \
     --classifier "$CLASSIFIER" --weights_path "/app/models/$W_NONE" \
     --tta_method oracle --eval_strategy zero \
     --n_views 64 --seed $SEED --output_path /app/results
 
 # 4. Setup B: color_jitter-trained + color_jitter TTA + ZERO
-$DOCKER python -m experiments.tta.run_inference \
+$DOCKER python -m code.experiments.tta.run_inference \
     --dataset "$DATASET" --data_path /app/data \
     --classifier "$CLASSIFIER" --weights_path "/app/models/$W_CJ" \
     --tta_method color_jitter --eval_strategy zero \
     --n_views 64 --seed $SEED --output_path /app/results
 
 # 5. RetriStyle + ZERO + DINO retrieval (64 refs)
-$DOCKER python -m experiments.tta.run_inference \
+$DOCKER python -m code.experiments.tta.run_inference \
     --dataset "$DATASET" --data_path /app/data \
     --classifier "$CLASSIFIER" --weights_path "/app/models/$W_NONE" \
-    --tta_method retristyle --eval_strategy zero \
+    --tta_method style_tta --eval_strategy zero \
     --retrieval_strategy dino --n_refs 64 \
     --embedding_dir /app/embeddings --seed $SEED \
     --output_path /app/results
 
 # 6. TENT baseline
-$DOCKER python -m experiments.tta.run_inference \
+$DOCKER python -m code.experiments.tta.run_inference \
     --dataset "$DATASET" --data_path /app/data \
     --classifier "$CLASSIFIER" --weights_path "/app/models/$W_NONE" \
     --tta_method tent --eval_strategy vanilla \
@@ -657,6 +657,6 @@ $DOCKER python -m experiments.tta.run_inference \
 
 # 7. Evaluate all predictions
 docker run --rm -v "$RESULTS":/app/results "$IMAGE" \
-    python -m experiments.evaluate_predictions \
+    python -m code.experiments.evaluate_predictions \
         --predictions_dir /app/results/tta_inference/predictions/
 ```

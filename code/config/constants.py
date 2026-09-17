@@ -13,7 +13,7 @@ ALL_SEEDS = [
 ]
 
 ALL_METHODS = {
-    "ablation/retristyle": "STyle-TTA(StyleID)",
+    "ablation/style_tta": "STyle-TTA(StyleID)",
     "ablation/adain": "STyle-TTA(AdaIN)",
     "geometric_tta": "Geometric TTA",
     "hybrid_tta": "Hybrid-TTA(Geo-Sty)"
@@ -120,7 +120,7 @@ STYLE_BATCH_SIZE = 8
 
 TTA_STRATEGIES = {
         "ablation/adain_tta": {"template": "{cl}_adain_tta_{eval}_{retr}_nrefs{rfs}_seed{seed}.json", "default_eval": "zero", "default_retr": "dino","axis": [2, 4, 8, 16, 32, 64], "color": "tab:red","color_shade": "Reds", "label": "AdaIN"},
-        "ablation/retristyle": {"template": "{cl}_retristyle_{eval}_dino_nrefs{rfs}_seed{seed}.json", "default_eval":"vanilla", "default_retr": "dino", "axis": [2, 4, 8, 16], "color": "tab:green","color_shade": "Greens", "label": "STyle-TTA"},
+        "ablation/style_tta": {"template": "{cl}_style_tta_{eval}_dino_nrefs{rfs}_seed{seed}.json", "default_eval":"vanilla", "default_retr": "dino", "axis": [2, 4, 8, 16], "color": "tab:green","color_shade": "Greens", "label": "STyle-TTA"},
         "geometric_tta": {"template": "{cl}_geometric_{eval}_nviews{rfs}_seed{seed}.json{retr}", "axis": [2, 4, 8, 16, 32, 64], "color": "tab:blue", "color_shade": "Blues","label": "Geometric"},
         "hybrid_tta": {"template": "{ds}_{cl}_hybrid_geo{geo}_sty{sty}_{eval}_split{use_n}_nr{rfs}_seed{seed}_results.json","default_eval":"vanilla", "default_retr":"dino", "axis": [4, 8, 16, 32, 64], "color": "tab:purple", "color_shade": "Purples","label": "Hybrid(Style/Geo)"},
     }

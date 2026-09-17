@@ -14,8 +14,8 @@ Protocol:
 Usage::
 
     python -m experiments.style_transfer_evaluation \\
-        --data_path /data/local/retristyle/data \\
-        --weights_dir /data/local/retristyle/models/style_transfer \\
+        --data_path /data/local/style_tta/data \\
+        --weights_dir /data/local/style_tta/models/style_transfer \\
         --output_dir ./results/style_transfer_eval \\
         --content_dataset imagenet --content_split test_r \\
         --style_dataset imagenet --style_split train \\

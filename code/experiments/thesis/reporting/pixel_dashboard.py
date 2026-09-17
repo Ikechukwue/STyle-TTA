@@ -23,16 +23,16 @@ from .helpers.support_funct import load_json, get_names
 classifier = "resnet18"
 method = 'geometric'
 BASELINE_PATH = (
-    "/home/stud/nemmler/retristyle/results/baseline/test_r/"
+    "/home/stud/nemmler/style_tta/results/baseline/test_r/"
     "tta_inference/predictions/imagenet/test_r/"
     f"{classifier}_geometric_vanilla_nviews1_seed265017005.json"
 )
 TTA_DIR = (
-    "/home/stud/nemmler/retristyle/results/baseline/test_r/"
+    "/home/stud/nemmler/style_tta/results/baseline/test_r/"
     "tta_inference/predictions/imagenet/test_r"
 )
 
-DOMAIN_PATH = "/home/stud/nemmler/retristyle/results/domain_stats/imagenet_test_r/0_30_imagenet_test_r.json"
+DOMAIN_PATH = "/home/stud/nemmler/style_tta/results/domain_stats/imagenet_test_r/0_30_imagenet_test_r.json"
 OUTPUT_DIR = f"./figures/tta_analysis_output/{method}/{classifier}"
 
 DOMAIN_METRICS = {
@@ -68,9 +68,9 @@ def parse_tta_filename(fname: str, method:str = "geometric") -> Optional[Dict[st
             r"([a-zA-Z0-9_]+)_geometric_([a-zA-Z0-9]+)_nviews(\d+)_seed(\d+)",
             fname
         )
-    elif method == 'retristyle':
+    elif method == 'style_tta':
         m = re.search(
-            r"([a-zA-Z0-9_]+)_retristyle_([a-zA-Z0-9]+)_dino_nrefs(\d+)_seed(\d+)",
+            r"([a-zA-Z0-9_]+)_style_tta_([a-zA-Z0-9]+)_dino_nrefs(\d+)_seed(\d+)",
             fname
         )
     else:
@@ -114,7 +114,7 @@ def load_pipeline_dataset(baseline_path: str, tta_dir: str, classifier: str, met
         base_df = base_df.rename(columns={"acc": "base_acc", "conf": "base_conf", "ent": "base_ent"})
         print(f"  Baseline overall accuracy: {base_df['base_acc'].mean():.4f} | {len(base_df)} classes")
 
-        method_pattern = f"{classifier}_geometric_vanilla_nviews*.json" if method == "geometric" else f"{classifier}_retristyle_vanilla_dino_nrefs*.json"
+        method_pattern = f"{classifier}_geometric_vanilla_nviews*.json" if method == "geometric" else f"{classifier}_style_tta_vanilla_dino_nrefs*.json"
         tta_pattern = os.path.join(tta_dir, method_pattern)
         print(tta_pattern)
         tta_files = glob.glob(tta_pattern)

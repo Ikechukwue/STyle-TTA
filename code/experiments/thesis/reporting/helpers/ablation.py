@@ -362,8 +362,8 @@ def plot_ablation_nrefs(results_dir: Path, output_dir: Path, method: str, args):
     axis_values = [2, 4, 8, 16, 32, 64]
     if method == "ablation/adain_tta":
         template = "{cl}_adain_tta_zero_dino_nrefs{rfs}_seed71397589.json"
-    elif method == "ablation/retristyle":
-        template = "{cl}_retristyle_zero_dino_nrefs{rfs}_seed71397589.json"
+    elif method == "ablation/style_tta":
+        template = "{cl}_style_tta_zero_dino_nrefs{rfs}_seed71397589.json"
         axis_values = axis_values[:4]
     elif method == "geometric_tta":
         template = "{cl}_geometric_zero_nviews{rfs}_seed71397589.json"
@@ -479,14 +479,14 @@ def plot_ablation_nrefs(results_dir: Path, output_dir: Path, method: str, args):
         plt.close(fig_tbl)
 
 def plot_all_ablation_nrefs(results_dir: Path, output_dir: Path, method: str, args, all_comparison: bool = False):
-    methods_to_run = ["ablation/adain_tta", "ablation/retristyle", "geometric_tta", "hybrid_tta"] if all_comparison else [method]
+    methods_to_run = ["ablation/adain_tta", "ablation/style_tta", "geometric_tta", "hybrid_tta"] if all_comparison else [method]
     save_folder = "all_methods_comparison" if all_comparison else method
     out_dir = output_dir / save_folder / args.split / "ablation_nrefs"
     out_dir.mkdir(parents=True, exist_ok=True)
     
     method_configs = {
         "ablation/adain_tta": {"template": "{cl}_adain_tta_zero_dino_nrefs{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16, 32, 64], "color": "tab:red", "label": "AdaIN"},
-        "ablation/retristyle": {"template": "{cl}_retristyle_zero_dino_nrefs{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16], "color": "tab:green", "label": "StyleID"},
+        "ablation/style_tta": {"template": "{cl}_style_tta_zero_dino_nrefs{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16], "color": "tab:green", "label": "StyleID"},
         "geometric_tta": {"template": "{cl}_geometric_zero_nviews{rfs}_seed{seed}.json", "axis": [2, 4, 8, 16, 32, 64], "color": "tab:blue", "label": "Geometric(Crop/Flip)"}
     }
 
@@ -554,7 +554,7 @@ def plot_ablation_nrefs_multi(results_dir, output_dir, strategy_keys, args):
                             f_name = cfg["template"].format(cl=cl, geo=geo_fac, rfs=real_rfs, seed=seed)
                         elif s_key == "ablation/adain_tta":
                             f_name = cfg["template"].format(cl=cl, eval="zero", retr="dino", rfs=rfs, seed=seed)
-                        elif s_key == "ablation/retristyle":
+                        elif s_key == "ablation/style_tta":
                             f_name = cfg["template"].format(cl=cl, eval="vanilla", retr="dino", rfs=rfs, seed=seed)
                         elif s_key == "geometric_tta":
                             f_name = cfg["template"].format(cl=cl, eval="vanilla", rfs=rfs, seed=seed, retr="")
@@ -838,12 +838,12 @@ def plot_nrefs_sweep(results_dir: Path, output_dir: Path, args, method: str, bes
 def plot_all_topk_metrics(results_dir: Path, dataset, split):
     methods = {
         "AdaIN": "ablation/adain_tta",
-        "RetriStyle": "ablation/retristyle",
+        "RetriStyle": "ablation/style_tta",
         "Geometric": "geometric_tta"
     }
     templates = {
         "AdaIN": "{cl}_adain_tta_zero_dino_nrefs64_seed71397589.json",
-        "RetriStyle": "{cl}_retristyle_zero_dino_nrefs16_seed71397589.json",
+        "RetriStyle": "{cl}_style_tta_zero_dino_nrefs16_seed71397589.json",
         "Geometric": "{cl}_geometric_zero_nviews64_seed71397589.json"
     }
 
@@ -898,4 +898,4 @@ def plot_all_topk_metrics(results_dir: Path, dataset, split):
         print(f"Saved: {filename}")
 
 if __name__ == "__main__":
-    res = Path("/home/stud/nemmler/retristyle/results")
+    res = Path("/home/stud/nemmler/style_tta/results")

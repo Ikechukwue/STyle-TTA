@@ -16,7 +16,7 @@ from torchvision.transforms import v2
 
 from code.experiments.data import create_dataset
 from code.experiments.utils.preprocessing import ResizeWhileRetainAspectRatio
-from code.retristyle.retrieval import (
+from code.style_tta.retrieval import (
     ReferenceDatabase,
     RandomRetriever,
     BalancedRandomRetriever,
@@ -24,7 +24,7 @@ from code.retristyle.retrieval import (
     BalancedMetricRetriever,
     DinoRetriever,
 )
-from code.retristyle.retrieval.dino_retriever import DEFAULT_EMBEDDING_MODEL
+from code.style_tta.retrieval.dino_retriever import DEFAULT_EMBEDDING_MODEL
 
 from .constants import DEFAULT_SEED
 from .extract_embeddings import embeddings_exist, load_cached_embeddings

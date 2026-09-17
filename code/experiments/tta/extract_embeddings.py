@@ -44,7 +44,7 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import v2
 from tqdm import tqdm
 
-from code.retristyle.retrieval.dino_retriever import DEFAULT_EMBEDDING_MODEL
+from code.style_tta.retrieval.dino_retriever import DEFAULT_EMBEDDING_MODEL
 from code.config.helpers import get_base_image_folder, inject_stylized_images_inplace
 from code.config.constants import PRETRAINED_CLASSIFIERS
 from code.experiments.data import create_dataset

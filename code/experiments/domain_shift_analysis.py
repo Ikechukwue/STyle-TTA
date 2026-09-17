@@ -24,7 +24,7 @@ Usage::
     python -m experiments.domain_shift_analysis \\
         --source_dataset imagenet --source_split val \\
         --target_dataset imagenet --target_split test_r \\
-        --data_path /data/local/retristyle/data \\
+        --data_path /data/local/style_tta/data \\
         --output_dir ./results/domain_shift_analysis \\
         --n_samples 500 --seed 42
 """

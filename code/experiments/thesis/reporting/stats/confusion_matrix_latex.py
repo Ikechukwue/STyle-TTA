@@ -79,7 +79,7 @@ if __name__ == "__main__":
             summary_dir=Path("./results/sample_analysis"),
             output_tex=Path(f"{i}_filtered_table.tex"),
             target_dataset="epistr",
-            target_method="ablation/retristyle",
+            target_method="ablation/style_tta",
             target_rfs=4,
             percent=i
         )

@@ -63,8 +63,8 @@ def generate_roster(
         mapping_path = ds_info["mapping_path"]
 
         if ds_name == "epistr":
-            style_img_path = "/home/stud/nemmler/retristyle/data/epistr/NKI/train/epi/epi19.jpg"
-            content_img_path = "/home/stud/nemmler/retristyle/data/epistr/IHC/test/epi/epi8.png"
+            style_img_path = "/home/stud/nemmler/style_tta/data/epistr/NKI/train/epi/epi19.jpg"
+            content_img_path = "/home/stud/nemmler/style_tta/data/epistr/IHC/test/epi/epi8.png"
 
             style_img = Image.open(style_img_path).convert("RGB")
             style_img = load_and_standardize(
@@ -178,7 +178,7 @@ def generate_roster(
 
 
 if __name__ == "__main__":
-    path = "/home/stud/nemmler/retristyle/results/retrieval_mapping/{ds}/retrieval_mapping_dino_test_r_s71397589.json"
+    path = "/home/stud/nemmler/style_tta/results/retrieval_mapping/{ds}/retrieval_mapping_dino_test_r_s71397589.json"
     datasets = [
         {
             "name": "imagenet",

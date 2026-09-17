@@ -437,7 +437,7 @@ def report_accuracy_agreement_mapping(mapped_analysis, method_name):
 
 if __name__ == "__main__":
     baseline_directory = "./results/baseline"
-    results_position = ["geometric_tta", "adain_tta", "retristyle"]
+    results_position = ["geometric_tta", "adain_tta", "style_tta"]
     
     for rp in results_position:
         rp_path = rp if rp == "geometric_tta" else f"ablation/{rp}"
@@ -447,8 +447,8 @@ if __name__ == "__main__":
             settings = {"eval_strat": "vanilla", "method": "geometric", "retr_strat": ""}
         elif rp == "adain_tta":
             settings = {"eval_strat": "zero", "method": "adain_tta", "retr_strat": "_dino"}
-        elif rp == "retristyle":
-            settings = {"eval_strat": "vanilla", "method": "retristyle", "retr_strat": "_dino"}
+        elif rp == "style_tta":
+            settings = {"eval_strat": "vanilla", "method": "style_tta", "retr_strat": "_dino"}
 
         output_path = f"results/tta_agreement/tta_agreement_{settings['method']}_{settings['eval_strat']}{settings['retr_strat']}_summary.json" 
 

@@ -239,7 +239,7 @@ if __name__ == "__main__":
     DATASET = "imagenet"
     SPLIT = "test_r"
     DATA_PATH = "./data"
-    CACHE_DIR = "/home/stud/nemmler/retristyle/data/augmented_cache/dino_imagenet_test_r_s71397589"
+    CACHE_DIR = "/home/stud/nemmler/style_tta/data/augmented_cache/dino_imagenet_test_r_s71397589"
     
     K_INTERVALS = [0,1,2,3,4]
     MAX_CLASSES = None  # Change to an integer if you want a fast validation subset test

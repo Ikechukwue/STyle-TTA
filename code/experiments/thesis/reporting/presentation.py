@@ -39,5 +39,5 @@ def plot_model_accuracies(json_string):
     fig.savefig('model_accuracies.png', bbox_inches='tight', dpi=300)
     plt.close(fig)
 if __name__ == "__main__":
-    path = "/home/stud/nemmler/retristyle/results/classifier_eval/classifier_evaluation/metrics_base.json"
+    path = "/home/stud/nemmler/style_tta/results/classifier_eval/classifier_evaluation/metrics_base.json"
     plot_model_accuracies(path)

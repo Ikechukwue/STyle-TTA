@@ -11,7 +11,7 @@ scripts) keep working without any changes::
     python -m experiments.inference_tta \\
         --dataset pathmnist --data_path /data \\
         --classifier densenet121 --weights_path ./checkpoints/model.pth \\
-        --tta_method retristyle --eval_strategy zero \\
+        --tta_method style_tta --eval_strategy zero \\
         --retrieval_strategy dino --n_refs 64
 
 For direct usage of the modular package, see :mod:`experiments.tta`.

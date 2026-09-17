@@ -15,7 +15,7 @@ Usage::
 
     python -m experiments.tta.hybrid \\
         --dataset imagenet --split test_r \\
-        --data_path /data/local/retristyle/data \\
+        --data_path /data/local/style_tta/data \\
         --classifier ViT-B-16 --weights_path pretrained \\
         --retrieval_strategy dino \\
         --n_views 64 --geo_frac 0.5 \\
@@ -87,7 +87,7 @@ def generate_hybrid_views(
     augmented_cache: Path | None = None,
     n_refs: int = 1,
     use_n_refs: int = 1,
-    retristyle_infer=None,
+    style_tta_infer=None,
     color_transfer_fn=None,
     native_size: int = 512,
     classifier_size: int = 224,
@@ -125,12 +125,12 @@ def generate_hybrid_views(
                     views_list.extend([t.to(device) for t in cached_tensors])
         
         elif retriever is not None:
-            tta_method = "retristyle" if retristyle_infer is not None else "color_tta"
+            tta_method = "style_tta" if style_tta_infer is not None else "color_tta"
             style_views = augment_views(
                 image, tta_method=tta_method, n_views=n_style + 1,
                 retriever=retriever, n_refs=n_style, 
                 color_transfer_fn=color_transfer_fn,
-                retristyle_infer=retristyle_infer, native_size=native_size,
+                style_tta_infer=style_tta_infer, native_size=native_size,
                 classifier_size=classifier_size, input_size=input_size,
                 dataset=dataset, style_batch_size=style_batch_size
             )
@@ -216,7 +216,7 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
 
     # Retriever setup (for style transfer portion)
     retriever = None
-    retristyle_infer = None
+    style_tta_infer = None
     color_transfer_fn = None
 
     
@@ -259,9 +259,9 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
             print(f"  Retriever ready — {len(ref_db)} references")
 
         # Load style transfer method
-        if args.style_method == "retristyle":
-            from code.retristyle.infer_style_base import StyleIDMethod
-            retristyle_infer = StyleIDMethod()
+        if args.style_method == "style_tta":
+            from code.style_tta.infer_style_base import StyleIDMethod
+            style_tta_infer = StyleIDMethod()
             print("  StyleID ready")
         else:
             from code.experiments.reference_methods.style_transfer_factory import (
@@ -313,7 +313,7 @@ def run_hybrid_tta(args: argparse.Namespace) -> Dict[str, float]:
             augmented_cache=augmented_cache, 
             n_refs=args.n_refs,
             use_n_refs=args.use_n_refs,
-            retristyle_infer=retristyle_infer,
+            style_tta_infer=style_tta_infer,
             color_transfer_fn=color_transfer_fn,
             native_size=args.native_size,
             classifier_size=args.input_size,
@@ -412,7 +412,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--tpt_gamma", type=float, default=TPT_GAMMA)
 
     p.add_argument("--retrieval_strategy", type=str, default="dino")
-    p.add_argument("--style_method", type=str, default="retristyle",
+    p.add_argument("--style_method", type=str, default="style_tta",
                    help="Style transfer method for the style portion")
     p.add_argument("--embedding_dir", type=str, default=None)
     p.add_argument("--embedding_model", type=str,

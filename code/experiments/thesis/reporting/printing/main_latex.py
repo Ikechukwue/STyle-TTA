@@ -292,7 +292,7 @@ def generate_transition_table(
     ----------
     strategy_keys : list[str]
         TTA strategies to report transitions for (e.g.
-        ["ablation/retristyle"] for a single-strategy "compact"
+        ["ablation/style_tta"] for a single-strategy "compact"
         table, or several for a "comprehensive" side-by-side table).
         Does not include "baseline" -- the baseline is embedded in
         each stats file already.
@@ -726,7 +726,7 @@ def generate_transition_table(
                     results_dir, dataset, "geometric_tta", cl, rfs, seed=seed, against=against,stat_type="acc"
                 )
                 style_id = load_transition_stats(
-                    results_dir, dataset, "ablation/retristyle", cl, rfs, seed=seed, against=against, stat_type="acc"
+                    results_dir, dataset, "ablation/style_tta", cl, rfs, seed=seed, against=against, stat_type="acc"
                 )
                 h_s1 = load_transition_stats(
                     results_dir, dataset, "hybrid_tta", cl, rfs, seed=seed, against=against,stat_type="acc" ,split=1, sty=hybrid_sty
@@ -777,9 +777,9 @@ def generate_transition_table(
                 results_dir, dataset, "geometric_tta", cl, 64, seed=seed, against=against
             )
             # Fetch optimal N for StyleID
-            style_rfs = rfs_values.get("ablation/retristyle", 16)
+            style_rfs = rfs_values.get("ablation/style_tta", 16)
             style_id = load_transition_stats(
-                results_dir, dataset, "ablation/retristyle", cl, style_rfs, seed=seed, against=against
+                results_dir, dataset, "ablation/style_tta", cl, style_rfs, seed=seed, against=against
             )
             h_s1 = load_transition_stats(
                 results_dir, dataset, "hybrid_tta", cl, 64, seed=seed, against=against, split=1, sty=hybrid_sty
@@ -855,12 +855,12 @@ def generate_transition_table(
                 geo = load_transition_stats(
                     results_dir, ds_name, "geometric_tta", cl, 64, seed=seed, against=against
                 )
-                style_rfs = rfs_values.get("ablation/retristyle", 16)
+                style_rfs = rfs_values.get("ablation/style_tta", 16)
                 if ds_name == "imagenet":
                     style_rfs = 16
 
                 style_id = load_transition_stats(
-                    results_dir, ds_name, "ablation/retristyle", cl, style_rfs, seed=seed, against=against
+                    results_dir, ds_name, "ablation/style_tta", cl, style_rfs, seed=seed, against=against
                 )
                 h_s1 = load_transition_stats(
                     results_dir, ds_name, "hybrid_tta", cl, 64, seed=seed, against=against, split=1, sty=hybrid_sty
@@ -943,12 +943,12 @@ def generate_transition_table(
                 geo = load_transition_stats(
                     results_dir, ds_name, "geometric_tta", cl, 64, seed=seed, against=against
                 )
-                style_rfs = rfs_values.get("ablation/retristyle", 16)
+                style_rfs = rfs_values.get("ablation/style_tta", 16)
                 if ds_name == "imagenet":
                     style_rfs = 16
 
                 style_id = load_transition_stats(
-                    results_dir, ds_name, "ablation/retristyle", cl, style_rfs, seed=seed, against=against
+                    results_dir, ds_name, "ablation/style_tta", cl, style_rfs, seed=seed, against=against
                 )
                 h_s1 = load_transition_stats(
                     results_dir, ds_name, "hybrid_tta", cl, 64, seed=seed, against=against, split=1, sty=hybrid_sty
@@ -1181,9 +1181,9 @@ if __name__ == "__main__":
             results_dir=results_dir,
             dataset=ds,
             split=TRUE_SPLITS[ALL_SPLITS[ds]],
-            strategy_keys=["ablation/retristyle", "geometric_tta"],
+            strategy_keys=["ablation/style_tta", "geometric_tta"],
             rfs_values={
-                "ablation/retristyle": 4,
+                "ablation/style_tta": 4,
                 "geometric_tta": 64,
             },
             table_mode=table_mode,

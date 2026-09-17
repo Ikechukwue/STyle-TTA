@@ -10,11 +10,11 @@ from collections import Counter
 # ==========================================
 # File Paths & Config
 # ==========================================
-PATH_BASE_PREDS = "/home/stud/nemmler/retristyle/results/geometric_tta/tta_inference/predictions/imagenet/test_r/{cl}_geometric_vanilla_nviews1_seed71397589.json"
-PATH_TTA_PREDS = "/home/stud/nemmler/retristyle/results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/{cl}_adain_tta_zero_dino_nrefs64_seed71397589.json"
-PATH_RETRIEVAL = "/home/stud/nemmler/retristyle/results/retrieval_mapping/imagenet/retrieval_mapping_dino_test_r_s71397589.json"
-PATH_CLASS_INDEX = "/home/stud/nemmler/retristyle/data/imagenet/imagenetr/imagenet_class_index.json"
-PATH_DOMAIN_GAP = "/home/stud/nemmler/retristyle/results/domain_gap/feature_space/aggregated/results_flat.csv"
+PATH_BASE_PREDS = "/home/stud/nemmler/style_tta/results/geometric_tta/tta_inference/predictions/imagenet/test_r/{cl}_geometric_vanilla_nviews1_seed71397589.json"
+PATH_TTA_PREDS = "/home/stud/nemmler/style_tta/results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/{cl}_adain_tta_zero_dino_nrefs64_seed71397589.json"
+PATH_RETRIEVAL = "/home/stud/nemmler/style_tta/results/retrieval_mapping/imagenet/retrieval_mapping_dino_test_r_s71397589.json"
+PATH_CLASS_INDEX = "/home/stud/nemmler/style_tta/data/imagenet/imagenetr/imagenet_class_index.json"
+PATH_DOMAIN_GAP = "/home/stud/nemmler/style_tta/results/domain_gap/feature_space/aggregated/results_flat.csv"
 
 
 

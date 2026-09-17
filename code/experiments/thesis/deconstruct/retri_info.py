@@ -523,7 +523,7 @@ if __name__ == "__main__":
 
     for method in ["dino", "random", "balanced_random"]:
         print(f"---- Analysis for {method} ----")
-        path = f"/home/stud/nemmler/retristyle/results/retrieval_mapping/imagenet/retrieval_mapping_{method}_test_r_s71397589.json"
+        path = f"/home/stud/nemmler/style_tta/results/retrieval_mapping/imagenet/retrieval_mapping_{method}_test_r_s71397589.json"
         y_true = get_y_true("imagenet", "test_r")
         
         analyze_neighborhood_dynamics(path, y_true)

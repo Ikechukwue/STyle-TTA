@@ -1,6 +1,8 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 
+# Thesis
+thesis/
 # Distribution / packaging
 .Python
 build/
@@ -51,8 +53,8 @@ figures/
 # Docker & Apptainer artifacts
 *.sif
 *.tar
-retristyle-*.tar
-retristyle-*.sif
+style_tta-*.tar
+style_tta-*.sif
 *-deployment.txt
 docker-compose.override.yml
 

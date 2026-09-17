@@ -208,7 +208,7 @@ def _build_method_instance(method_name: str, pretrained_weights: Optional[str]):
             f"Method file not found for '{method_name}': {module_file}"
         )
 
-    module_name = f"_retristyle_style_method_{method_name}"
+    module_name = f"_style_tta_style_method_{method_name}"
     spec = importlib.util.spec_from_file_location(module_name, module_file)
     if spec is None or spec.loader is None:
         raise ValueError(

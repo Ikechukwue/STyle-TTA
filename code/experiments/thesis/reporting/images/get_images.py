@@ -218,12 +218,12 @@ def main():
     parser.add_argument(
         "--mapping_path",
         type=str,
-        default="/home/stud/nemmler/retristyle/results/retrieval_mapping/imagenet/retrieval_mapping_dino_test_r_s71397589.json",
+        default="/home/stud/nemmler/style_tta/results/retrieval_mapping/imagenet/retrieval_mapping_dino_test_r_s71397589.json",
     )
     parser.add_argument(
         "--cache_base_dir",
         type=str,
-        default="/home/stud/nemmler/retristyle/data/augmented_cache",
+        default="/home/stud/nemmler/style_tta/data/augmented_cache",
     )
     parser.add_argument(
         "--stylized_folders",
@@ -241,7 +241,7 @@ def main():
     parser.add_argument(
         "--pred_path_a",
         type=str,
-        default="/home/stud/nemmler/retristyle/results/ablation/retristyle/tta_inference/predictions/imagenet/test_r/densenet121_retristyle_vanilla_dino_nrefs2_seed71397589.json",
+        default="/home/stud/nemmler/style_tta/results/ablation/style_tta/tta_inference/predictions/imagenet/test_r/densenet121_style_tta_vanilla_dino_nrefs2_seed71397589.json",
         help="Predictions file for model A, used for the comparison-mode sample "
         "selection and, if --info_cards is set, as the source of the predicted "
         "label shown for the corresponding entry in --stylized_folders.",
@@ -249,13 +249,13 @@ def main():
     parser.add_argument(
         "--pred_path_b",
         type=str,
-        default="/home/stud/nemmler/retristyle/results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/densenet121_adain_tta_zero_dino_nrefs2_seed71397589.json",
+        default="/home/stud/nemmler/style_tta/results/ablation/adain_tta/tta_inference/predictions/imagenet/test_r/densenet121_adain_tta_zero_dino_nrefs2_seed71397589.json",
         help="Predictions file for model B, used the same way as --pred_path_a.",
     )
     parser.add_argument(
         "--pred_path_c",
         type=str,
-        default="/home/stud/nemmler/retristyle/results/geometric_tta/tta_inference/predictions/imagenet/test_r/densenet121_geometric_vanilla_nviews1_seed71397589.json",
+        default="/home/stud/nemmler/style_tta/results/geometric_tta/tta_inference/predictions/imagenet/test_r/densenet121_geometric_vanilla_nviews1_seed71397589.json",
     )
     parser.add_argument(
         "--comparison_mode",

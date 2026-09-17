@@ -49,7 +49,7 @@ for CLF in "${ALL_CLASSIFIERS[@]}"; do
 
             WEIGHTS_LINE='WEIGHTS_PATH="pretrained"'
             if ! is_pretrained "$CLF"; then
-                WEIGHTS_LINE='WEIGHTS_PATH=$WORK/retristyle/models/training/${DATASET}-${CLASSIFIER}-none-seed${SEED}.pth'
+                WEIGHTS_LINE='WEIGHTS_PATH=$WORK/style_tta/models/training/${DATASET}-${CLASSIFIER}-none-seed${SEED}.pth'
             fi
 
             # Style requires more GPU for small geo_frac
@@ -121,7 +121,7 @@ timeout 23h apptainer exec --nv \\
     --bind \$HF_MODELS_CACHE:/app/hf_models \\
     --bind \$TORCH_MODELS_CACHE:/app/torch_models \\
     \$CONTAINER \\
-    python -m experiments.tta.hybrid \\
+    python -m code.experiments.tta.hybrid \\
         --dataset ${DATASET} --split ${SPLIT} \\
         --data_path /app/data \\
         --classifier "\$CLASSIFIER" \\

@@ -136,6 +136,6 @@ def run_view_rank_analysis(results_dir: Path, output_dir: Path):
 
 
 if __name__ == "__main__":
-    results_base = Path("/home/stud/nemmler/retristyle/results")
+    results_base = Path("/home/stud/nemmler/style_tta/results")
     output_base = Path("./output/view_rank_plots")
     run_view_rank_analysis(results_base, output_base)

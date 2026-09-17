@@ -35,9 +35,9 @@ done
 
 echo "Generating augmented cache: $DATASET/$SPLIT | retr=$RETRIEVAL_STRATEGY | n_refs=$N_REFS"
 
-python -m experiments.tta.generate_augmented_images \
+python -m code.experiments.tta.generate_augmented_images \
     --dataset "$DATASET" --data_path "$DATA_PATH" --split "$SPLIT" \
-    --tta_method "retristyle"\
+    --tta_method "style_tta"\
     --retrieval_strategy "$RETRIEVAL_STRATEGY" \
     --n_refs "$N_REFS" --n_views "$N_VIEWS" \
     --embedding_dir "$EMBEDDING_DIR" --embedding_model "$EMBEDDING_MODEL" \

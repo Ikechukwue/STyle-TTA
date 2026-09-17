@@ -93,5 +93,5 @@ def run_oracle_evaluation(results_dir: Path):
 
 
 if __name__ == "__main__":
-    results_base = Path("/home/stud/nemmler/retristyle/results")
+    results_base = Path("/home/stud/nemmler/style_tta/results")
     run_oracle_evaluation(results_base)

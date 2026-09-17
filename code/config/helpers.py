@@ -71,7 +71,7 @@ def parse_filename_metadata(filepath: str) -> dict:
             - 'n_refs' (int): Number of reference views/images.
             - 'classifier' (str): Name of the matched classifier.
             - 'eval_strategy' (str): Evaluation strategy matched from EVAL_STRATEGIES.
-            - 'tta_method' (str): Method identifier ('geometric_tta', 'retristyle', or 'adain_tta').
+            - 'tta_method' (str): Method identifier ('geometric_tta', 'style_tta', or 'adain_tta').
     """
     basename = Path(filepath).stem 
     metadata = {}
@@ -98,8 +98,8 @@ def parse_filename_metadata(filepath: str) -> dict:
             
     if 'geometric' in basename:
         metadata['tta_method'] = 'geometric_tta'
-    elif 'retristyle' in basename:
-        metadata['tta_method'] = 'retristyle'
+    elif 'style_tta' in basename:
+        metadata['tta_method'] = 'style_tta'
     elif 'adain' in basename:
         metadata['tta_method'] = 'adain_tta'
 

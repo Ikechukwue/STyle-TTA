@@ -1,468 +1,0 @@
-nohup: ignoring input
-Generating augmented cache: eurosat/ucmerced | retr=dino | n_refs=16
-/home/stud/nemmler/miniconda3/envs/retristyle/lib/python3.14/site-packages/outdated/__init__.py:36: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
-  from pkg_resources import parse_version
-========================================================================
-Augmented Image Pre-Generation
-========================================================================
-Cache dir     : data/augmented_cache/dino_eurosat_ucmerced_s71397589
-Dataset       : eurosat (split=ucmerced)
-TTA method    : retristyle
-Already done  : 0 samples
-Device        : cuda
-========================================================================
-Loaded UCMerced subset
-  [skip] /home/stud/nemmler/retristyle/data/embeddings/eurosat/vit_base_patch16_dinov3_lvd1689m/ucmerced.pt already exists
-Build database
-======================================================================
-StyleID: Initializing training-free style transfer method
-======================================================================
-Loading Stable Diffusion 1.4 from HuggingFace...
-Model ID: CompVis/stable-diffusion-v1-4
-Precision: torch.float16
-Device: cuda
-Downloading/loading model (this may take a few minutes on first run)...
-Fetching 14 files:   0%|          | 0/14 [00:00<?, ?it/s]Fetching 14 files:   7%|▋         | 1/14 [00:00<00:06,  2.11it/s]Fetching 14 files:  43%|████▎     | 6/14 [00:54<01:16,  9.57s/it]Fetching 14 files:  86%|████████▌ | 12/14 [00:56<00:08,  4.04s/it]Fetching 14 files: 100%|██████████| 14/14 [00:56<00:00,  4.06s/it]
-Loading pipeline components...:   0%|          | 0/6 [00:00<?, ?it/s]Loading pipeline components...:  17%|█▋        | 1/6 [00:57<04:47, 57.44s/it]Loading pipeline components...:  50%|█████     | 3/6 [00:58<00:45, 15.17s/it]Loading pipeline components...:  67%|██████▋   | 4/6 [01:03<00:23, 11.86s/it]Loading pipeline components...:  83%|████████▎ | 5/6 [01:04<00:08,  8.03s/it]`torch_dtype` is deprecated! Use `dtype` instead!
-You are using a model of type clip_text_model to instantiate a model of type clip. This is not supported for all configurations of models and can yield errors.
-Loading pipeline components...: 100%|██████████| 6/6 [01:12<00:00,  8.12s/it]Loading pipeline components...: 100%|██████████| 6/6 [01:12<00:00, 12.06s/it]
-======================================================================
-✓ StyleID initialized successfully
-  - Model: Stable Diffusion 1.4
-  - Device: cuda
-  - Dtype: torch.float16
-  - Parameters: gamma=0.75, T=1.5, steps=50
-  - Injection layers: [6, 7, 8, 9, 10, 11]
-  - Start step: 49
-  - AdaIN enabled: True
-  - Attention injection enabled: True
-======================================================================
-Generating:   0%|          | 0/700 [00:00<?, ?it/s]/home/stud/nemmler/miniconda3/envs/retristyle/lib/python3.14/site-packages/outdated/__init__.py:36: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
-  from pkg_resources import parse_version
-/home/stud/nemmler/miniconda3/envs/retristyle/lib/python3.14/site-packages/outdated/__init__.py:36: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
-  from pkg_resources import parse_version
-/home/stud/nemmler/miniconda3/envs/retristyle/lib/python3.14/site-packages/outdated/__init__.py:36: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
-  from pkg_resources import parse_version
-/home/stud/nemmler/miniconda3/envs/retristyle/lib/python3.14/site-packages/outdated/__init__.py:36: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
-  from pkg_resources import parse_version
-StyleID: Inverting content image...
-
-DDIM Inversion:   0%|          | 0/50 [00:00<?, ?it/s][A
-DDIM Inversion:   2%|▏         | 1/50 [00:00<00:47,  1.04it/s][A
-DDIM Inversion:   4%|▍         | 2/50 [00:01<00:23,  2.04it/s][A
-DDIM Inversion:   6%|▌         | 3/50 [00:01<00:16,  2.80it/s][A
-DDIM Inversion:   8%|▊         | 4/50 [00:01<00:13,  3.32it/s][A
-DDIM Inversion:  10%|█         | 5/50 [00:01<00:12,  3.72it/s][A
-DDIM Inversion:  12%|█▏        | 6/50 [00:01<00:10,  4.01it/s][A
-DDIM Inversion:  14%|█▍        | 7/50 [00:02<00:10,  4.21it/s][A
-DDIM Inversion:  16%|█▌        | 8/50 [00:02<00:09,  4.35it/s][A
-DDIM Inversion:  18%|█▊        | 9/50 [00:02<00:09,  4.45it/s][A
-DDIM Inversion:  20%|██        | 10/50 [00:02<00:08,  4.53it/s][A
-DDIM Inversion:  22%|██▏       | 11/50 [00:03<00:08,  4.55it/s][A
-DDIM Inversion:  24%|██▍       | 12/50 [00:03<00:08,  4.59it/s][A
-DDIM Inversion:  26%|██▌       | 13/50 [00:03<00:07,  4.63it/s][A
-DDIM Inversion:  28%|██▊       | 14/50 [00:03<00:07,  4.66it/s][A
-DDIM Inversion:  30%|███       | 15/50 [00:03<00:07,  4.67it/s][A
-DDIM Inversion:  32%|███▏      | 16/50 [00:04<00:07,  4.68it/s][A
-DDIM Inversion:  34%|███▍      | 17/50 [00:04<00:07,  4.69it/s][A
-DDIM Inversion:  36%|███▌      | 18/50 [00:04<00:06,  4.68it/s][A
-DDIM Inversion:  38%|███▊      | 19/50 [00:04<00:06,  4.69it/s][A
-DDIM Inversion:  40%|████      | 20/50 [00:04<00:06,  4.69it/s][A
-DDIM Inversion:  42%|████▏     | 21/50 [00:05<00:06,  4.69it/s][A
-DDIM Inversion:  44%|████▍     | 22/50 [00:05<00:05,  4.68it/s][A
-DDIM Inversion:  46%|████▌     | 23/50 [00:05<00:05,  4.69it/s][A
-DDIM Inversion:  48%|████▊     | 24/50 [00:05<00:05,  4.70it/s][A
-DDIM Inversion:  50%|█████     | 25/50 [00:06<00:05,  4.71it/s][A
-DDIM Inversion:  52%|█████▏    | 26/50 [00:06<00:05,  4.71it/s][A
-DDIM Inversion:  54%|█████▍    | 27/50 [00:06<00:04,  4.71it/s][A
-DDIM Inversion:  56%|█████▌    | 28/50 [00:06<00:04,  4.72it/s][A
-DDIM Inversion:  58%|█████▊    | 29/50 [00:06<00:04,  4.71it/s][A
-DDIM Inversion:  60%|██████    | 30/50 [00:07<00:04,  4.69it/s][A
-DDIM Inversion:  62%|██████▏   | 31/50 [00:07<00:04,  4.70it/s][A
-DDIM Inversion:  64%|██████▍   | 32/50 [00:07<00:03,  4.70it/s][A
-DDIM Inversion:  66%|██████▌   | 33/50 [00:07<00:03,  4.70it/s][A
-DDIM Inversion:  68%|██████▊   | 34/50 [00:07<00:03,  4.71it/s][A
-DDIM Inversion:  70%|███████   | 35/50 [00:08<00:03,  4.70it/s][A
-DDIM Inversion:  72%|███████▏  | 36/50 [00:08<00:02,  4.67it/s][A
-DDIM Inversion:  74%|███████▍  | 37/50 [00:08<00:02,  4.68it/s][A
-DDIM Inversion:  76%|███████▌  | 38/50 [00:08<00:02,  4.69it/s][A
-DDIM Inversion:  78%|███████▊  | 39/50 [00:08<00:02,  4.68it/s][A
-DDIM Inversion:  80%|████████  | 40/50 [00:09<00:02,  4.68it/s][A
-DDIM Inversion:  82%|████████▏ | 41/50 [00:09<00:01,  4.69it/s][A
-DDIM Inversion:  84%|████████▍ | 42/50 [00:09<00:01,  4.69it/s][A
-DDIM Inversion:  86%|████████▌ | 43/50 [00:09<00:01,  4.69it/s][A
-DDIM Inversion:  88%|████████▊ | 44/50 [00:10<00:01,  4.69it/s][A
-DDIM Inversion:  90%|█████████ | 45/50 [00:10<00:01,  4.69it/s][A
-DDIM Inversion:  92%|█████████▏| 46/50 [00:10<00:00,  4.69it/s][A
-DDIM Inversion:  94%|█████████▍| 47/50 [00:10<00:00,  4.69it/s][A
-DDIM Inversion:  96%|█████████▌| 48/50 [00:10<00:00,  4.69it/s][A
-DDIM Inversion:  98%|█████████▊| 49/50 [00:11<00:00,  4.70it/s][A
-DDIM Inversion: 100%|██████████| 50/50 [00:11<00:00,  4.66it/s][A
-                                                               [AStyleID: Inverting style image...
-
-DDIM Inversion:   0%|          | 0/50 [00:00<?, ?it/s][A
-DDIM Inversion:   2%|▏         | 1/50 [00:00<00:10,  4.65it/s][A
-DDIM Inversion:   4%|▍         | 2/50 [00:00<00:10,  4.68it/s][A
-DDIM Inversion:   6%|▌         | 3/50 [00:00<00:10,  4.69it/s][A
-DDIM Inversion:   8%|▊         | 4/50 [00:00<00:09,  4.69it/s][A
-DDIM Inversion:  10%|█         | 5/50 [00:01<00:09,  4.69it/s][A
-DDIM Inversion:  12%|█▏        | 6/50 [00:01<00:09,  4.70it/s][A
-DDIM Inversion:  14%|█▍        | 7/50 [00:01<00:09,  4.70it/s][A
-DDIM Inversion:  16%|█▌        | 8/50 [00:01<00:08,  4.70it/s][A
-DDIM Inversion:  18%|█▊        | 9/50 [00:01<00:08,  4.70it/s][A
-DDIM Inversion:  20%|██        | 10/50 [00:02<00:08,  4.70it/s][A
-DDIM Inversion:  22%|██▏       | 11/50 [00:02<00:08,  4.70it/s][A
-DDIM Inversion:  24%|██▍       | 12/50 [00:02<00:08,  4.70it/s][A
-DDIM Inversion:  26%|██▌       | 13/50 [00:02<00:07,  4.70it/s][A
-DDIM Inversion:  28%|██▊       | 14/50 [00:02<00:07,  4.70it/s][A
-DDIM Inversion:  30%|███       | 15/50 [00:03<00:07,  4.70it/s][A
-DDIM Inversion:  32%|███▏      | 16/50 [00:03<00:07,  4.70it/s][A
-DDIM Inversion:  34%|███▍      | 17/50 [00:03<00:07,  4.70it/s][A
-DDIM Inversion:  36%|███▌      | 18/50 [00:03<00:06,  4.70it/s][A
-DDIM Inversion:  38%|███▊      | 19/50 [00:04<00:06,  4.69it/s][A
-DDIM Inversion:  40%|████      | 20/50 [00:04<00:06,  4.70it/s][A
-DDIM Inversion:  42%|████▏     | 21/50 [00:04<00:06,  4.70it/s][A
-DDIM Inversion:  44%|████▍     | 22/50 [00:04<00:05,  4.70it/s][A
-DDIM Inversion:  46%|████▌     | 23/50 [00:04<00:05,  4.69it/s][A
-DDIM Inversion:  48%|████▊     | 24/50 [00:05<00:05,  4.70it/s][A
-DDIM Inversion:  50%|█████     | 25/50 [00:05<00:05,  4.70it/s][A
-DDIM Inversion:  52%|█████▏    | 26/50 [00:05<00:05,  4.69it/s][A
-DDIM Inversion:  54%|█████▍    | 27/50 [00:05<00:04,  4.68it/s][A
-DDIM Inversion:  56%|█████▌    | 28/50 [00:05<00:04,  4.66it/s][A
-DDIM Inversion:  58%|█████▊    | 29/50 [00:06<00:04,  4.66it/s][A
-DDIM Inversion:  60%|██████    | 30/50 [00:06<00:04,  4.67it/s][A
-DDIM Inversion:  62%|██████▏   | 31/50 [00:06<00:04,  4.67it/s][A
-DDIM Inversion:  64%|██████▍   | 32/50 [00:06<00:03,  4.67it/s][A
-DDIM Inversion:  66%|██████▌   | 33/50 [00:07<00:03,  4.67it/s][A
-DDIM Inversion:  68%|██████▊   | 34/50 [00:07<00:03,  4.68it/s][A
-DDIM Inversion:  70%|███████   | 35/50 [00:07<00:03,  4.67it/s][A
-DDIM Inversion:  72%|███████▏  | 36/50 [00:07<00:03,  4.66it/s][A
-DDIM Inversion:  74%|███████▍  | 37/50 [00:07<00:02,  4.67it/s][A
-DDIM Inversion:  76%|███████▌  | 38/50 [00:08<00:02,  4.67it/s][A
-DDIM Inversion:  78%|███████▊  | 39/50 [00:08<00:02,  4.68it/s][A
-DDIM Inversion:  80%|████████  | 40/50 [00:08<00:02,  4.68it/s][A
-DDIM Inversion:  82%|████████▏ | 41/50 [00:08<00:01,  4.68it/s][A
-DDIM Inversion:  84%|████████▍ | 42/50 [00:08<00:01,  4.69it/s][A
-DDIM Inversion:  86%|████████▌ | 43/50 [00:09<00:01,  4.69it/s][A
-DDIM Inversion:  88%|████████▊ | 44/50 [00:09<00:01,  4.68it/s][A
-DDIM Inversion:  90%|█████████ | 45/50 [00:09<00:01,  4.69it/s][A
-DDIM Inversion:  92%|█████████▏| 46/50 [00:09<00:00,  4.70it/s][A
-DDIM Inversion:  94%|█████████▍| 47/50 [00:10<00:00,  4.69it/s][A
-DDIM Inversion:  96%|█████████▌| 48/50 [00:10<00:00,  4.69it/s][A
-DDIM Inversion:  98%|█████████▊| 49/50 [00:10<00:00,  4.69it/s][A
-DDIM Inversion: 100%|██████████| 50/50 [00:10<00:00,  4.68it/s][A
-                                                               [AStyleID: Generating stylized image...
-
-DDIM Sampling:   0%|          | 0/50 [00:00<?, ?it/s][A
-DDIM Sampling:   4%|▍         | 2/50 [00:00<00:12,  3.94it/s][A
-DDIM Sampling:   6%|▌         | 3/50 [00:00<00:11,  4.01it/s][A
-DDIM Sampling:   8%|▊         | 4/50 [00:00<00:11,  4.04it/s][A
-DDIM Sampling:  10%|█         | 5/50 [00:01<00:11,  4.07it/s][A
-DDIM Sampling:  12%|█▏        | 6/50 [00:01<00:10,  4.08it/s][A
-DDIM Sampling:  14%|█▍        | 7/50 [00:01<00:10,  4.08it/s][A
-DDIM Sampling:  16%|█▌        | 8/50 [00:01<00:10,  4.09it/s][A
-DDIM Sampling:  18%|█▊        | 9/50 [00:02<00:10,  4.09it/s][A
-DDIM Sampling:  20%|██        | 10/50 [00:02<00:09,  4.09it/s][A
-DDIM Sampling:  22%|██▏       | 11/50 [00:02<00:09,  4.09it/s][A
-DDIM Sampling:  24%|██▍       | 12/50 [00:02<00:09,  4.09it/s][A
-DDIM Sampling:  26%|██▌       | 13/50 [00:03<00:09,  4.09it/s][A
-DDIM Sampling:  28%|██▊       | 14/50 [00:03<00:08,  4.09it/s][A
-DDIM Sampling:  30%|███       | 15/50 [00:03<00:08,  4.09it/s][A
-DDIM Sampling:  32%|███▏      | 16/50 [00:03<00:08,  4.09it/s][A
-DDIM Sampling:  34%|███▍      | 17/50 [00:04<00:08,  4.09it/s][A
-DDIM Sampling:  36%|███▌      | 18/50 [00:04<00:07,  4.09it/s][A
-DDIM Sampling:  38%|███▊      | 19/50 [00:04<00:07,  4.09it/s][A
-DDIM Sampling:  40%|████      | 20/50 [00:04<00:07,  4.09it/s][A
-DDIM Sampling:  42%|████▏     | 21/50 [00:05<00:07,  4.09it/s][A
-DDIM Sampling:  44%|████▍     | 22/50 [00:05<00:06,  4.09it/s][A
-DDIM Sampling:  46%|████▌     | 23/50 [00:05<00:06,  4.09it/s][A
-DDIM Sampling:  48%|████▊     | 24/50 [00:05<00:06,  4.08it/s][A
-DDIM Sampling:  50%|█████     | 25/50 [00:06<00:06,  4.08it/s][A
-DDIM Sampling:  52%|█████▏    | 26/50 [00:06<00:05,  4.09it/s][A
-DDIM Sampling:  54%|█████▍    | 27/50 [00:06<00:05,  4.08it/s][A
-DDIM Sampling:  56%|█████▌    | 28/50 [00:06<00:05,  4.08it/s][A
-DDIM Sampling:  58%|█████▊    | 29/50 [00:07<00:05,  4.08it/s][A
-DDIM Sampling:  60%|██████    | 30/50 [00:07<00:04,  4.08it/s][A
-DDIM Sampling:  62%|██████▏   | 31/50 [00:07<00:04,  4.08it/s][A
-DDIM Sampling:  64%|██████▍   | 32/50 [00:07<00:04,  4.08it/s][A
-DDIM Sampling:  66%|██████▌   | 33/50 [00:08<00:04,  4.08it/s][A
-DDIM Sampling:  68%|██████▊   | 34/50 [00:08<00:03,  4.08it/s][A
-DDIM Sampling:  70%|███████   | 35/50 [00:08<00:03,  4.08it/s][A
-DDIM Sampling:  72%|███████▏  | 36/50 [00:08<00:03,  4.08it/s][A
-DDIM Sampling:  74%|███████▍  | 37/50 [00:09<00:03,  4.08it/s][A
-DDIM Sampling:  76%|███████▌  | 38/50 [00:09<00:02,  4.08it/s][A
-DDIM Sampling:  78%|███████▊  | 39/50 [00:09<00:02,  4.08it/s][A
-DDIM Sampling:  80%|████████  | 40/50 [00:09<00:02,  4.08it/s][A
-DDIM Sampling:  82%|████████▏ | 41/50 [00:10<00:02,  4.08it/s][A
-DDIM Sampling:  84%|████████▍ | 42/50 [00:10<00:01,  4.08it/s][A
-DDIM Sampling:  86%|████████▌ | 43/50 [00:10<00:01,  4.07it/s][A
-DDIM Sampling:  88%|████████▊ | 44/50 [00:10<00:01,  4.07it/s][A
-DDIM Sampling:  90%|█████████ | 45/50 [00:11<00:01,  4.07it/s][A
-DDIM Sampling:  92%|█████████▏| 46/50 [00:11<00:00,  4.07it/s][A
-DDIM Sampling:  94%|█████████▍| 47/50 [00:11<00:00,  4.07it/s][A
-DDIM Sampling:  96%|█████████▌| 48/50 [00:11<00:00,  4.07it/s][A
-DDIM Sampling:  98%|█████████▊| 49/50 [00:12<00:00,  4.07it/s][A
-DDIM Sampling: 100%|██████████| 50/50 [00:12<00:00,  4.06it/s][A
-                                                              [AStyleID: Inverting content image...
-
-DDIM Inversion:   0%|          | 0/50 [00:00<?, ?it/s][A
-DDIM Inversion:   2%|▏         | 1/50 [00:00<00:10,  4.67it/s][A
-DDIM Inversion:   4%|▍         | 2/50 [00:00<00:10,  4.67it/s][A
-DDIM Inversion:   6%|▌         | 3/50 [00:00<00:10,  4.67it/s][A
-DDIM Inversion:   8%|▊         | 4/50 [00:00<00:09,  4.66it/s][A
-DDIM Inversion:  10%|█         | 5/50 [00:01<00:09,  4.67it/s][A
-DDIM Inversion:  12%|█▏        | 6/50 [00:01<00:09,  4.67it/s][A
-DDIM Inversion:  14%|█▍        | 7/50 [00:01<00:09,  4.66it/s][A
-DDIM Inversion:  16%|█▌        | 8/50 [00:01<00:09,  4.66it/s][A
-DDIM Inversion:  18%|█▊        | 9/50 [00:01<00:08,  4.67it/s][A
-DDIM Inversion:  20%|██        | 10/50 [00:02<00:08,  4.66it/s][A
-DDIM Inversion:  22%|██▏       | 11/50 [00:02<00:08,  4.66it/s][A
-DDIM Inversion:  24%|██▍       | 12/50 [00:02<00:08,  4.67it/s][A
-DDIM Inversion:  26%|██▌       | 13/50 [00:02<00:07,  4.67it/s][A
-DDIM Inversion:  28%|██▊       | 14/50 [00:03<00:07,  4.66it/s][A
-DDIM Inversion:  30%|███       | 15/50 [00:03<00:07,  4.66it/s][A
-DDIM Inversion:  32%|███▏      | 16/50 [00:03<00:07,  4.67it/s][A
-DDIM Inversion:  34%|███▍      | 17/50 [00:03<00:07,  4.66it/s][A
-DDIM Inversion:  36%|███▌      | 18/50 [00:03<00:06,  4.65it/s][A
-DDIM Inversion:  38%|███▊      | 19/50 [00:04<00:06,  4.65it/s][A
-DDIM Inversion:  40%|████      | 20/50 [00:04<00:06,  4.65it/s][A
-DDIM Inversion:  42%|████▏     | 21/50 [00:04<00:06,  4.66it/s][A
-DDIM Inversion:  44%|████▍     | 22/50 [00:04<00:06,  4.66it/s][A
-DDIM Inversion:  46%|████▌     | 23/50 [00:04<00:05,  4.66it/s][A
-DDIM Inversion:  48%|████▊     | 24/50 [00:05<00:05,  4.66it/s][A
-DDIM Inversion:  50%|█████     | 25/50 [00:05<00:05,  4.66it/s][A
-DDIM Inversion:  52%|█████▏    | 26/50 [00:05<00:05,  4.66it/s][A
-DDIM Inversion:  54%|█████▍    | 27/50 [00:05<00:04,  4.66it/s][A
-DDIM Inversion:  56%|█████▌    | 28/50 [00:06<00:04,  4.66it/s][A
-DDIM Inversion:  58%|█████▊    | 29/50 [00:06<00:04,  4.66it/s][A
-DDIM Inversion:  60%|██████    | 30/50 [00:06<00:04,  4.66it/s][A
-DDIM Inversion:  62%|██████▏   | 31/50 [00:06<00:04,  4.66it/s][A
-DDIM Inversion:  64%|██████▍   | 32/50 [00:06<00:03,  4.66it/s][A
-DDIM Inversion:  66%|██████▌   | 33/50 [00:07<00:03,  4.66it/s][A
-DDIM Inversion:  68%|██████▊   | 34/50 [00:07<00:03,  4.64it/s][A
-DDIM Inversion:  70%|███████   | 35/50 [00:07<00:03,  4.64it/s][A
-DDIM Inversion:  72%|███████▏  | 36/50 [00:07<00:03,  4.64it/s][A
-DDIM Inversion:  74%|███████▍  | 37/50 [00:07<00:02,  4.65it/s][A
-DDIM Inversion:  76%|███████▌  | 38/50 [00:08<00:02,  4.64it/s][A
-DDIM Inversion:  78%|███████▊  | 39/50 [00:08<00:02,  4.65it/s][A
-DDIM Inversion:  80%|████████  | 40/50 [00:08<00:02,  4.65it/s][A
-DDIM Inversion:  82%|████████▏ | 41/50 [00:08<00:01,  4.66it/s][A
-DDIM Inversion:  84%|████████▍ | 42/50 [00:09<00:01,  4.65it/s][A
-DDIM Inversion:  86%|████████▌ | 43/50 [00:09<00:01,  4.65it/s][A
-DDIM Inversion:  88%|████████▊ | 44/50 [00:09<00:01,  4.65it/s][A
-DDIM Inversion:  90%|█████████ | 45/50 [00:09<00:01,  4.64it/s][A
-DDIM Inversion:  92%|█████████▏| 46/50 [00:09<00:00,  4.64it/s][A
-DDIM Inversion:  94%|█████████▍| 47/50 [00:10<00:00,  4.64it/s][A
-DDIM Inversion:  96%|█████████▌| 48/50 [00:10<00:00,  4.63it/s][A
-DDIM Inversion:  98%|█████████▊| 49/50 [00:10<00:00,  4.63it/s][A
-DDIM Inversion: 100%|██████████| 50/50 [00:10<00:00,  4.64it/s][A
-                                                               [AStyleID: Inverting style image...
-
-DDIM Inversion:   0%|          | 0/50 [00:00<?, ?it/s][A
-DDIM Inversion:   2%|▏         | 1/50 [00:00<00:07,  6.15it/s][A
-DDIM Inversion:   4%|▍         | 2/50 [00:00<00:08,  5.50it/s][A
-DDIM Inversion:   6%|▌         | 3/50 [00:00<00:08,  5.29it/s][A
-DDIM Inversion:   8%|▊         | 4/50 [00:00<00:08,  5.19it/s][A
-DDIM Inversion:  10%|█         | 5/50 [00:00<00:08,  5.14it/s][A
-DDIM Inversion:  12%|█▏        | 6/50 [00:01<00:08,  5.10it/s][A
-DDIM Inversion:  14%|█▍        | 7/50 [00:01<00:08,  5.08it/s][A
-DDIM Inversion:  16%|█▌        | 8/50 [00:01<00:08,  5.08it/s][A
-DDIM Inversion:  18%|█▊        | 9/50 [00:01<00:08,  5.07it/s][A
-DDIM Inversion:  20%|██        | 10/50 [00:01<00:07,  5.08it/s][A
-DDIM Inversion:  22%|██▏       | 11/50 [00:02<00:07,  5.07it/s][A
-DDIM Inversion:  24%|██▍       | 12/50 [00:02<00:07,  5.06it/s][A
-DDIM Inversion:  26%|██▌       | 13/50 [00:02<00:07,  5.04it/s][A
-DDIM Inversion:  28%|██▊       | 14/50 [00:02<00:07,  5.02it/s][A
-DDIM Inversion:  30%|███       | 15/50 [00:02<00:06,  5.00it/s][A
-DDIM Inversion:  32%|███▏      | 16/50 [00:03<00:06,  5.00it/s][A
-DDIM Inversion:  34%|███▍      | 17/50 [00:03<00:06,  5.00it/s][A
-DDIM Inversion:  36%|███▌      | 18/50 [00:03<00:06,  5.00it/s][A
-DDIM Inversion:  38%|███▊      | 19/50 [00:03<00:06,  5.00it/s][A
-DDIM Inversion:  40%|████      | 20/50 [00:03<00:05,  5.01it/s][A
-DDIM Inversion:  42%|████▏     | 21/50 [00:04<00:05,  5.01it/s][A
-DDIM Inversion:  44%|████▍     | 22/50 [00:04<00:05,  5.02it/s][A
-DDIM Inversion:  46%|████▌     | 23/50 [00:04<00:05,  5.02it/s][A
-DDIM Inversion:  48%|████▊     | 24/50 [00:04<00:05,  5.02it/s][A
-DDIM Inversion:  50%|█████     | 25/50 [00:04<00:04,  5.03it/s][A
-DDIM Inversion:  52%|█████▏    | 26/50 [00:05<00:04,  5.03it/s][A
-DDIM Inversion:  54%|█████▍    | 27/50 [00:05<00:04,  5.03it/s][A
-DDIM Inversion:  56%|█████▌    | 28/50 [00:05<00:04,  5.04it/s][A
-DDIM Inversion:  58%|█████▊    | 29/50 [00:05<00:04,  5.04it/s][A
-DDIM Inversion:  60%|██████    | 30/50 [00:05<00:03,  5.04it/s][A
-DDIM Inversion:  62%|██████▏   | 31/50 [00:06<00:03,  5.05it/s][A
-DDIM Inversion:  64%|██████▍   | 32/50 [00:06<00:03,  5.04it/s][A
-DDIM Inversion:  66%|██████▌   | 33/50 [00:06<00:03,  5.04it/s][A
-DDIM Inversion:  68%|██████▊   | 34/50 [00:06<00:03,  4.93it/s][A
-DDIM Inversion:  70%|███████   | 35/50 [00:06<00:03,  4.84it/s][A
-DDIM Inversion:  72%|███████▏  | 36/50 [00:07<00:02,  4.77it/s][A
-DDIM Inversion:  74%|███████▍  | 37/50 [00:07<00:02,  4.72it/s][A
-DDIM Inversion:  76%|███████▌  | 38/50 [00:07<00:02,  4.69it/s][A
-DDIM Inversion:  78%|███████▊  | 39/50 [00:07<00:02,  4.67it/s][A
-DDIM Inversion:  80%|████████  | 40/50 [00:08<00:02,  4.65it/s][A
-DDIM Inversion:  82%|████████▏ | 41/50 [00:08<00:01,  4.58it/s][A
-DDIM Inversion:  84%|████████▍ | 42/50 [00:08<00:01,  4.56it/s][A
-DDIM Inversion:  86%|████████▌ | 43/50 [00:08<00:01,  4.00it/s][A
-DDIM Inversion:  88%|████████▊ | 44/50 [00:09<00:01,  4.11it/s][A
-DDIM Inversion:  90%|█████████ | 45/50 [00:09<00:01,  4.17it/s][A
-DDIM Inversion:  92%|█████████▏| 46/50 [00:09<00:01,  3.96it/s][A
-DDIM Inversion:  94%|█████████▍| 47/50 [00:09<00:00,  3.88it/s][A
-DDIM Inversion:  96%|█████████▌| 48/50 [00:10<00:00,  4.06it/s][A
-DDIM Inversion:  98%|█████████▊| 49/50 [00:10<00:00,  4.21it/s][A
-DDIM Inversion: 100%|██████████| 50/50 [00:10<00:00,  4.31it/s][A
-                                                               [AStyleID: Generating stylized image...
-
-DDIM Sampling:   0%|          | 0/50 [00:00<?, ?it/s][A
-DDIM Sampling:   4%|▍         | 2/50 [00:00<00:08,  5.53it/s][A
-DDIM Sampling:   6%|▌         | 3/50 [00:00<00:09,  4.82it/s][A
-DDIM Sampling:   8%|▊         | 4/50 [00:00<00:10,  4.51it/s][A
-DDIM Sampling:  10%|█         | 5/50 [00:01<00:10,  4.34it/s][A
-DDIM Sampling:  12%|█▏        | 6/50 [00:01<00:10,  4.25it/s][A
-DDIM Sampling:  14%|█▍        | 7/50 [00:01<00:10,  4.18it/s][A
-DDIM Sampling:  16%|█▌        | 8/50 [00:01<00:10,  4.14it/s][A
-DDIM Sampling:  18%|█▊        | 9/50 [00:02<00:09,  4.12it/s][A
-DDIM Sampling:  20%|██        | 10/50 [00:02<00:09,  4.10it/s][A
-DDIM Sampling:  22%|██▏       | 11/50 [00:02<00:09,  4.09it/s][A
-DDIM Sampling:  24%|██▍       | 12/50 [00:02<00:09,  4.08it/s][A
-DDIM Sampling:  26%|██▌       | 13/50 [00:03<00:09,  4.07it/s][A
-DDIM Sampling:  28%|██▊       | 14/50 [00:03<00:08,  4.06it/s][A
-DDIM Sampling:  30%|███       | 15/50 [00:03<00:08,  4.06it/s][A
-DDIM Sampling:  32%|███▏      | 16/50 [00:03<00:08,  4.06it/s][A
-DDIM Sampling:  34%|███▍      | 17/50 [00:04<00:08,  4.06it/s][A
-DDIM Sampling:  36%|███▌      | 18/50 [00:04<00:07,  4.05it/s][A
-DDIM Sampling:  38%|███▊      | 19/50 [00:04<00:07,  4.04it/s][A
-DDIM Sampling:  40%|████      | 20/50 [00:04<00:07,  4.03it/s][A
-DDIM Sampling:  42%|████▏     | 21/50 [00:05<00:07,  4.03it/s][A
-DDIM Sampling:  44%|████▍     | 22/50 [00:05<00:06,  4.02it/s][A
-DDIM Sampling:  46%|████▌     | 23/50 [00:05<00:06,  4.02it/s][A
-DDIM Sampling:  48%|████▊     | 24/50 [00:05<00:06,  4.02it/s][A
-DDIM Sampling:  50%|█████     | 25/50 [00:06<00:06,  4.02it/s][A
-DDIM Sampling:  52%|█████▏    | 26/50 [00:06<00:05,  4.02it/s][A
-DDIM Sampling:  54%|█████▍    | 27/50 [00:06<00:05,  4.02it/s][A
-DDIM Sampling:  56%|█████▌    | 28/50 [00:06<00:05,  4.02it/s][A
-DDIM Sampling:  58%|█████▊    | 29/50 [00:07<00:05,  4.02it/s][A
-DDIM Sampling:  60%|██████    | 30/50 [00:07<00:04,  4.02it/s][A
-DDIM Sampling:  62%|██████▏   | 31/50 [00:07<00:04,  4.02it/s][A
-DDIM Sampling:  64%|██████▍   | 32/50 [00:07<00:04,  4.02it/s][A
-DDIM Sampling:  66%|██████▌   | 33/50 [00:08<00:04,  4.02it/s][A
-DDIM Sampling:  68%|██████▊   | 34/50 [00:08<00:03,  4.02it/s][A
-DDIM Sampling:  70%|███████   | 35/50 [00:08<00:03,  4.01it/s][A
-DDIM Sampling:  72%|███████▏  | 36/50 [00:08<00:03,  4.02it/s][A
-DDIM Sampling:  74%|███████▍  | 37/50 [00:09<00:03,  4.02it/s][A
-DDIM Sampling:  76%|███████▌  | 38/50 [00:09<00:02,  4.02it/s][A
-DDIM Sampling:  78%|███████▊  | 39/50 [00:09<00:02,  4.01it/s][A
-DDIM Sampling:  80%|████████  | 40/50 [00:09<00:02,  4.01it/s][A
-DDIM Sampling:  82%|████████▏ | 41/50 [00:10<00:02,  4.01it/s][A
-DDIM Sampling:  84%|████████▍ | 42/50 [00:10<00:01,  4.01it/s][A
-DDIM Sampling:  86%|████████▌ | 43/50 [00:10<00:01,  4.01it/s][A
-DDIM Sampling:  88%|████████▊ | 44/50 [00:10<00:01,  4.01it/s][A
-DDIM Sampling:  90%|█████████ | 45/50 [00:11<00:01,  4.01it/s][A
-DDIM Sampling:  92%|█████████▏| 46/50 [00:11<00:00,  4.01it/s][A
-DDIM Sampling:  94%|█████████▍| 47/50 [00:11<00:00,  4.01it/s][A
-DDIM Sampling:  96%|█████████▌| 48/50 [00:11<00:00,  4.01it/s][A
-DDIM Sampling:  98%|█████████▊| 49/50 [00:12<00:00,  4.01it/s][A
-DDIM Sampling: 100%|██████████| 50/50 [00:12<00:00,  3.99it/s][A
-                                                              [AGenerating:   0%|          | 1/700 [02:11<25:36:18, 131.87s/it]StyleID: Inverting content image...
-
-DDIM Inversion:   0%|          | 0/50 [00:00<?, ?it/s][A
-DDIM Inversion:   2%|▏         | 1/50 [00:00<00:08,  5.96it/s][A
-DDIM Inversion:   4%|▍         | 2/50 [00:00<00:08,  5.87it/s][A
-DDIM Inversion:   6%|▌         | 3/50 [00:00<00:08,  5.84it/s][A
-DDIM Inversion:   8%|▊         | 4/50 [00:00<00:07,  5.85it/s][A
-DDIM Inversion:  10%|█         | 5/50 [00:00<00:07,  5.91it/s][A
-DDIM Inversion:  12%|█▏        | 6/50 [00:01<00:07,  5.56it/s][A
-DDIM Inversion:  14%|█▍        | 7/50 [00:01<00:08,  5.33it/s][A
-DDIM Inversion:  16%|█▌        | 8/50 [00:01<00:08,  5.19it/s][A
-DDIM Inversion:  18%|█▊        | 9/50 [00:01<00:08,  5.12it/s][A
-DDIM Inversion:  20%|██        | 10/50 [00:01<00:07,  5.07it/s][A
-DDIM Inversion:  22%|██▏       | 11/50 [00:02<00:07,  5.03it/s][A
-DDIM Inversion:  24%|██▍       | 12/50 [00:02<00:07,  5.00it/s][A
-DDIM Inversion:  26%|██▌       | 13/50 [00:02<00:07,  5.00it/s][A
-DDIM Inversion:  28%|██▊       | 14/50 [00:02<00:07,  4.99it/s][A
-DDIM Inversion:  30%|███       | 15/50 [00:02<00:07,  4.96it/s][A
-DDIM Inversion:  32%|███▏      | 16/50 [00:03<00:06,  4.96it/s][A
-DDIM Inversion:  34%|███▍      | 17/50 [00:03<00:06,  4.95it/s][A
-DDIM Inversion:  36%|███▌      | 18/50 [00:03<00:06,  4.95it/s][A
-DDIM Inversion:  38%|███▊      | 19/50 [00:03<00:06,  4.93it/s][A
-DDIM Inversion:  40%|████      | 20/50 [00:03<00:06,  4.93it/s][A
-DDIM Inversion:  42%|████▏     | 21/50 [00:04<00:05,  4.93it/s][A
-DDIM Inversion:  44%|████▍     | 22/50 [00:04<00:05,  4.92it/s][A
-DDIM Inversion:  46%|████▌     | 23/50 [00:04<00:05,  4.78it/s][A
-DDIM Inversion:  48%|████▊     | 24/50 [00:04<00:05,  4.76it/s][A
-DDIM Inversion:  50%|█████     | 25/50 [00:04<00:05,  4.75it/s][A
-DDIM Inversion:  52%|█████▏    | 26/50 [00:05<00:05,  4.71it/s][A
-DDIM Inversion:  54%|█████▍    | 27/50 [00:05<00:05,  4.57it/s][A
-DDIM Inversion:  56%|█████▌    | 28/50 [00:05<00:04,  4.58it/s][A
-DDIM Inversion:  58%|█████▊    | 29/50 [00:05<00:04,  4.55it/s][A
-DDIM Inversion:  60%|██████    | 30/50 [00:06<00:04,  4.56it/s][A
-DDIM Inversion:  62%|██████▏   | 31/50 [00:06<00:04,  4.58it/s][A
-DDIM Inversion:  64%|██████▍   | 32/50 [00:06<00:03,  4.60it/s][A
-DDIM Inversion:  66%|██████▌   | 33/50 [00:06<00:03,  4.63it/s][A
-DDIM Inversion:  68%|██████▊   | 34/50 [00:06<00:03,  4.66it/s][A
-DDIM Inversion:  70%|███████   | 35/50 [00:07<00:03,  4.70it/s][A
-DDIM Inversion:  72%|███████▏  | 36/50 [00:07<00:02,  4.71it/s][A
-DDIM Inversion:  74%|███████▍  | 37/50 [00:07<00:02,  4.68it/s][A
-DDIM Inversion:  76%|███████▌  | 38/50 [00:07<00:02,  4.71it/s][A
-DDIM Inversion:  78%|███████▊  | 39/50 [00:07<00:02,  4.72it/s][A
-DDIM Inversion:  80%|████████  | 40/50 [00:08<00:02,  4.73it/s][A
-DDIM Inversion:  82%|████████▏ | 41/50 [00:08<00:01,  4.72it/s][A
-DDIM Inversion:  84%|████████▍ | 42/50 [00:08<00:01,  4.69it/s][A
-DDIM Inversion:  86%|████████▌ | 43/50 [00:08<00:01,  4.73it/s][A
-DDIM Inversion:  88%|████████▊ | 44/50 [00:09<00:01,  4.76it/s][A
-DDIM Inversion:  90%|█████████ | 45/50 [00:09<00:01,  4.81it/s][A
-DDIM Inversion:  92%|█████████▏| 46/50 [00:09<00:00,  4.85it/s][A
-DDIM Inversion:  94%|█████████▍| 47/50 [00:09<00:00,  4.86it/s][A
-DDIM Inversion:  96%|█████████▌| 48/50 [00:09<00:00,  4.84it/s][A
-DDIM Inversion:  98%|█████████▊| 49/50 [00:10<00:00,  4.83it/s][A
-DDIM Inversion: 100%|██████████| 50/50 [00:10<00:00,  4.83it/s][A
-                                                               [AStyleID: Inverting style image...
-
-DDIM Inversion:   0%|          | 0/50 [00:00<?, ?it/s][A
-DDIM Inversion:   2%|▏         | 1/50 [00:00<00:08,  6.07it/s][A
-DDIM Inversion:   4%|▍         | 2/50 [00:00<00:07,  6.09it/s][A
-DDIM Inversion:   6%|▌         | 3/50 [00:00<00:07,  6.07it/s][A
-DDIM Inversion:   8%|▊         | 4/50 [00:00<00:07,  6.03it/s][A
-DDIM Inversion:  10%|█         | 5/50 [00:00<00:07,  6.01it/s][A
-DDIM Inversion:  12%|█▏        | 6/50 [00:00<00:07,  6.02it/s][A
-DDIM Inversion:  14%|█▍        | 7/50 [00:01<00:07,  6.03it/s][A
-DDIM Inversion:  16%|█▌        | 8/50 [00:01<00:06,  6.04it/s][A
-DDIM Inversion:  18%|█▊        | 9/50 [00:01<00:06,  6.02it/s][A
-DDIM Inversion:  20%|██        | 10/50 [00:01<00:06,  6.00it/s][A
-DDIM Inversion:  22%|██▏       | 11/50 [00:01<00:06,  6.00it/s][A
-DDIM Inversion:  24%|██▍       | 12/50 [00:01<00:06,  6.00it/s][A
-DDIM Inversion:  26%|██▌       | 13/50 [00:02<00:06,  5.99it/s][A
-DDIM Inversion:  28%|██▊       | 14/50 [00:02<00:06,  5.97it/s][A
-DDIM Inversion:  30%|███       | 15/50 [00:02<00:05,  5.97it/s][A
-DDIM Inversion:  32%|███▏      | 16/50 [00:02<00:05,  5.97it/s][A
-DDIM Inversion:  34%|███▍      | 17/50 [00:02<00:05,  5.98it/s][A
-DDIM Inversion:  36%|███▌      | 18/50 [00:02<00:05,  6.00it/s][A
-DDIM Inversion:  38%|███▊      | 19/50 [00:03<00:05,  6.02it/s][A
-DDIM Inversion:  40%|████      | 20/50 [00:03<00:04,  6.02it/s][A
-DDIM Inversion:  42%|████▏     | 21/50 [00:03<00:04,  6.02it/s][A
-DDIM Inversion:  44%|████▍     | 22/50 [00:03<00:04,  6.03it/s][A
-DDIM Inversion:  46%|████▌     | 23/50 [00:03<00:04,  6.04it/s][A
-DDIM Inversion:  48%|████▊     | 24/50 [00:03<00:04,  6.05it/s][A
-DDIM Inversion:  50%|█████     | 25/50 [00:04<00:04,  6.06it/s][A
-DDIM Inversion:  52%|█████▏    | 26/50 [00:04<00:03,  6.06it/s][A
-DDIM Inversion:  54%|█████▍    | 27/50 [00:04<00:03,  6.06it/s][A
-DDIM Inversion:  56%|█████▌    | 28/50 [00:04<00:03,  6.06it/s][A
-DDIM Inversion:  58%|█████▊    | 29/50 [00:04<00:03,  6.07it/s][A
-DDIM Inversion:  60%|██████    | 30/50 [00:04<00:03,  6.06it/s][A
-DDIM Inversion:  62%|██████▏   | 31/50 [00:05<00:03,  6.06it/s][A
-DDIM Inversion:  64%|██████▍   | 32/50 [00:05<00:02,  6.06it/s][A
-DDIM Inversion:  66%|██████▌   | 33/50 [00:05<00:02,  6.01it/s][A
-DDIM Inversion:  68%|██████▊   | 34/50 [00:05<00:02,  5.62it/s][A
-DDIM Inversion:  70%|███████   | 35/50 [00:05<00:02,  5.16it/s][A
-DDIM Inversion:  72%|███████▏  | 36/50 [00:06<00:02,  4.85it/s][A
-DDIM Inversion:  74%|███████▍  | 37/50 [00:06<00:02,  4.51it/s][A
-DDIM Inversion:  76%|███████▌  | 38/50 [00:06<00:02,  4.39it/s][A
-DDIM Inversion:  78%|███████▊  | 39/50 [00:06<00:02,  4.28it/s][A
-DDIM Inversion:  80%|████████  | 40/50 [00:07<00:02,  4.14it/s][A
-DDIM Inversion:  82%|████████▏ | 41/50 [00:07<00:02,  4.09it/s][A
-DDIM Inversion:  84%|████████▍ | 42/50 [00:07<00:01,  4.09it/s][A
-DDIM Inversion:  86%|████████▌ | 43/50 [00:07<00:01,  4.09it/s][A
-DDIM Inversion:  88%|████████▊ | 44/50 [00:08<00:01,  4.10it/s][A
-DDIM Inversion:  90%|█████████ | 45/50 [00:08<00:01,  4.14it/s][A
-DDIM Inversion:  92%|█████████▏| 46/50 [00:08<00:00,  4.19it/s][A
-DDIM Inversion:  94%|█████████▍| 47/50 [02:46<02:22, 47.41s/it][A
-DDIM Inversion:  96%|█████████▌| 48/50 [02:46<01:06, 33.33s/it][A
-DDIM Inversion:  98%|█████████▊| 49/50 [03:04<00:28, 28.70s/it][A

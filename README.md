@@ -14,17 +14,19 @@ The project combines:
 
 ```text
 retristyle/
-├── retristyle/          Core STyle-TTA library
-├── experiments/         Training, TTA, evaluation, metrics, and reporting
-├── scripts/             Local experiment runners and HPC job generators
-├── config/              Shared project configuration and constants
-├── data/                Datasets, embeddings, and cached artifacts
-├── checkpoints/         Model checkpoints
-├── results/             Predictions and experiment outputs
-├── figures/             Generated figures
+├── code/                Canonical source tree: config, experiments, and library code
+├── data/                Local datasets, embeddings, and cached artifacts (not tracked)
+├── models/              Local model weights and checkpoints (not tracked)
+├── results/             Local predictions and experiment outputs (not tracked)
 ├── requirements.txt     Reproducible Python dependencies
 └── Dockerfile           CUDA-enabled production image
 ```
+
+Large datasets, model weights, checkpoints, generated outputs, and experiment
+results are intentionally excluded from Git. Configure their locations with
+`DATA_PATH`, `MODEL_DIR`, `WEIGHTS_DIR`, `EMBEDDING_DIR`, and `OUTPUT_PATH`, or
+create local `data/`, `models/`, and `results/` directories at the repository
+root. Do not commit machine-specific symlinks to external storage paths.
 
 ## Requirements
 
@@ -53,14 +55,14 @@ For a containerized environment:
 docker build --target production -t retristyle:production .
 ```
 
-See [GETTING_STARTED.md](GETTING_STARTED.md) for Docker, NVIDIA Container Toolkit, and Apptainer setup details.
+See the experiment documentation in this repository for Docker, NVIDIA Container Toolkit, and Apptainer setup details.
 
 ## Quick Start
 
 Run the TTA entry point directly with a dataset and classifier checkpoint:
 
 ```bash
-python -m experiments.tta.run_inference \
+python -m code.experiments.tta.run_inference \
     --dataset pathmnist \
     --data_path ./data \
     --classifier densenet121 \

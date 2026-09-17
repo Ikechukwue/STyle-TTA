@@ -45,6 +45,7 @@ wandb/
 
 # Outputs
 outputs/
+output/
 figures/
 *.o*
 # Docker & Apptainer artifacts
@@ -56,17 +57,14 @@ retristyle-*.sif
 docker-compose.override.yml
 
 # Data directories (large files)
-**/data/*
-checkpoints/
-results/
-logs/
-models/
-assets/
+/data
+/checkpoints/
+/results
+/logs/
+/models/
+/assets/
 *.pdf
 *.o*
-# Make sure it doesn't ignore that folder 
-!**/data/__init__.py
-!experiments/data/*.py
 # Environment files (may contain secrets)
 .env
 .env.local
@@ -104,3 +102,7 @@ scripts/generated/
 *.tar.gz
 *.tgz
 *.rar
+
+# Python caches
+**/__pycache__/
+*.py[cod]

@@ -4,15 +4,16 @@
 # Source this file in other scripts: source "$(dirname "$0")/common.sh"
 # ============================================================================
 
-# ── Project root (relative to scripts/) ──
-PROJECT_ROOT="/home/stud/nemmler/retristyle"
+# ── Project root (relative to this file) ──
+COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$COMMON_DIR/../.." && pwd)"
 
 # ── Default paths (local machine) ──
-DATA_PATH="${DATA_PATH:-/data/local/retristyle/data}"
+DATA_PATH="${DATA_PATH:-${PROJECT_ROOT}/data}"
 OUTPUT_PATH="${OUTPUT_PATH:-${PROJECT_ROOT}/results}"
-WEIGHTS_DIR="${WEIGHTS_DIR:-/data/local/retristyle/models/style_transfer}"
+WEIGHTS_DIR="${WEIGHTS_DIR:-${PROJECT_ROOT}/models/style_transfer}"
 EMBEDDING_DIR="${EMBEDDING_DIR:-${PROJECT_ROOT}/data/embeddings}"
-MODEL_DIR="${MODEL_DIR:-${PROJECT_ROOT}/data/models}"
+MODEL_DIR="${MODEL_DIR:-${PROJECT_ROOT}/models}"
 AUG_DIR="${AUG_DIR:-${PROJECT_ROOT}/data/augmented_cache}"
 # ── HPC cluster paths (NHR@FAU) ──
 HPC_CONTAINER='$WORK/retristyle/retristyle-production.sif'

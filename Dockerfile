@@ -88,24 +88,24 @@ FROM dependencies AS production
 WORKDIR /app
 
 # Copy only necessary project files
-COPY retristyle/ /app/retristyle/
-COPY experiments/ /app/experiments/
-COPY configs/ /app/configs/
+COPY code/ /app/code/
 COPY setup.py README.md __init__.py /app/
 
 # Install package
 RUN pip install .
 
-# Create directories for data and outputs
+# Create directories for mounted data, models, and results
 RUN mkdir -p /app/data \
-    /app/checkpoints \
-    /app/outputs \
+    /app/models \
+    /app/results \
     /app/wandb
 
-# Set environment variables for production
-ENV retristyle_DATA_DIR=/app/data \
-    retristyle_CHECKPOINT_DIR=/app/checkpoints \
-    retristyle_OUTPUT_DIR=/app/outputs
+# Set defaults consumed by code/config/paths.py
+ENV DATA_PATH=/app/data \
+    MODEL_DIR=/app/models \
+    WEIGHTS_DIR=/app/models/style_transfer \
+    EMBEDDING_DIR=/app/data/embeddings \
+    OUTPUT_PATH=/app/results
 
 # Non-root user for security
 # Note: Container runs as retristyle user, but on HPC the bind mounts
@@ -115,4 +115,4 @@ RUN useradd -m retristyle && \
 USER retristyle
 
 # Default command
-CMD ["python", "-c", "import retristyle; print('RetriStyle is ready!')"]
+CMD ["python", "-c", "import code.retristyle; print('RetriStyle is ready!')"]

@@ -1,9 +1,9 @@
 # ============================================================================
-# Colorist Requirements
+# STyle-TTA Requirements
 # ============================================================================
-# Complete list of Python packages for the Colorist project
-# Environment: colorist (Python 3.13, PyTorch 2.9.1, CUDA 12.8)
-# Last updated: 2025-12-04
+# Runtime and experiment dependencies for the STyle-TTA thesis codebase
+# Tested environment: Python 3.13, PyTorch 2.9.1, CUDA 12.8
+# Last updated: 2026-09-17
 #
 # Note: numpy constrained to <2.3.0 due to scipy/scikit compatibility
 # opencv-python removed (not used in codebase)
@@ -65,6 +65,7 @@ wandb==0.23.1
 # Metrics & Evaluation
 # ============================================================================
 lpips==0.1.4
+torchmetrics>=1.0.0
 
 # ============================================================================
 # Medical Image Datasets
@@ -97,6 +98,8 @@ faiss-cpu>=1.7.0
 # ============================================================================
 # Utilities & Infrastructure
 # ============================================================================
+tabulate>=0.9.0
+nltk>=3.8.0
 pyyaml==6.0.3
 requests==2.32.5
 filelock==3.20.0
@@ -156,8 +159,6 @@ kornia==0.8.2
 # DiffuseIT (ICLR 2023) - CLIP-guided diffusion for style transfer
 color-matcher>=0.1.0         # Color matching utility
 ftfy>=6.0.0                  # Text processing for CLIP
-lpips>=0.1.4                 # Perceptual similarity metric (duplicate with line 63, kept for clarity)
-kornia>=0.6.0                # Computer vision library for augmentations (duplicate with line 131, kept for clarity)
 
 # CLIP from OpenAI GitHub (required for DiffuseIT)
 # git+https://github.com/openai/CLIP.git
@@ -166,5 +167,3 @@ kornia>=0.6.0                # Computer vision library for augmentations (duplic
 # No separate installation needed - included in:
 # experiments/reference_methods/style_transfer/training_free/diffuseit/guided_diffusion/
 
-# FAISS
-faiss-cpu>=1.13.2

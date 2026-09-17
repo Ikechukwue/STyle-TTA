@@ -2,24 +2,45 @@
 
 STyle-TTA is a research framework for **structure-aware retrieval and diffusion-based test-time adaptation (TTA)**. It evaluates whether retrieved style references and style-transfer transformations can improve image classification under distribution and domain shifts.
 
+## Provenance and Thesis Scope
+
+This repository contains the implementation developed for a master's thesis on
+STyle-TTA. It is based on the RetriStyle project code originally developed by
+**Sebastian Dörrich** and made available for adaptation in this thesis.
+
+The thesis work adapts and extends that codebase for retrieval-driven,
+training-free style-transfer TTA. In particular, the thesis-specific work
+includes the experiment orchestration, retrieval configurations, TTA
+evaluation, classifier comparisons, ablations, and reporting used for the
+results described in the thesis. The repository also retains inherited and
+general-purpose research components that are not necessarily used in every
+thesis experiment; their presence does not imply that they are thesis
+contributions.
+
 The project combines:
 
 - retrieval of reference images using random, metric, or DINO-based strategies;
 - style-transfer and diffusion methods for generating test-time views;
 - TTA baselines such as geometric augmentation;
-- evaluation strategies including vanilla averaging, ZERO and TPT;
+- evaluation strategies including vanilla averaging, ZERO, TPT;
 - experiments across ImageNet variants and medical and natural-domain datasets.
 
 ## Repository Layout
 
 ```text
 retristyle/
-├── code/                Canonical source tree: config, experiments, and library code
-├── data/                Local datasets, embeddings, and cached artifacts (not tracked)
-├── models/              Local model weights and checkpoints (not tracked)
-├── results/             Local predictions and experiment outputs (not tracked)
-├── requirements.txt     Reproducible Python dependencies
-└── Dockerfile           CUDA-enabled production image
+├── code/
+│   ├── config/          Paths, constants, and GPU configuration
+│   ├── experiments/     Training, inference, TTA, evaluation, and reporting
+│   ├── retristyle/      Retrieval, style-transfer, and ensemble library code
+│   └── scripts/         Local and HPC experiment wrappers
+├── data/                Local datasets, embeddings, and augmented caches
+├── models/              Local model weights, checkpoints, and style-transfer weights
+├── results/             Local predictions, statistics, figures, and reports
+├── requirements.txt     Experiment environment dependencies
+├── setup.py             Editable package installation metadata
+├── Dockerfile           CUDA-enabled production image
+└── prepare-hpc.sh       Docker-to-Apptainer deployment helper
 ```
 
 Large datasets, model weights, checkpoints, generated outputs, and experiment
@@ -55,7 +76,9 @@ For a containerized environment:
 docker build --target production -t retristyle:production .
 ```
 
-See the experiment documentation in this repository for Docker, NVIDIA Container Toolkit, and Apptainer setup details.
+The container copies the canonical `code/` source tree into `/app/code`.
+Dataset and model directories should be mounted into the container rather than
+committed to the repository.
 
 ## Quick Start
 
@@ -66,7 +89,7 @@ python -m code.experiments.tta.run_inference \
     --dataset pathmnist \
     --data_path ./data \
     --classifier densenet121 \
-    --weights_path ./checkpoints/model.pth \
+    --weights_path ./models/model.pth \
     --tta_method geometric \
     --eval_strategy zero \
     --n_views 16 \
@@ -76,11 +99,11 @@ python -m code.experiments.tta.run_inference \
 For STyle-TTA retrieval-based TTA:
 
 ```bash
-python -m experiments.tta.run_inference \
+python -m code.experiments.tta.run_inference \
     --dataset pathmnist \
     --data_path ./data \
     --classifier densenet121 \
-    --weights_path ./checkpoints/model.pth \
+    --weights_path ./models/model.pth \
     --tta_method retristyle \
     --eval_strategy zero \
     --retrieval_strategy random \
@@ -91,45 +114,51 @@ python -m experiments.tta.run_inference \
 The available TTA methods, evaluation strategies, and retrieval strategies are documented in the module help and in [README_TTA.md](README_TTA.md):
 
 ```bash
-python -m experiments.tta.run_inference --help
+python -m code.experiments.tta.run_inference --help
 ```
 
 ## Running Experiments
 
-Experiment wrappers live in `scripts/` and use paths configured in `scripts/common.sh`.
+Experiment wrappers live in `code/scripts/` and use paths configured in
+`code/scripts/common.sh`. Run them from the repository root:
 
 ```bash
 # Style-transfer method comparison
-bash scripts/style_transfer_eval.sh
+bash code/scripts/style_transfer_eval.sh
 
 # Train reference classifiers
-bash scripts/train_reference_baselines.sh
+bash code/scripts/train_reference_baselines.sh
 
 # Geometric TTA baseline
-bash scripts/geometric_tta_eval.sh
+bash code/scripts/geometric_tta_eval.sh
 
 # STyle-TTA ablations
-bash scripts/ablation_tta.sh
+bash code/scripts/ablation_tta.sh
 
 # Hybrid geometric + style TTA
-bash scripts/hybrid_tta.sh
+bash code/scripts/hybrid_tta.sh
 
 # Evaluate saved predictions and generate reports
-bash scripts/evaluate_predictions.sh
-bash scripts/generate_tables_and_figures.sh
+bash code/scripts/evaluate_predictions.sh
+bash code/scripts/generate_tables_and_figures.sh
 ```
 
-For the complete experiment matrix, dataset layouts, classifier details, and HPC commands, read [EXPERIMENT_GUIDE.md](EXPERIMENT_GUIDE.md). The thesis-specific implementation context is in [MASTER_THESIS_IMPLEMENTATION_PLAN.md](MASTER_THESIS_IMPLEMENTATION_PLAN.md).
+The TTA entry points and evaluation strategies are documented in
+[README_TTA.md](README_TTA.md). The source tree also contains reference
+methods and exploratory reporting code inherited from the underlying research
+project; use the thesis experiment commands and configurations as the supported
+submission workflow.
 
 ## Data and Checkpoints
 
-By default, the shell scripts expect data and model paths configured in `scripts/common.sh`. Override them for a local setup:
+By default, the shell scripts expect data and model paths configured in
+`code/scripts/common.sh`. Override them for a local setup:
 
 ```bash
 export DATA_PATH="$PWD/data"
 export OUTPUT_PATH="$PWD/results"
-export MODEL_DIR="$PWD/data/models"
-export WEIGHTS_DIR="$PWD/data/weights"
+export MODEL_DIR="$PWD/models"
+export WEIGHTS_DIR="$PWD/models/style_transfer"
 ```
 
 Classifier checkpoints generally follow this naming pattern:
@@ -148,14 +177,15 @@ The project supports Docker-to-Apptainer deployment for SLURM-based clusters:
 ./prepare-hpc.sh --target production --apptainer
 ```
 
-HPC job-generation scripts are available under `scripts/`, including generators for style-transfer evaluation, TTA, embedding extraction, and baseline training.
+HPC job-generation scripts are available under `code/scripts/`, including
+generators for style-transfer evaluation, TTA, embedding extraction, and
+baseline training.
 
 ## Documentation
 
-- [GETTING_STARTED.md](GETTING_STARTED.md): environment, Docker, and HPC setup
-- [EXPERIMENT_GUIDE.md](EXPERIMENT_GUIDE.md): full experiment and dataset guide
 - [README_TTA.md](README_TTA.md): TTA setups, CLI usage, and evaluation strategies
-- [MASTER_THESIS_IMPLEMENTATION_PLAN.md](MASTER_THESIS_IMPLEMENTATION_PLAN.md): implementation and thesis plan
+- [setup.py](setup.py): editable package metadata and runtime dependencies
+- [requirements.txt](requirements.txt): experiment environment dependencies and version constraints
 
 ## Citation
 

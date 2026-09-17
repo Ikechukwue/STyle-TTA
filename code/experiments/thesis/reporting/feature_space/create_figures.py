@@ -65,7 +65,7 @@ def plot_accuracy_drop_vs_metric(metrics=["mmd", "wasserstein", "kl_symmetric", 
             r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0.0
 
             # Plot Regression Line
-            ax.plot(sorted_deltas, y_pred, color="black", linestyle="-", linewidth=1.5, label="Fit", a)
+            ax.plot(sorted_deltas, y_pred, color="black", linestyle="-", linewidth=1.5, label="Fit")
             
             # Panel Annotations
             ax.set_title(f"{cls}", fontsize=12, fontweight="bold")

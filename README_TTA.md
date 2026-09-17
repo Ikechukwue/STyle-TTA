@@ -1,4 +1,5 @@
-# RetriStyle-TTA — Test-Time Adaptation Experiments
+# Original RetriStyle-TTA — Test-Time Adaptation Experiments setup
+# Usable for STyle-TTA
 
 This document covers how to **run TTA inference** locally (Docker) and on
 the NHR@FAU HPC cluster, and describes the two main evaluation setups.

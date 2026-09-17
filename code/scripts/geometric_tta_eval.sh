@@ -51,7 +51,7 @@ for DT in "${DATASET[@]}"; do
                     echo "Geometric TTA: $MDL | $EVAL_STRATEGY | seed=$SD"
 
                     accelerate launch --config_file "${PROJECT_ROOT}/config/gpu/single_gpu_0.yaml" \
-                        -m experiments.tta.run_inference \
+                        -m code.experiments.tta.run_inference \
                         --dataset "$DT" --data_path "$DATA_PATH" --split "$SPLIT" \
                         --classifier "$MDL" --weights_path "$WEIGHTS_PATH" \
                         --tta_method geometric --eval_strategy "$EV" \

@@ -62,7 +62,7 @@ def main():
     split = TRUE_SPLITS[ALL_SPLITS[dataset]]
     data_path = "./data"
     target_class = 1
-    output_path = f"output/images/domain_comparison_2x2_{}.png"
+    output_path = "output/images/domain_comparison_2x2.png"
     seed = 42 
 
     np.random.seed(seed)

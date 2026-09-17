@@ -59,7 +59,7 @@ for DT in "${DATASET}"; do
             #for EV in "${EVAL_STRATEGIES[@]}"; do
             echo "Ablation: $CL | retr=$RETRIEVAL_STRATEGY | eval=$EV | n_refs=$N_REFS"
             echo $WEIGHTS_PATH
-            python -m experiments.tta.run_inference \
+            python -m code.experiments.tta.run_inference \
                 --dataset "$DT" --data_path "$DATA_PATH" --split "$SPLIT" \
                 --classifier "$CL" --weights_path "$WEIGHTS_PATH" \
                 --tta_method retristyle --eval_strategy "$EVAL_STRATEGY" \
